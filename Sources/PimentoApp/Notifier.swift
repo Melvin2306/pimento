@@ -1,26 +1,7 @@
 import AppKit
+import OSLog
 import PimentoCore
 @preconcurrency import UserNotifications
-
-/// What macOS currently allows Pimento to do with notifications.
-enum NotificationPermission: Equatable {
-    case unknown
-    /// Running outside Pimento.app (`swift run`): no bundle ID, no notifications.
-    case unavailable
-    case notDetermined
-    case denied
-    case allowed
-
-    var label: String {
-        switch self {
-        case .unknown: "Checking…"
-        case .unavailable: "Unavailable outside Pimento.app"
-        case .notDetermined: "Not asked yet"
-        case .denied: "Turned off in System Settings"
-        case .allowed: "Allowed"
-        }
-    }
-}
 
 /// macOS notifications: one when a batch of activations finishes, and a
 /// reminder shortly before activated roles expire, as the user's settings say.
@@ -28,7 +9,8 @@ enum NotificationPermission: Equatable {
 /// `swift run` skips them.
 @MainActor
 enum Notifier {
-    private static let foreground = ForegroundPresenter()
+    private nonisolated static let foreground = ForegroundPresenter()
+    private nonisolated static let log = Logger(subsystem: "io.github.melvin2306.pimento", category: "notifications")
 
     static var isAvailable: Bool {
         Bundle.main.bundleIdentifier != nil && Bundle.main.bundleURL.pathExtension == "app"
@@ -38,20 +20,37 @@ enum Notifier {
     /// asks for permission once (macOS remembers the answer).
     static func setUp() {
         guard isAvailable else { return }
+        let center = installDelegate()
+        center.requestAuthorization(options: [.alert, .sound]) { _, error in
+            if let error { log.error("requestAuthorization failed: \(error.localizedDescription, privacy: .public)") }
+        }
+    }
+
+    /// The delegate that shows banners while Pimento is frontmost. Set at
+    /// launch; set again here in case a notification goes out before that.
+    @discardableResult
+    private nonisolated static func installDelegate() -> UNUserNotificationCenter {
         let center = UNUserNotificationCenter.current()
-        center.delegate = foreground
-        center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        if center.delegate !== foreground { center.delegate = foreground }
+        return center
+    }
+
+    /// Hands a request to macOS and logs a refusal (permission missing, …).
+    private nonisolated static func schedule(_ request: UNNotificationRequest) {
+        installDelegate().add(request) { error in
+            if let error {
+                log.error("Notification \(request.identifier, privacy: .public) not scheduled: \(error.localizedDescription, privacy: .public)")
+            }
+        }
     }
 
     static func activationsFinished(planned: [PlannedRequest], outcomes: [String: ActivationOutcome], prefs: Preferences) {
         guard isAvailable,
               let summary = ActivationSummary(planned: planned, outcomes: outcomes, reminderLead: prefs.reminderLead)
         else { return }
-        let center = UNUserNotificationCenter.current()
-
         if summary.postsCompletion(enabled: prefs.notifyOnCompletion, onlyFailures: prefs.notifyOnlyOnFailure) {
             let content = content(summary.title, summary.body, thread: "activations", sound: prefs.playSound)
-            center.add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
+            schedule(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
         }
 
         guard prefs.expiryReminders else { return }
@@ -59,18 +58,26 @@ enum Notifier {
             let content = content(reminder.title, reminder.body, thread: "expiry", sound: prefs.playSound)
             let trigger = UNTimeIntervalNotificationTrigger(
                 timeInterval: max(1, reminder.fireAt.timeIntervalSinceNow), repeats: false)
-            center.add(UNNotificationRequest(identifier: reminder.id, content: content, trigger: trigger))
+            schedule(UNNotificationRequest(identifier: reminder.id, content: content, trigger: trigger))
         }
     }
 
-    /// A sample notification, from the Settings window.
-    static func sendTest(prefs: Preferences) {
-        guard isAvailable else { return }
+    /// A sample notification, from the Settings window. Each test gets its own
+    /// identifier, so repeated tests are not merged into the first one.
+    static func sendTest(prefs: Preferences) async -> NotificationTestResult {
+        guard isAvailable else { return .failed(NotificationPermission.unavailable.label) }
         let content = content(
             "Test notification",
             "This is how Pimento tells you that activations finished or roles are about to expire.",
             thread: "test", sound: prefs.playSound)
-        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "test", content: content, trigger: nil))
+        let request = UNNotificationRequest(identifier: "test-\(UUID().uuidString)", content: content, trigger: nil)
+        do {
+            try await installDelegate().add(request)
+            return .sent(Date())
+        } catch {
+            log.error("Test notification not scheduled: \(error.localizedDescription, privacy: .public)")
+            return .failed(error.localizedDescription)
+        }
     }
 
     /// Drops every pending expiry reminder (reminders were turned off).
@@ -96,24 +103,19 @@ enum Notifier {
                 }
                 let trigger = UNTimeIntervalNotificationTrigger(timeInterval: max(1, fireAt.timeIntervalSinceNow), repeats: false)
                 // Same identifier: replaces the pending one.
-                center.add(UNNotificationRequest(identifier: request.identifier, content: request.content, trigger: trigger))
+                schedule(UNNotificationRequest(identifier: request.identifier, content: request.content, trigger: trigger))
             }
         }
     }
 
     static func permission() async -> NotificationPermission {
         guard isAvailable else { return .unavailable }
-        let status = await withCheckedContinuation { continuation in
+        let snapshot = await withCheckedContinuation { continuation in
             UNUserNotificationCenter.current().getNotificationSettings { settings in
-                continuation.resume(returning: settings.authorizationStatus)
+                continuation.resume(returning: NotificationSettingsSnapshot(settings))
             }
         }
-        switch status {
-        case .notDetermined: return .notDetermined
-        case .denied: return .denied
-        case .authorized, .provisional: return .allowed
-        @unknown default: return .allowed
-        }
+        return NotificationPermission(snapshot)
     }
 
     static func requestPermission() async {
@@ -134,7 +136,35 @@ enum Notifier {
         content.body = body
         content.sound = sound ? .default : nil
         content.threadIdentifier = thread
+        // The default, set explicitly: a banner that Focus may hold back, not a passive one.
+        content.interruptionLevel = .active
         return content
+    }
+}
+
+extension NotificationSettingsSnapshot {
+    init(_ settings: UNNotificationSettings) {
+        let authorization: Authorization = switch settings.authorizationStatus {
+        case .notDetermined: .notDetermined
+        case .denied: .denied
+        case .provisional: .provisional
+        case .ephemeral: .ephemeral
+        default: .authorized
+        }
+        let style: AlertStyle = switch settings.alertStyle {
+        case .none: .none
+        case .alert: .alert
+        default: .banner
+        }
+        func flag(_ setting: UNNotificationSetting) -> Bool? {
+            switch setting {
+            case .enabled: true
+            case .disabled: false
+            default: nil
+            }
+        }
+        self.init(authorization: authorization, alertStyle: style,
+                  alerts: flag(settings.alertSetting), notificationCenter: flag(settings.notificationCenterSetting))
     }
 }
 

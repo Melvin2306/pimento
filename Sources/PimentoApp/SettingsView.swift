@@ -214,6 +214,10 @@ private struct ActivationSettings: View {
     }
 }
 
+private func resultIsFailure(_ result: NotificationTestResult) -> Bool {
+    if case .failed = result { true } else { false }
+}
+
 private struct NotificationSettings: View {
     @Environment(AppModel.self) private var model
 
@@ -224,27 +228,37 @@ private struct NotificationSettings: View {
                 LabeledContent("Permission") {
                     HStack {
                         Text(model.notificationPermission.label)
-                            .foregroundStyle(model.notificationPermission == .denied ? Color.orange : .secondary)
-                        switch model.notificationPermission {
-                        case .denied:
+                            .foregroundStyle(model.notificationPermission.needsSystemSettings ? Color.orange : .secondary)
+                            .multilineTextAlignment(.trailing)
+                        if model.notificationPermission.needsSystemSettings {
                             Button("Open System Settings…") { Notifier.openSystemSettings() }
-                        case .notDetermined:
+                        } else if model.notificationPermission == .notDetermined {
                             Button("Allow…") {
                                 Task {
                                     await Notifier.requestPermission()
                                     await model.updateNotificationPermission()
                                 }
                             }
-                        default:
-                            EmptyView()
                         }
                     }
                 }
-                Button("Send Test Notification") {
-                    Notifier.sendTest(prefs: model.prefs)
-                    Task { await model.updateNotificationPermission() }
+                LabeledContent {
+                    if let result = model.notificationTestResult {
+                        Text(result.label())
+                            .foregroundStyle(resultIsFailure(result) ? Color.orange : .secondary)
+                            .textSelection(.enabled)
+                    }
+                } label: {
+                    Button("Send Test Notification") {
+                        Task { await model.sendTestNotification() }
+                    }
+                    .disabled(model.notificationPermission == .unavailable)
                 }
-                .disabled(model.notificationPermission == .unavailable)
+            } footer: {
+                Text("A Focus or Do Not Disturb mode can hide banners even when they are allowed; "
+                    + "they still land in Notification Center. The banner style is under System Settings › "
+                    + "Notifications › Pimento.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
 
             Section("When activations finish") {

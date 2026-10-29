@@ -33,6 +33,9 @@ All notable changes to this project are documented here. The format follows
 - Appearance mode (Settings › General › Appearance): System (default), Light or Dark, applied
   live to every window, sheet and popover. Windows XP-style stays light-only; the stored choice
   comes back when switching to another theme.
+- Settings › Notifications says whether macOS actually shows banners ("Allowed, but banners are
+  off" when the banner style is None or alerts are disabled, with a link to System Settings), and
+  *Send Test Notification* reports "Sent ✓ at HH:mm" or the reason macOS refused it.
 
 ### Changed
 
@@ -54,6 +57,12 @@ All notable changes to this project are documented here. The format follows
   Azure lists a new activation only after a few seconds. It now shows as active right away
   (with the expiry Azure returned), leaves the selection, and the list is re-checked 20 s
   later.
+- The test notification could fail silently: errors from macOS are now shown and logged, each test
+  gets its own identifier (repeated tests are no longer merged), notifications set
+  `interruptionLevel = .active`, and the foreground delegate is in place before the first one.
+- `scripts/bundle.sh --install` moves the app to `~/Applications` (unregistering and removing the
+  `build/` copy) and registers the installed one, so two copies with the same bundle ID no longer
+  compete for notifications.
 - Windows XP-style under a dark system: the toolbar stayed dark above the light window. Light and
   dark are now set app-wide instead of per window, so switching themes or modes never leaves a
   window stuck in a forced appearance.

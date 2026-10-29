@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Builds a release binary and wraps it into "build/Pimento.app" (ad-hoc signed).
 #   scripts/bundle.sh            # build the .app
-#   scripts/bundle.sh --install  # ...and copy it to ~/Applications
+#   scripts/bundle.sh --install  # ...and move it to ~/Applications
 #   scripts/bundle.sh --zip      # ...and zip it to build/Pimento-<version>.zip
 set -euo pipefail
 
@@ -58,7 +58,14 @@ case "${1:-}" in
     mkdir -p "$HOME/Applications"
     rm -rf "$HOME/Applications/${APP_NAME}.app"
     cp -R "$APP" "$HOME/Applications/"
-    echo "Installed to ~/Applications/${APP_NAME}.app"
+    # One registered copy per bundle ID: with build/ and ~/Applications both
+    # known to LaunchServices, notifications can go to the wrong one. The
+    # build/ copy is removed too, or LaunchServices finds it again.
+    LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+    [[ -x "$LSREGISTER" ]] && { "$LSREGISTER" -u "$PWD/$APP" >/dev/null 2>&1 || true; }
+    rm -rf "$APP"
+    [[ -x "$LSREGISTER" ]] && { "$LSREGISTER" -f "$HOME/Applications/${APP_NAME}.app" >/dev/null 2>&1 || true; }
+    echo "Installed to ~/Applications/${APP_NAME}.app (the build/ copy is removed)"
     ;;
   --zip)
     ZIP="build/${APP_NAME}-${VERSION}.zip"

@@ -64,7 +64,7 @@ There are no notarized builds yet. Build it yourself (takes about a minute):
 ```sh
 git clone https://github.com/melvin2306/pimento.git
 cd pimento
-scripts/bundle.sh --install      # builds build/Pimento.app and copies it to ~/Applications
+scripts/bundle.sh --install      # builds Pimento.app and moves it to ~/Applications
 ```
 
 Tagged releases also carry an ad-hoc signed `Pimento-<version>.zip`. Because it is not notarized,
@@ -264,6 +264,14 @@ is a member (or guest) there.
 
 **Azure CLI not found.** Install it with `brew install azure-cli`. Pimento looks in
 `/opt/homebrew/bin`, `/usr/local/bin` and `$PATH`.
+
+**Notifications don't show up.** *Settings › Notifications* shows what macOS allows. "Allowed,
+but banners are off" means the banner style for Pimento is *None* (or alerts are turned off):
+change it in System Settings › Notifications › Pimento. A Focus or Do Not Disturb mode also hides
+banners; they still land in Notification Center. *Send Test Notification* reports whether macOS
+accepted the test, or why not. If you built Pimento yourself, keep one copy: two
+copies with the same bundle ID can confuse macOS. `scripts/bundle.sh --install` leaves only the one
+in `~/Applications`.
 
 **Does it work with sovereign clouds?** Not yet: the ARM endpoint is `management.azure.com`.
 

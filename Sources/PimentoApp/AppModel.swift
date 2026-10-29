@@ -52,6 +52,7 @@ final class AppModel {
         didSet { saveColumnCustomization() }
     }
     var notificationPermission: NotificationPermission = .unknown
+    var notificationTestResult: NotificationTestResult?
     var showResetConfirmation = false
     private var autoRefreshTask: Task<Void, Never>?
 
@@ -481,5 +482,10 @@ final class AppModel {
 
     func updateNotificationPermission() async {
         notificationPermission = await Notifier.permission()
+    }
+
+    func sendTestNotification() async {
+        notificationTestResult = await Notifier.sendTest(prefs: prefs)
+        await updateNotificationPermission()
     }
 }
