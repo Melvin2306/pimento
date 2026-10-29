@@ -12,6 +12,7 @@
 <p align="center">
   <a href="https://github.com/melvin2306/pimento/actions/workflows/ci.yml"><img src="https://github.com/melvin2306/pimento/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <img src="https://img.shields.io/badge/macOS-14%2B-blue" alt="macOS 14+">
+  <img src="https://img.shields.io/badge/CLI-macOS%20%7C%20Linux%20%7C%20Windows-blue" alt="CLI: macOS, Linux, Windows">
   <img src="https://img.shields.io/badge/Swift-6.0%2B-orange" alt="Swift 6.0+">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT license"></a>
 </p>
@@ -89,10 +90,13 @@ _Coming soon._
 
 ## Requirements
 
-- macOS 14 Sonoma or later
+- macOS 14 Sonoma or later for the app; the `pimento` CLI also runs on **Linux** (x86_64 and
+  arm64, glibc 2.35+: Ubuntu 22.04, Debian 12, RHEL 9 or later, with libcurl) and **Windows** 10/11
+  (x86_64), see [Linux and Windows](#linux-and-windows)
 - [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli-macos) (`brew install azure-cli`), signed in with `az login`,
   **or** an app registration for [Pimento sign-in](#pimento-sign-in-without-the-azure-cli) (no Azure CLI needed)
-- To build: Swift 6.0 or later (Xcode 16+, or just the Command Line Tools: `xcode-select --install`)
+- To build: Swift 6.0 or later (Xcode 16+, or just the Command Line Tools: `xcode-select --install`;
+  on Linux and Windows the [swift.org toolchain](https://www.swift.org/install/), CLI only)
 
 ## Install
 
@@ -102,9 +106,12 @@ Pick one download from the [releases page](https://github.com/melvin2306/pimento
 | --- | --- | --- |
 | `Pimento-<version>.zip` | Pimento.app, **with** the `pimento` command-line tool inside | the Mac app; turn on the CLI from its menu |
 | `pimento-cli-<version>-macos.tar.gz` | only the `pimento` command-line tool (universal: Apple silicon and Intel), shell completions, LICENSE | terminals, scripts, no app wanted |
+| `pimento-cli-<version>-linux-x86_64.tar.gz` | the command-line tool for Linux (Swift runtime linked in), shell completions | Linux; `-linux-aarch64` too once the repository is public |
+| `pimento-cli-<version>-windows-x86_64.zip` | `pimento.exe` with the Swift runtime DLLs | Windows 10/11 |
 
-Each release also has `SHA256SUMS.txt` (`shasum -a 256 -c SHA256SUMS.txt --ignore-missing`).
-Neither download is notarized yet, so macOS asks before the first launch (see below).
+Each release also has `SHA256SUMS.txt` (`shasum -a 256 -c SHA256SUMS.txt --ignore-missing` on
+macOS, `sha256sum -c SHA256SUMS.txt --ignore-missing` on Linux, `Get-FileHash` on Windows).
+Neither macOS download is notarized yet, so macOS asks before the first launch (see below).
 
 ### Option 1: the app, with the CLI
 
@@ -131,6 +138,31 @@ pimento version
 
 The `completions/` folder has scripts for zsh, bash and fish (see [Shell completions](#shell-completions)).
 
+### Option 3: the CLI on Linux
+
+```sh
+tar -xzf pimento-cli-<version>-linux-x86_64.tar.gz
+mkdir -p ~/.local/bin && mv pimento-cli-<version>-linux-x86_64/pimento ~/.local/bin/
+pimento version
+```
+
+It needs libcurl (`sudo apt install libcurl4` on a minimal Debian or Ubuntu; most systems have it).
+Completions are in `completions/`, as on macOS.
+
+### Option 4: the CLI on Windows
+
+In PowerShell:
+
+```powershell
+Expand-Archive pimento-cli-<version>-windows-x86_64.zip -DestinationPath $env:LOCALAPPDATA\Programs
+# then add $env:LOCALAPPDATA\Programs\pimento-cli-<version>-windows-x86_64 to your PATH, and:
+pimento version
+```
+
+Keep the DLLs next to `pimento.exe` (they are the Swift runtime). It needs the Microsoft Visual C++
+Redistributable, which most Windows systems have. `pimento login` signs in with a device code on
+Windows (see [Linux and Windows](#linux-and-windows)).
+
 ### From source
 
 ```sh
@@ -140,8 +172,13 @@ scripts/bundle.sh --install      # Pimento.app (CLI inside) in ~/Applications
 scripts/package-cli.sh           # or only the CLI: build/pimento-cli-<version>-macos.tar.gz
 ```
 
-Homebrew is not available yet. Templates for a formula (CLI) and a cask (app) are in
-[`packaging/homebrew/`](packaging/homebrew/), for when the repository is public.
+On Linux (Swift 6 toolchain) and Windows (Swift 6 toolchain, Git Bash for the script) only the CLI
+builds: `swift build --product pimento`, `swift test`, and `scripts/package-cli.sh` packs
+`build/pimento-cli-<version>-linux-<arch>.tar.gz` or `build/pimento-cli-<version>-windows-x86_64.zip`.
+
+Homebrew is not available yet. A formula (CLI, macOS and Linux) and a cask (app) are ready in
+[`packaging/homebrew/`](packaging/homebrew/), with `scripts/update-homebrew.sh` to fill in a
+release; they will be published in a tap once the repository is public.
 
 ## Build and run
 
@@ -156,6 +193,9 @@ scripts/bundle.sh --zip        # ...plus build/Pimento-<version>.zip
 scripts/package-cli.sh         # universal CLI -> build/pimento-cli-<version>-macos.tar.gz
 open build/Pimento.app
 ```
+
+On Linux and Windows the package has only the CLI: `swift build` and `swift test` build and test
+`pimento` and the core (macOS-only tests are skipped there).
 
 ## Usage
 
@@ -320,10 +360,11 @@ first). The CLI follows the same settings.
 #### History file
 
 `~/Library/Application Support/Pimento/history.jsonl`, shared by the app and the CLI
-(`PIMENTO_HISTORY` points both elsewhere, for the CLI or an app started from a terminal). It is
+(`PIMENTO_HISTORY` points both elsewhere, for the CLI or an app started from a terminal; on Linux
+and Windows see [Linux and Windows](#linux-and-windows)). It is
 [JSON Lines](https://jsonlines.org): one object per line, mode 600. Every write takes an exclusive
-lock on the file and appends each line with a single `write` on an `O_APPEND` descriptor, so the
-app and the CLI can write at the same time. Past 5 MB the file becomes `history.1.jsonl` (replacing
+lock on the file (on Windows, on `history.jsonl.lock` next to it) and appends each line with a
+single write on an append-only descriptor, so the app and the CLI can write at the same time. Past 5 MB the file becomes `history.1.jsonl` (replacing
 an older one) and a new one starts. Entries older than the retention are removed when Pimento
 starts, when it first records something, and when the retention changes. The settings are in
 `history-settings.json` next to it (`{"enabled": true, "retentionDays": 365}`, 0 = forever).
@@ -510,9 +551,11 @@ fresh token look expired). The name and IDs in *Signed in as …* come from the 
   CLI after signing in in the app, or the reverse), or a new build after an update, reads it, macOS
   asks for your login password (*Always Allow* stops the question until the next update). To avoid
   that for the CLI, set `PIMENTO_TOKEN_STORE=file`.
-- **Linux and other systems**, or `PIMENTO_TOKEN_STORE=file`: `~/.config/pimento/tokens.json`
+- **Linux**, or `PIMENTO_TOKEN_STORE=file` on macOS: `~/.config/pimento/tokens.json`
   (`$XDG_CONFIG_HOME/pimento`, or `$PIMENTO_TOKEN_FILE`), mode 600 in a folder with mode 700.
   **Less secure** than the Keychain: any program running as you can read it.
+- **Windows**: `%APPDATA%\Pimento\tokens.json` (or `$PIMENTO_TOKEN_FILE`). Windows has no POSIX
+  modes: the file is protected only by your user profile's permissions, like the rest of `%APPDATA%`.
 
 `pimento logout` / *Sign Out* delete the item (or the file's entry). Microsoft revokes refresh
 tokens on password changes and when an administrator revokes your sessions; Pimento then asks you
@@ -829,6 +872,24 @@ pimento completions fish > ~/.config/fish/completions/pimento.fish
 release (also on the app binary, which hands them to the bundled CLI). They print a note and go
 away in the next release. `--dry-run` keeps its old meaning: `--role` matches a substring, and
 without filters it plans every eligible role.
+
+#### Linux and Windows
+
+The CLI works the same on Linux and Windows, with these differences:
+
+| | macOS | Linux | Windows |
+| --- | --- | --- | --- |
+| Files (presets, history, `auth.json`) | `~/Library/Application Support/Pimento` | `$XDG_CONFIG_HOME/pimento`, else `~/.config/pimento` | `%APPDATA%\Pimento` |
+| Refresh token (`pimento login`) | Keychain (`PIMENTO_TOKEN_STORE=file`: `~/.config/pimento/tokens.json`) | `tokens.json` in the folder above | `tokens.json` in the folder above |
+| File permissions | mode 600 (folder 700 for the token file) | mode 600 (folder 700) | none of its own: your profile's permissions |
+| Browser sign-in | yes | yes (`xdg-open`; `--device-code` without a desktop) | **no**: `pimento login` uses a device code |
+| `az` | Homebrew paths, then `PATH` | `PATH` | `az.cmd` from `PATH` (the installer's Python is run directly, never through `cmd.exe` with your arguments) |
+| Colours | terminals | terminals | consoles with ANSI support (Windows Terminal, Windows 10+); `NO_COLOR` turns them off |
+| Completions | zsh, bash, fish | zsh, bash, fish | none |
+
+`PIMENTO_PRESETS`, `PIMENTO_HISTORY`, `PIMENTO_TOKEN_FILE` and the other variables work everywhere.
+The history lock on Windows is `LockFileEx` on `history.jsonl.lock`, so several `pimento` processes can
+append at the same time there too.
 <!-- cli-readme:end -->
 
 ## How it works
@@ -907,8 +968,8 @@ directly with the PIM APIs (`api-version=2020-10-01`):
   to `login.microsoftonline.com`** (its token and device-code endpoints, over HTTPS; a guard refuses
   any other host or method). The browser redirect is received on 127.0.0.1/::1 only, checked against
   a random `state`, and the listener stops after one answer or 5 minutes. The **refresh token** is
-  kept in the macOS **Keychain** (or, on other systems or with `PIMENTO_TOKEN_STORE=file`, in
-  `~/.config/pimento/tokens.json`, mode 600: less secure). `pimento logout` / *Sign Out* delete it.
+  kept in the macOS **Keychain** (or, on Linux or with `PIMENTO_TOKEN_STORE=file`, in
+  `~/.config/pimento/tokens.json`, mode 600; on Windows in `%APPDATA%\Pimento\tokens.json`: less secure). `pimento logout` / *Sign Out* delete it.
   `auth.json` holds the auth source, client ID, chosen account and a pending claims challenge, no secrets.
 - It keeps its settings in `UserDefaults`: the chosen tenant ID, the hidden tenant IDs, table
   columns, the options from the Settings window and, unless you turn it off, your last
@@ -969,8 +1030,11 @@ See [SECURITY.md](SECURITY.md) for how to report a vulnerability.
   Keychain items are tied to the ad-hoc signed binary: after an update, or when the CLI reads what
   the app saved, macOS asks for your password once. Sovereign clouds are not supported.
 - Not notarized (yet), so Gatekeeper asks before the first launch of a downloaded build.
-- The CLI is built and tested for macOS only. Its code avoids AppKit and imports
-  `FoundationNetworking` where Linux needs it, but there is no Linux build in CI.
+- **The CLI on Linux and Windows** is built and tested in CI, but the app is macOS-only, and so are
+  notifications, reminders, the menu bar and the Keychain. On **Windows**: no browser sign-in yet
+  (`pimento login` uses a device code; the loopback listener would need Winsock), no POSIX file
+  modes (files rely on your profile's permissions), no shell completions for PowerShell or cmd, and
+  colours only in consoles that support ANSI escapes (Windows Terminal, Windows 10+ conhost).
 
 ## FAQ and troubleshooting
 
@@ -1010,8 +1074,11 @@ those roles in the portal.
 permissions beyond being signed in. Check that the right tenant is selected and that your account
 is a member (or guest) there.
 
-**Azure CLI not found.** Install it with `brew install azure-cli`. Pimento looks in
-`/opt/homebrew/bin`, `/usr/local/bin` and `$PATH`.
+**Azure CLI not found.** Install it with `brew install azure-cli` (macOS),
+[Microsoft's packages](https://learn.microsoft.com/cli/azure/install-azure-cli-linux) (Linux) or
+`winget install -e --id Microsoft.AzureCLI` (Windows). On macOS Pimento looks in
+`/opt/homebrew/bin`, `/usr/local/bin` and `$PATH`; elsewhere in `PATH` (`az.cmd` on Windows).
+Or skip the Azure CLI: [Pimento sign-in](#pimento-sign-in-without-the-azure-cli).
 
 **Notifications don't show up.** *Settings › Notifications* shows what macOS allows. "Allowed,
 but banners are off" means the banner style for Pimento is *None* (or alerts are turned off):
@@ -1027,7 +1094,7 @@ in `~/Applications`.
 
 ```
 Sources/PimentoCore/     logic and ARM/az plumbing: models, matching, request bodies,
-                         error mapping, tenant resolution. Fully unit-tested.
+                         error mapping, tenant resolution, per-platform paths. Fully unit-tested.
 Sources/PimentoCore/SignIn/ Pimento sign-in: PKCE, loopback listener, device code, token
                          endpoint requests and errors, Keychain/file token store. Unit-tested.
 Sources/PimentoCore/CLI/ the CLI's commands: parser, selection, confirmation, exit codes,
@@ -1037,9 +1104,10 @@ Sources/PimentoApp/      SwiftUI app (product PimentoApp, Pimento.app/Contents/M
 Tests/PimentoCoreTests/  Swift Testing tests with synthetic JSON fixtures and a fake transport
 Assets/                  app icon and menu bar glyph (generated by scripts/make-icon.swift)
 scripts/bundle.sh        builds, signs (ad hoc) and optionally zips Pimento.app, CLI inside
-scripts/package-cli.sh   builds the universal CLI and packs pimento-cli-<version>-macos.tar.gz
+scripts/package-cli.sh   builds the CLI and packs it: universal macOS tar.gz, Linux tar.gz, Windows zip
+scripts/update-homebrew.sh fills the Homebrew templates with a release's sums (build/homebrew/)
 scripts/make-icon.swift  draws the icon with CoreGraphics and runs iconutil
-packaging/homebrew/      unpublished Homebrew formula (CLI) and cask (app) templates
+packaging/homebrew/      unpublished Homebrew formula (CLI) and cask (app), and how to publish them
 ```
 
 The app builds with the Command Line Tools alone. That is why it avoids SwiftUI's `@State`

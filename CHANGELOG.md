@@ -212,7 +212,26 @@ All notable changes to this project are documented here. The format follows
 - Two downloads per release: `Pimento-<version>.zip` (app with the CLI inside) and
   `pimento-cli-<version>-macos.tar.gz` (universal CLI with completions, LICENSE, README), plus
   `SHA256SUMS.txt`. `scripts/package-cli.sh` builds the CLI archive; CI builds and checks both.
-- Homebrew formula (CLI) and cask (app) templates in `packaging/homebrew/`, not published yet.
+- **The CLI on Linux and Windows.** `pimento` and the core build and pass their tests on Linux
+  (Swift 6, x86_64 and arm64) and Windows (Swift 6, x86_64); `Package.swift` declares the app only on
+  macOS. CI has `Linux` and `Windows` jobs next to `macOS`, and releases add
+  `pimento-cli-<version>-linux-x86_64.tar.gz` (`-linux-aarch64` once the repository is public) and
+  `pimento-cli-<version>-windows-x86_64.zip` (Swift runtime linked in on Linux, its DLLs included on
+  Windows), listed in `SHA256SUMS.txt`.
+  `scripts/package-cli.sh` packs the archive of the platform it runs on.
+  - Files: `$XDG_CONFIG_HOME/pimento` (else `~/.config/pimento`) on Linux, `%APPDATA%\Pimento` on
+    Windows, for presets, history, `auth.json` and the token file (macOS is unchanged).
+  - `az`: `PATH` on Linux; `az.cmd` (`Path`, `;`-separated) on Windows, where the installer's
+    Python runs it directly and another batch file goes through `cmd.exe` only with plain arguments.
+  - History: `LockFileEx` on `history.jsonl.lock` on Windows instead of `flock`; no POSIX modes there.
+  - Windows has no browser sign-in yet: `pimento login` says so and uses a device code. The console
+    gets UTF-8 output and ANSI colours where it supports them (else none).
+  - Linux opens the browser with `xdg-open` from `PATH`.
+- Homebrew, ready to publish (not published): `packaging/homebrew/` has a formula (the CLI from the
+  release archives on macOS 14+ and Linux, with completions) and a cask (the app, its CLI linked as
+  `pimento`, `zap` of Pimento's folders, a Keychain caveat), both passing `brew style`.
+  `scripts/update-homebrew.sh VERSION [--release | --from DIR]` fills in the version and sums and
+  writes `build/homebrew/`; `packaging/homebrew/README.md` explains the tap and its checks.
 - macOS notifications: one when a batch of activations finishes (activated, skipped, failed, with
   the expiry), and a reminder 10 minutes before activated roles expire. Shown while the app is
   frontmost too.
@@ -244,6 +263,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- The `az not found` error names the install command of the platform (`brew`, Microsoft's Linux
+  packages, `winget`). An HTTP error without a body reads the same on every platform ("forbidden").
 - The app binary is `Pimento.app/Contents/MacOS/Pimento` (SwiftPM product `PimentoApp`:
   `swift run PimentoApp`); the CLI is `Contents/Helpers/pimento` (`swift run pimento`). The app itself
   only reads `--tenant` from its arguments.
