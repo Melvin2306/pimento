@@ -1,0 +1,19 @@
+{
+ "properties": {
+  "targetRoleAssignmentScheduleId": "x",
+  "principalId": "11111111-2222-3333-4444-555555555555",
+  "requestType": "SelfActivate",
+  "status": "Provisioned",
+  "scheduleInfo": {
+   "startDateTime": "2026-10-29T12:00:00.123Z",
+   "expiration": {
+    "type": "AfterDuration",
+    "endDateTime": null,
+    "duration": "PT4H"
+   }
+  },
+  "justification": "t"
+ },
+ "name": "req",
+ "type": "Microsoft.Authorization/RoleAssignmentScheduleRequests"
+}

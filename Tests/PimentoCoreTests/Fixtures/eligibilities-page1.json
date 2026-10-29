@@ -1,0 +1,75 @@
+{
+ "value": [
+  {
+   "properties": {
+    "roleEligibilityScheduleId": "/subscriptions/aaaaaaaa-0000-0000-0000-00000000000a/providers/Microsoft.Authorization/roleEligibilitySchedules/sched-1",
+    "scope": "/subscriptions/aaaaaaaa-0000-0000-0000-00000000000a",
+    "roleDefinitionId": "/subscriptions/aaaaaaaa-0000-0000-0000-00000000000a/providers/Microsoft.Authorization/roleDefinitions/8e3af657-a8ff-443c-a75c-2fe8c4bcb635",
+    "principalId": "11111111-2222-3333-4444-555555555555",
+    "principalType": "User",
+    "status": "Provisioned",
+    "startDateTime": "2026-01-05T09:00:00.000Z",
+    "endDateTime": "2027-01-05T09:00:00.000Z",
+    "memberType": "Direct",
+    "createdOn": "2026-01-05T09:00:00.000Z",
+    "expandedProperties": {
+     "principal": {
+      "id": "11111111-2222-3333-4444-555555555555",
+      "displayName": "Test User",
+      "type": "User"
+     },
+     "roleDefinition": {
+      "id": "/subscriptions/aaaaaaaa-0000-0000-0000-00000000000a/providers/Microsoft.Authorization/roleDefinitions/8e3af657-a8ff-443c-a75c-2fe8c4bcb635",
+      "displayName": "Owner",
+      "type": "BuiltInRole"
+     },
+     "scope": {
+      "id": "/subscriptions/aaaaaaaa-0000-0000-0000-00000000000a",
+      "displayName": "Contoso Production",
+      "type": "subscription"
+     }
+    },
+    "condition": "((!(ActionMatches{'Microsoft.Authorization/roleAssignments/write'})) OR (@Request[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {acdd72a7-3385-48ef-bd42-f606fba81ae7, b24988ac-6180-42a0-ab88-20f7382dd24c}))",
+    "conditionVersion": "2.0"
+   },
+   "name": "inst-1",
+   "id": "/subscriptions/aaaaaaaa-0000-0000-0000-00000000000a/providers/Microsoft.Authorization/roleEligibilityScheduleInstances/inst-1",
+   "type": "Microsoft.Authorization/roleEligibilityScheduleInstances"
+  },
+  {
+   "properties": {
+    "roleEligibilityScheduleId": "/subscriptions/aaaaaaaa-0000-0000-0000-00000000000a/providers/Microsoft.Authorization/roleEligibilitySchedules/sched-2",
+    "scope": "/subscriptions/aaaaaaaa-0000-0000-0000-00000000000a",
+    "roleDefinitionId": "/subscriptions/aaaaaaaa-0000-0000-0000-00000000000a/providers/Microsoft.Authorization/roleDefinitions/acdd72a7-3385-48ef-bd42-f606fba81ae7",
+    "principalId": "11111111-2222-3333-4444-555555555555",
+    "principalType": "User",
+    "status": "Provisioned",
+    "startDateTime": "2026-01-05T09:00:00.000Z",
+    "endDateTime": "2027-01-05T09:00:00.000Z",
+    "memberType": "Direct",
+    "createdOn": "2026-01-05T09:00:00.000Z",
+    "expandedProperties": {
+     "principal": {
+      "id": "11111111-2222-3333-4444-555555555555",
+      "displayName": "Test User",
+      "type": "User"
+     },
+     "roleDefinition": {
+      "id": "/subscriptions/aaaaaaaa-0000-0000-0000-00000000000a/providers/Microsoft.Authorization/roleDefinitions/acdd72a7-3385-48ef-bd42-f606fba81ae7",
+      "displayName": "Reader",
+      "type": "BuiltInRole"
+     },
+     "scope": {
+      "id": "/subscriptions/aaaaaaaa-0000-0000-0000-00000000000a",
+      "displayName": "Contoso Production",
+      "type": "subscription"
+     }
+    }
+   },
+   "name": "inst-2",
+   "id": "/subscriptions/aaaaaaaa-0000-0000-0000-00000000000a/providers/Microsoft.Authorization/roleEligibilityScheduleInstances/inst-2",
+   "type": "Microsoft.Authorization/roleEligibilityScheduleInstances"
+  }
+ ],
+ "nextLink": "https://management.azure.com/providers/Microsoft.Authorization/roleEligibilityScheduleInstances?api-version=2020-10-01&$filter=asTarget()&$skiptoken=page2"
+}

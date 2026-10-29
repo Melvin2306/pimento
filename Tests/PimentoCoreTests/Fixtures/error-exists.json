@@ -1,0 +1,6 @@
+{
+ "error": {
+  "code": "RoleAssignmentExists",
+  "message": "The Role assignment already exists."
+ }
+}

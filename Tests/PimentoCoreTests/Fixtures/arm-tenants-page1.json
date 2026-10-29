@@ -1,0 +1,22 @@
+{
+  "value": [
+    {
+      "id": "/tenants/00000000-0000-0000-0000-0000000c0de0",
+      "tenantId": "00000000-0000-0000-0000-0000000C0DE0",
+      "countryCode": "US",
+      "displayName": "Contoso Ltd",
+      "domains": ["contoso.onmicrosoft.com", "contoso.example"],
+      "tenantCategory": "Home",
+      "defaultDomain": "contoso.example",
+      "tenantType": "AAD"
+    },
+    {
+      "id": "/tenants/00000000-0000-0000-0000-0000000fab00",
+      "tenantId": "00000000-0000-0000-0000-0000000fab00",
+      "displayName": "Fabrikam",
+      "defaultDomain": "fabrikam.onmicrosoft.com",
+      "tenantCategory": "ManagedBy"
+    }
+  ],
+  "nextLink": "https://management.azure.com/tenants?api-version=2022-12-01&%24skiptoken=page2"
+}

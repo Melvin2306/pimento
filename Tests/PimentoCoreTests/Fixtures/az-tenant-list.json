@@ -1,0 +1,6 @@
+[
+  { "id": "/tenants/00000000-0000-0000-0000-0000000c0de0", "tenantId": "00000000-0000-0000-0000-0000000c0de0" },
+  { "id": "/tenants/00000000-0000-0000-0000-00000fab41c0", "tenantId": "00000000-0000-0000-0000-00000fab41c0" },
+  { "id": "/tenants/00000000-0000-0000-0000-0000000aa0e0", "tenantId": "00000000-0000-0000-0000-0000000aa0e0",
+    "displayName": "Northwind", "defaultDomain": "northwind.onmicrosoft.com" }
+]

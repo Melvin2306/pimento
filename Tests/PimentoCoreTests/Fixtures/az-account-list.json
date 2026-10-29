@@ -1,0 +1,33 @@
+[
+  {
+    "cloudName": "AzureCloud",
+    "id": "aaaaaaaa-0000-0000-0000-00000000000a",
+    "isDefault": true,
+    "name": "Contoso Production",
+    "state": "Enabled",
+    "tenantDefaultDomain": "contoso.onmicrosoft.com",
+    "tenantDisplayName": "Contoso",
+    "tenantId": "00000000-0000-0000-0000-0000000c0de0",
+    "user": { "name": "ada@example.com", "type": "user" }
+  },
+  {
+    "cloudName": "AzureCloud",
+    "id": "bbbbbbbb-0000-0000-0000-00000000000b",
+    "isDefault": false,
+    "name": "Contoso Staging",
+    "state": "Enabled",
+    "tenantDefaultDomain": "contoso.onmicrosoft.com",
+    "tenantDisplayName": "Contoso",
+    "tenantId": "00000000-0000-0000-0000-0000000C0DE0",
+    "user": { "name": "ada@example.com", "type": "user" }
+  },
+  {
+    "cloudName": "AzureCloud",
+    "id": "cccccccc-0000-0000-0000-00000000000c",
+    "isDefault": false,
+    "name": "Fabrikam Sandbox",
+    "state": "Enabled",
+    "tenantId": "00000000-0000-0000-0000-00000fab41c0",
+    "user": { "name": "ada@example.com", "type": "user" }
+  }
+]

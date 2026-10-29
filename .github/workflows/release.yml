@@ -1,0 +1,33 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check the tag matches AppInfo.version
+        run: |
+          version="$(sed -n 's/.*static let version = "\(.*\)".*/\1/p' Sources/PimentoCore/AppInfo.swift)"
+          test "v${version}" = "${GITHUB_REF_NAME}" || { echo "tag ${GITHUB_REF_NAME} != v${version}"; exit 1; }
+      - name: Test
+        run: swift test
+      - name: Bundle (ad-hoc signed, not notarized)
+        run: scripts/bundle.sh --zip
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" build/Pimento-*.zip \
+            --title "Pimento ${GITHUB_REF_NAME#v}" \
+            --generate-notes \
+            --notes "Ad-hoc signed, not notarized: right-click the app and choose Open on first launch, or run \`xattr -dr com.apple.quarantine Pimento.app\`."

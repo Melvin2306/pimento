@@ -1,0 +1,79 @@
+{
+ "value": [
+  {
+   "properties": {
+    "roleAssignmentScheduleId": "/SUBSCRIPTIONS/AAAAAAAA-0000-0000-0000-00000000000A//providers/Microsoft.Authorization/roleAssignmentSchedules/a1",
+    "assignmentType": "Activated",
+    "scope": "/SUBSCRIPTIONS/AAAAAAAA-0000-0000-0000-00000000000A/",
+    "roleDefinitionId": "/subscriptions/aaaaaaaa-0000-0000-0000-00000000000a/providers/Microsoft.Authorization/roleDefinitions/8e3af657-a8ff-443c-a75c-2fe8c4bcb635",
+    "principalId": "11111111-2222-3333-4444-555555555555",
+    "principalType": "User",
+    "status": "Provisioned",
+    "startDateTime": "2026-10-29T09:42:19.66Z",
+    "endDateTime": "2026-10-29T18:42:17.9130000Z",
+    "memberType": "Direct"
+   },
+   "id": "/SUBSCRIPTIONS/AAAAAAAA-0000-0000-0000-00000000000A//providers/Microsoft.Authorization/roleAssignmentScheduleInstances/a1"
+  },
+  {
+   "properties": {
+    "roleAssignmentScheduleId": "/subscriptions/aaaaaaaa-0000-0000-0000-00000000000a/providers/Microsoft.Authorization/roleAssignmentSchedules/a2",
+    "assignmentType": "Assigned",
+    "scope": "/subscriptions/aaaaaaaa-0000-0000-0000-00000000000a",
+    "roleDefinitionId": "/subscriptions/aaaaaaaa-0000-0000-0000-00000000000a/providers/Microsoft.Authorization/roleDefinitions/acdd72a7-3385-48ef-bd42-f606fba81ae7",
+    "principalId": "11111111-2222-3333-4444-555555555555",
+    "principalType": "User",
+    "status": "Provisioned",
+    "startDateTime": "2026-10-29T09:42:19.66Z",
+    "endDateTime": null,
+    "memberType": "Direct"
+   },
+   "id": "/subscriptions/aaaaaaaa-0000-0000-0000-00000000000a/providers/Microsoft.Authorization/roleAssignmentScheduleInstances/a2"
+  },
+  {
+   "properties": {
+    "roleAssignmentScheduleId": "/subscriptions/bbbbbbbb-0000-0000-0000-00000000000b/providers/Microsoft.Authorization/roleAssignmentSchedules/a3",
+    "assignmentType": "Activated",
+    "scope": "/subscriptions/bbbbbbbb-0000-0000-0000-00000000000b",
+    "roleDefinitionId": "/subscriptions/bbbbbbbb-0000-0000-0000-00000000000b/providers/Microsoft.Authorization/roleDefinitions/b24988ac-6180-42a0-ab88-20f7382dd24c",
+    "principalId": "11111111-2222-3333-4444-555555555555",
+    "principalType": "User",
+    "status": "Provisioned",
+    "startDateTime": "2026-10-29T09:42:19.66Z",
+    "endDateTime": "2026-10-29T10:00:00Z",
+    "memberType": "Group"
+   },
+   "id": "/subscriptions/bbbbbbbb-0000-0000-0000-00000000000b/providers/Microsoft.Authorization/roleAssignmentScheduleInstances/a3"
+  },
+  {
+   "properties": {
+    "roleAssignmentScheduleId": "/subscriptions/cccccccc-0000-0000-0000-00000000000c/resourceGroups/rg-app-dev/providers/Microsoft.Authorization/roleAssignmentSchedules/a4",
+    "assignmentType": "Activated",
+    "scope": "/subscriptions/cccccccc-0000-0000-0000-00000000000c/resourceGroups/rg-app-dev",
+    "roleDefinitionId": "/subscriptions/cccccccc-0000-0000-0000-00000000000c/providers/Microsoft.Authorization/roleDefinitions/8e3af657-a8ff-443c-a75c-2fe8c4bcb635",
+    "principalId": "11111111-2222-3333-4444-555555555555",
+    "principalType": "User",
+    "status": "Provisioned",
+    "startDateTime": "2026-10-29T09:42:19.66Z",
+    "endDateTime": "2026-10-29T14:00:00Z",
+    "memberType": "Direct"
+   },
+   "id": "/subscriptions/cccccccc-0000-0000-0000-00000000000c/resourceGroups/rg-app-dev/providers/Microsoft.Authorization/roleAssignmentScheduleInstances/a4"
+  },
+  {
+   "properties": {
+    "roleAssignmentScheduleId": "/subscriptions/cccccccc-0000-0000-0000-00000000000c/resourceGroups/rg-app-dev/providers/Microsoft.Authorization/roleAssignmentSchedules/a5",
+    "assignmentType": "Activated",
+    "scope": "/subscriptions/cccccccc-0000-0000-0000-00000000000c/resourceGroups/rg-app-dev",
+    "roleDefinitionId": "/subscriptions/dddddddd-0000-0000-0000-00000000000d/providers/Microsoft.Authorization/roleDefinitions/8e3af657-a8ff-443c-a75c-2fe8c4bcb635",
+    "principalId": "11111111-2222-3333-4444-555555555555",
+    "principalType": "User",
+    "status": "Provisioned",
+    "startDateTime": "2026-10-29T09:42:19.66Z",
+    "endDateTime": "2026-10-29T20:00:00.5Z",
+    "memberType": "Direct"
+   },
+   "id": "/subscriptions/cccccccc-0000-0000-0000-00000000000c/resourceGroups/rg-app-dev/providers/Microsoft.Authorization/roleAssignmentScheduleInstances/a5"
+  }
+ ]
+}

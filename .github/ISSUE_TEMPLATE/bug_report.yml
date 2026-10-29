@@ -1,0 +1,39 @@
+name: Bug report
+description: Something does not work as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please do not paste tokens, tenant or subscription IDs, user names or resource names from a real tenant. Use placeholders.
+        Security problems: see SECURITY.md instead of opening an issue.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: error
+    attributes:
+      label: Error text
+      description: The text from the result column, banner or terminal (redacted).
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: Pimento version
+      placeholder: "0.1.0 (pimento --version)"
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      placeholder: "macOS 15.1"
+  - type: input
+    id: az
+    attributes:
+      label: Azure CLI version
+      placeholder: "az version"

@@ -1,0 +1,12 @@
+{
+  "value": [
+    {
+      "id": "/tenants/00000000-0000-0000-0000-0000000b0b00",
+      "tenantId": "00000000-0000-0000-0000-0000000b0b00",
+      "displayName": "",
+      "defaultDomain": "adventure-works.onmicrosoft.com",
+      "tenantCategory": "Home"
+    },
+    { "id": "/tenants/not-a-guid", "tenantId": "not-a-guid", "displayName": "Garbage" }
+  ]
+}
