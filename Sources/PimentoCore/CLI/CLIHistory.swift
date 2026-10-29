@@ -104,9 +104,7 @@ extension CLIRunner {
             env.write(HistoryCSV.encode(records, timeZone: env.timeZone), .out)
             return .success
         }
-        let home = NSHomeDirectory()
-        let path = file == "~" ? home : file.hasPrefix("~/") ? home + file.dropFirst() : file
-        let url = URL(fileURLWithPath: path)
+        let url = URL(fileURLWithPath: PimentoPaths.expandTilde(file))
         do {
             try HistoryCSV.write(records, to: url, timeZone: env.timeZone)
         } catch {
