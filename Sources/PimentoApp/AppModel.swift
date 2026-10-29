@@ -537,7 +537,7 @@ final class AppModel {
     private func announce(_ transitions: [ApprovalTransition]) async {
         let generation = tenantGeneration
         let service = service
-        if transitions.contains(where: \.resolution.isApproved) { await refresh() }
+        if transitions.contains(where: \.resolution.isApproved) { await refreshAfterRunningLoad() }
         guard generation == tenantGeneration else { return }
         var approvedRoles: [EligibleRole] = []
         var outcomes: [String: ActivationOutcome] = [:]
@@ -779,6 +779,16 @@ final class AppModel {
             if let claims = (error as? SignInError)?.claims { authSettings.claimsChallenge = claims }
             loadState = .failed(message: error.localizedDescription, needsLogin: Self.needsLogin(error))
         }
+    }
+
+    /// Refreshes, first letting a load that is already running finish
+    /// (`refresh()` alone returns at once then, leaving the old rows), so
+    /// that the caller looks at current roles. Gives up waiting after a minute.
+    private func refreshAfterRunningLoad() async {
+        for _ in 0..<300 where loadState == .loading {
+            try? await Task.sleep(for: .milliseconds(200))
+        }
+        await refresh()
     }
 
     /// Shows rows this app just changed the way they will be until Azure
@@ -1053,12 +1063,13 @@ final class AppModel {
     }
 
     /// What expiry reminders carry for their Renew / End Now actions.
-    private func reminderContext(justification: String) -> Notifier.ReminderContext {
+    private func reminderContext(justification: String, duration: RequestedDuration? = nil) -> Notifier.ReminderContext {
         Notifier.ReminderContext(
-            tenantId: effectiveTenantId,
+            // The GUID when known: the selection may be a domain.
+            tenantId: identity?.tenantId ?? tenant.tenantId,
             // Kept only when the user keeps recent justifications.
             justification: prefs.rememberJustifications && !justification.isEmpty ? justification : nil,
-            duration: duration)
+            duration: duration ?? self.duration)
     }
 
     /// Refreshes now and again shortly: ARM lists a change only after a few
@@ -1309,13 +1320,22 @@ final class AppModel {
 
     /// A tap on "Renew" or "End Now" in an expiry reminder.
     func handleReminderAction(_ action: ReminderAction, payload: ReminderPayload) async {
-        guard payload.isTenant(effectiveTenantId) else {
+        while isActivating { try? await Task.sleep(for: .milliseconds(300)) }
+        // Current roles and identity first: right after launch (a tap on the
+        // reminder can start the app) neither is loaded yet, and an empty
+        // list would read as "no longer active".
+        await refreshAfterRunningLoad()
+        guard loadState == .loaded else {
+            NSApp.activate(ignoringOtherApps: true)
+            banner = Banner(kind: .error, text: "Could not load the roles to act on that reminder. Refresh, then renew or end them here.")
+            return
+        }
+        // The reminder names the tenant by GUID (older ones as selected).
+        guard payload.isTenant(identity?.tenantId) || payload.isTenant(tenant.tenantId) else {
             NSApp.activate(ignoringOtherApps: true)
             banner = Banner(kind: .error, text: "That reminder is for tenant \(payload.tenantId ?? "?"). Switch to it, then renew or end the roles here.")
             return
         }
-        while isActivating { try? await Task.sleep(for: .milliseconds(300)) }
-        await refresh()
         let targets = payload.matchingActive(in: roles)
         guard !targets.isEmpty else {
             if action == .renew { NSApp.activate(ignoringOtherApps: true) }
@@ -1327,16 +1347,19 @@ final class AppModel {
         case .end:
             await deactivate(targets)
         case .renew:
-            checkedActive = Set(targets.map(\.id))
-            if let d = payload.duration { duration = d }
-            if let text = payload.justification { justification = text }
             let owners = targets.contains(where: \.isOwner) && prefs.confirmOwnerRoles
-            if trimmedJustification.isEmpty || owners {
+            let text = payload.justification?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if text.isEmpty || owners {
                 // Needs the user: a justification, or the Owner confirmation.
+                // Whatever is in the justification field was not chosen for
+                // these roles, so it is only sent once the user confirms.
+                checkedActive = Set(targets.map(\.id))
+                if let d = payload.duration { duration = d }
+                if !text.isEmpty { justification = text }
                 NSApp.activate(ignoringOtherApps: true)
                 requestRenewal(targets)
             } else {
-                await renew(targets, justification: trimmedJustification, duration: payload.duration)
+                await renew(targets, justification: text, duration: payload.duration)
             }
         }
     }
