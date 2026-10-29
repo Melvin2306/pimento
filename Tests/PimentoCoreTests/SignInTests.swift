@@ -554,6 +554,38 @@ struct TokenBrokerTests {
         #expect(await transport.requests.count == 1)
     }
 
+    @Test func signOutDuringARefreshKeepsTheAccountRemoved() async throws {
+        let gate = TransportGate()
+        let store = InMemoryTokenStore()
+        let broker = TokenBroker(store: store, transport: GatedTransport(gate: gate, answer: (tokenAnswer(refresh: "rt-rotated"), 200)))
+        let account = try signedInAccount(store)
+        let refresh = Task { try await broker.accessToken(accountId: account.id, tenantId: otherTenant) }
+        await gate.waitUntilEntered()
+        try await broker.signOut(account.id)
+        gate.release()
+        // The rotated refresh token of the late answer must not bring the account back.
+        await #expect(throws: SignInError.notSignedIn) { _ = try await refresh.value }
+        #expect(try store.accounts().isEmpty)
+        #expect(try store.refreshToken(for: account.id) == nil)
+    }
+
+    @Test func signInAgainDuringARefreshKeepsTheNewSignIn() async throws {
+        let gate = TransportGate()
+        let store = InMemoryTokenStore()
+        let broker = TokenBroker(store: store, transport: GatedTransport(gate: gate, answer: (tokenAnswer(refresh: "rt-old-rotated"), 200)))
+        let account = try signedInAccount(store, refreshToken: "rt-old")
+        let refresh = Task { try await broker.accessToken(accountId: account.id, tenantId: nil) }
+        await gate.waitUntilEntered()
+        // A new sign-in (here: its result) with another app registration.
+        let otherClient = "1f1e1d1c-1b1a-4119-8118-171615141312"
+        let fresh = try await broker.complete(
+            TokenResponse.parse(tokenAnswer(refresh: "rt-new"))!, clientId: otherClient, nonce: nil)
+        gate.release()
+        _ = try? await refresh.value
+        #expect(try store.refreshToken(for: fresh.id) == "rt-new")
+        #expect(try store.accounts().map(\.clientId) == [otherClient])
+    }
+
     @Test func providerFeedsPIMService() async throws {
         let (broker, _, store) = broker { _ in (tokenAnswer(), 200) }
         _ = try signedInAccount(store)
@@ -664,6 +696,36 @@ struct TokenBrokerTests {
         #expect(pimento.loginCommand(tenant: "t") == "pimento login --tenant t")
         let orphan = AuthContext(selection: AuthSelection(source: .pimento, origin: .saved), broker: nil, accountId: nil)
         await #expect(throws: SignInError.notSignedIn) { _ = try await orphan.tokens(tenantId: nil).accessToken() }
+    }
+}
+
+/// Holds the request it gets until `release()`; `waitUntilEntered()` returns
+/// once the request is being held.
+final class TransportGate: @unchecked Sendable {
+    private let entered = AsyncStream<Void>.makeStream()
+    private let released = AsyncStream<Void>.makeStream()
+
+    func enter() async {
+        entered.continuation.yield()
+        var it = released.stream.makeAsyncIterator()
+        _ = await it.next()
+    }
+
+    func waitUntilEntered() async {
+        var it = entered.stream.makeAsyncIterator()
+        _ = await it.next()
+    }
+
+    func release() { released.continuation.yield() }
+}
+
+struct GatedTransport: HTTPTransport {
+    let gate: TransportGate
+    let answer: (Data, Int)
+
+    func send(_ request: URLRequest) async throws -> (Data, Int) {
+        await gate.enter()
+        return answer
     }
 }
 

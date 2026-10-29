@@ -13,6 +13,9 @@ public actor TokenBroker {
     let clock: @Sendable () -> Date
     private var cache: [String: (token: String, expires: Date)] = [:]
     private var inflight: [String: Task<String, Error>] = [:]
+    /// Bumped whenever an account is signed out or signed in again: a refresh
+    /// that started before must not write its rotated refresh token back.
+    private var generation: [String: Int] = [:]
 
     /// Access tokens are renewed this long before their expiry.
     public static let refreshMargin: TimeInterval = 5 * 60
@@ -48,12 +51,15 @@ public actor TokenBroker {
     }
 
     public func signOutAll() throws {
+        let ids = (try? store.accounts().map(\.id)) ?? []
         try store.removeAll()
+        for id in ids { generation[id, default: 0] += 1 }
         cache = [:]
         inflight = [:]
     }
 
     private func forget(_ accountId: String) {
+        generation[accountId, default: 0] += 1
         for key in cache.keys where key.hasPrefix(accountId + "|") { cache[key] = nil }
         for key in inflight.keys where key.hasPrefix(accountId + "|") { inflight[key] = nil }
     }
@@ -76,7 +82,11 @@ public actor TokenBroker {
     private func redeem(account: SignedInAccount, tenant: String, key: String) async throws -> String {
         guard let refreshToken = try store.refreshToken(for: account.id) else { throw SignInError.notSignedIn }
         let authority = try MicrosoftIdentity.authority(tenant)
+        let started = generation[account.id, default: 0]
         let response = try await post(TokenRequest.refresh(refreshToken, clientId: account.clientId, authority: authority))
+        // Signed out (or in again) meanwhile: keep nothing of this answer, or
+        // the rotated refresh token would bring the removed account back.
+        guard generation[account.id, default: 0] == started else { throw SignInError.notSignedIn }
         // Entra rotates refresh tokens; keep the newest.
         if let rotated = response.refreshToken, rotated != refreshToken {
             try store.save(account, refreshToken: rotated)
