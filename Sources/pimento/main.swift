@@ -88,10 +88,27 @@ func openInBrowser(_ url: URL) -> Bool {
     return process.terminationStatus == 0
 }
 
+/// EPIPE, as `FileHandle` reports it (directly or as the underlying error).
+func isBrokenPipe(_ error: Error) -> Bool {
+    let ns = error as NSError
+    if ns.domain == NSPOSIXErrorDomain { return ns.code == Int(EPIPE) }
+    if let underlying = ns.userInfo[NSUnderlyingErrorKey] as? NSError, underlying.domain == NSPOSIXErrorDomain {
+        return underlying.code == Int(EPIPE)
+    }
+    return false
+}
+
 let environment = CLIEnvironment(
     write: { text, stream in
         let handle = stream == .out ? FileHandle.standardOutput : FileHandle.standardError
-        handle.write(Data(text.utf8))
+        // `write(_:)` raises an Objective-C exception on a closed pipe, which
+        // Swift cannot catch; the throwing variant reports it.
+        do { try handle.write(contentsOf: Data(text.utf8)) } catch {
+            guard stream == .out else { return }
+            // The reader went away (`pimento history --csv | head -1`): stop
+            // quietly. Any other output error is one.
+            exit(isBrokenPipe(error) ? 0 : 74)
+        }
     },
     readLine: { Swift.readLine(strippingNewline: true) },
     stdoutIsTTY: stdoutIsTTY,
