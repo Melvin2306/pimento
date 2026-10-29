@@ -440,6 +440,7 @@ public enum CLIJSON {
         public let match: [PresetRule]?
         public let justification: String?
         public let duration: String?
+        public let ticketSystem: String?
         public let createdAt: String?
         public let updatedAt: String?
 
@@ -451,6 +452,7 @@ public enum CLIJSON {
             match = p.match.isEmpty ? nil : p.match
             justification = p.trimmedJustification
             duration = p.duration?.stringValue
+            ticketSystem = p.trimmedTicketSystem
             createdAt = p.createdAt.map(AzureDate.format)
             updatedAt = p.updatedAt.map(AzureDate.format)
         }

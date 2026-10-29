@@ -46,13 +46,16 @@ public struct ActivationRequestBody: Encodable, Equatable, Sendable {
         public let justification: String
         /// Not sent for `SelfDeactivate`.
         public let scheduleInfo: ScheduleInfo?
+        /// Ticket number and system; left out when none is given.
+        public let ticketInfo: TicketInfo?
         public let condition: String?
         public let conditionVersion: String?
 
         public init(
             principalId: String, roleDefinitionId: String, requestType: String,
             linkedRoleEligibilityScheduleId: String? = nil, targetRoleAssignmentScheduleId: String? = nil,
-            justification: String, scheduleInfo: ScheduleInfo?, condition: String? = nil, conditionVersion: String? = nil
+            justification: String, scheduleInfo: ScheduleInfo?, ticketInfo: TicketInfo? = nil,
+            condition: String? = nil, conditionVersion: String? = nil
         ) {
             self.principalId = principalId
             self.roleDefinitionId = roleDefinitionId
@@ -61,6 +64,7 @@ public struct ActivationRequestBody: Encodable, Equatable, Sendable {
             self.targetRoleAssignmentScheduleId = targetRoleAssignmentScheduleId
             self.justification = justification
             self.scheduleInfo = scheduleInfo
+            self.ticketInfo = ticketInfo
             self.condition = condition
             self.conditionVersion = conditionVersion
         }
@@ -154,7 +158,8 @@ public enum ActivationRequestBuilder {
         justification: String,
         minutes: Int,
         now: Date,
-        start: Date? = nil
+        start: Date? = nil,
+        ticket: TicketInfo? = nil
     ) throws -> ActivationRequestBody {
         let justification = justification.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !justification.isEmpty else { throw ActivationRequestError.missingJustification }
@@ -173,6 +178,7 @@ public enum ActivationRequestBuilder {
                 startDateTime: AzureDate.format(start ?? now),
                 expiration: .init(type: "AfterDuration", duration: ISODuration.format(minutes: minutes))
             ),
+            ticketInfo: ticket.flatMap { $0.isEmpty ? nil : $0 },
             condition: condition,
             conditionVersion: conditionVersion
         ))
@@ -307,12 +313,14 @@ public enum ActivationRequestBuilder {
     /// One request per role, each for `duration(role)`: the asked duration
     /// capped at that role's policy maximum (see `EffectiveDuration.resolve`).
     /// `start`: a later start schedules the activations; nil starts them now.
+    /// `ticket`: sent with every request (required by some policies).
     public static func plan(
         _ roles: [EligibleRole],
         principalId: String,
         justification: String,
         now: Date = Date(),
         start: Date? = nil,
+        ticket: TicketInfo? = nil,
         makeId: () -> UUID = UUID.init,
         duration: (EligibleRole) -> EffectiveDuration
     ) throws -> [PlannedRequest] {
@@ -322,7 +330,7 @@ public enum ActivationRequestBuilder {
                 role: role,
                 url: url(for: role, requestId: makeId()),
                 body: try body(for: role, principalId: principalId, justification: justification, minutes: d.minutes,
-                               now: now, start: start),
+                               now: now, start: start, ticket: ticket),
                 requestedAt: now,
                 duration: d,
                 start: start

@@ -72,12 +72,15 @@ public struct Preset: Codable, Hashable, Identifiable, Sendable {
     public var match: [PresetRule]
     public var justification: String?
     public var duration: RequestedDuration?
+    /// Default ticket system (`ServiceNow`, `Jira`) for roles that need a ticket.
+    public var ticketSystem: String?
     public var createdAt: Date?
     public var updatedAt: Date?
 
     public init(
         id: UUID = UUID(), name: String, tenantId: String?, roles: [PresetRole] = [], match: [PresetRule] = [],
-        justification: String? = nil, duration: RequestedDuration? = nil, createdAt: Date? = nil, updatedAt: Date? = nil
+        justification: String? = nil, duration: RequestedDuration? = nil, ticketSystem: String? = nil,
+        createdAt: Date? = nil, updatedAt: Date? = nil
     ) {
         self.id = id
         self.name = name
@@ -86,12 +89,13 @@ public struct Preset: Codable, Hashable, Identifiable, Sendable {
         self.match = match
         self.justification = justification
         self.duration = duration
+        self.ticketSystem = ticketSystem
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, name, tenantId, roles, match, justification, duration, createdAt, updatedAt
+        case id, name, tenantId, roles, match, justification, duration, ticketSystem, createdAt, updatedAt
     }
 
     /// Lenient: unknown keys are ignored, a missing id gets a new one, and an
@@ -105,6 +109,7 @@ public struct Preset: Codable, Hashable, Identifiable, Sendable {
         match = (try c.decodeIfPresent([PresetRule].self, forKey: .match) ?? []).filter { !$0.isEmpty }
         justification = try c.decodeIfPresent(String.self, forKey: .justification)
         duration = (try? c.decodeIfPresent(String.self, forKey: .duration)).flatMap { $0.flatMap(RequestedDuration.init(stringValue:)) }
+        ticketSystem = (try? c.decodeIfPresent(String.self, forKey: .ticketSystem))?.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty }
         createdAt = try? c.decodeIfPresent(Date.self, forKey: .createdAt)
         updatedAt = try? c.decodeIfPresent(Date.self, forKey: .updatedAt)
     }
@@ -118,6 +123,7 @@ public struct Preset: Codable, Hashable, Identifiable, Sendable {
         if !match.isEmpty { try c.encode(match, forKey: .match) }
         try c.encodeIfPresent(justification?.nonEmpty, forKey: .justification)
         try c.encodeIfPresent(duration?.stringValue, forKey: .duration)
+        try c.encodeIfPresent(trimmedTicketSystem, forKey: .ticketSystem)
         try c.encodeIfPresent(createdAt, forKey: .createdAt)
         try c.encodeIfPresent(updatedAt, forKey: .updatedAt)
     }
@@ -131,6 +137,10 @@ public struct Preset: Codable, Hashable, Identifiable, Sendable {
 
     public var trimmedJustification: String? {
         justification?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty
+    }
+
+    public var trimmedTicketSystem: String? {
+        ticketSystem?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty
     }
 
     /// `3 roles`, `2 roles + 1 rule`.

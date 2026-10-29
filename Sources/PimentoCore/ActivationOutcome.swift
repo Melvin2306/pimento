@@ -210,7 +210,7 @@ public enum ActivationResponseMapper {
         switch rule {
         case "ExpirationRule": "duration exceeds the role's maximum activation time"
         case "JustificationRule": "justification required"
-        case "TicketingRule": "ticket information required"
+        case "TicketingRule": "a ticket is required: give a ticket number and ticket system"
         case "MfaRule", "AuthenticationContextRule": "MFA or authentication context required (see README)"
         case "ApprovalRule": "approval required"
         case "EnablementRule": "an enablement rule failed (justification/ticket/MFA)"
