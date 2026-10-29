@@ -38,6 +38,9 @@ does the whole list in one go, as you, using the Azure CLI session you already h
 - **Each role's policy maximum**: Pimento reads every role's PIM policy and never asks for more
   than it allows. Pick a duration or *Maximum allowed*; the Duration column shows what each role
   gets (*8 h (max 8 h)*, or a warning when it is capped).
+- **End early or renew**: check active rows (or right-click one) and press *Deactivate* to end them
+  now, or *Renew* to end and activate them again for a fresh duration. Expiry reminders offer
+  **Renew** and **End Now** right in the notification. See [Ending and renewing](#ending-and-renewing-activations).
 - **Preview (dry run)**: shows the exact `PUT` URLs and JSON bodies without sending anything (<kbd>⌥</kbd><kbd>⌘</kbd><kbd>↩</kbd>).
 - **Notifications**: a macOS notification when a batch finishes, and a reminder before activated roles
   expire (10 minutes by default; adjustable in Settings).
@@ -48,7 +51,7 @@ does the whole list in one go, as you, using the Azure CLI session you already h
   `--tenant` / `PIMENTO_TENANT`. Hide the tenants you never use.
 - **Settings** (<kbd>⌘</kbd><kbd>,</kbd>) for notifications, activation defaults, refresh and table columns.
 - **Themes**: Native, Azure-style or, for fun, Windows XP-style (see [Themes](#themes)).
-- **A real command-line tool**, `pimento`: `list`, `activate`, `status`, `tenants`, with JSON
+- **A real command-line tool**, `pimento`: `list`, `activate`, `deactivate`, `renew`, `status`, `tenants`, with JSON
   output, exit codes and shell completions. Download it on its own, or get it with the app.
 - **No credentials of its own, no dependencies, no telemetry.**
 
@@ -135,7 +138,8 @@ open build/Pimento.app
 1. Make sure `az` is signed in: `az login` (or `az login --tenant <tenant>`).
 2. Open Pimento. It loads your eligible roles for the selected tenant.
 3. Filter with the search field, check rows, or press <kbd>⇧</kbd><kbd>⌘</kbd><kbd>A</kbd> to select every
-   role that is not active yet (within the current filter). Active rows cannot be checked.
+   role that is not active yet (within the current filter). Checking an *active* row selects it
+   for **Renew** / **Deactivate** instead (see below).
 4. Enter a **justification** and a **duration**: 1 to 24 hours (default 8), or *Maximum allowed*.
    Each role is requested for at most its PIM policy's maximum; the **Duration** column shows the
    maximum of every role and, for checked rows, the duration it will get.
@@ -153,7 +157,41 @@ open build/Pimento.app
 | <kbd>⌘</kbd><kbd>1</kbd> … <kbd>⌘</kbd><kbd>9</kbd> | Select the roles of the first nine presets |
 | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>S</kbd> | Save selection as preset |
 | <kbd>⌘</kbd><kbd>↩</kbd> | Preview / activate |
+| <kbd>⇧</kbd><kbd>⌘</kbd><kbd>R</kbd> | Renew the checked active roles |
+| <kbd>⇧</kbd><kbd>⌘</kbd><kbd>E</kbd> | End the checked active roles now |
 | <kbd>⌘</kbd><kbd>F</kbd> | Filter |
+
+### Ending and renewing activations
+
+Check active rows and the bottom bar offers **Renew** and **Deactivate**; right-clicking a row
+offers *End Now…* and *Renew…* for it (or for all checked active rows when it is one of them).
+Both ask first. The same actions are in the menu bar (<kbd>⇧</kbd><kbd>⌘</kbd><kbd>R</kbd>, <kbd>⇧</kbd><kbd>⌘</kbd><kbd>E</kbd>).
+
+| Action | What Pimento sends | What happens |
+| --- | --- | --- |
+| **Deactivate** (End Now) | `SelfDeactivate` | The activation ends; the row goes back to *Eligible*. PIM refuses this in the first **5 minutes** after an activation; Pimento then shows *Too soon* with the time from which it works, and sends nothing. |
+| **Renew** | `SelfDeactivate`, then `SelfActivate` | A fresh activation for the chosen duration (capped at the policy maximum). **In between the role is not active**: PIM accepts the new activation only once it has removed the old one, which took about **3 minutes** in tests. Pimento keeps trying for 5 minutes and shows *Activating again (try n)…*. If that fails, the role stays off: activate it again. Roles whose policy requires approval are not renewed. |
+| `pimento extend` (CLI) | `SelfExtend` | For **admin-assigned, time-bound** assignments: a *request* that an administrator must approve (`PendingAdminDecision`). Nothing changes until then. |
+
+**Why Renew and not Extend?** PIM has no self-service way to lengthen your own activation.
+Sending `SelfExtend` for an activation is accepted, but only as a request for an administrator
+(`PendingAdminDecision`), and PIM keeps the old end time in it. Pimento therefore renews
+activations, and uses `SelfExtend` only for admin-assigned time-bound assignments (where it is
+the documented way to ask for more time).
+
+Rows you end or renew keep their new state while Azure catches up (a refresh follows right away
+and again after 20 and 60 seconds), the result column says what happened, and the completion
+notification sums it up. Reminders for ended roles are withdrawn; renewed roles get new ones.
+
+**From the expiry reminder.** The reminder has two actions:
+
+- **Renew** renews the roles in the reminder for the duration they were activated for, with
+  the same justification when Pimento keeps recent justifications (Settings › Activation). If
+  there is no justification, or the roles include Owner (with the Owner confirmation on), the app
+  comes forward and asks.
+- **End Now** ends them right away.
+
+Both act in the tenant the reminder is for; if the app shows another tenant, it says so instead.
 
 ### Presets
 
@@ -252,6 +290,12 @@ pimento activate contoso-dev --role Contributor -j "deploy" --yes --json | jq .s
 # The longest each role's PIM policy allows
 pimento activate prod --role Owner -j "INC-1234" --hours max
 
+# End roles early, or renew them for a fresh duration (asks first)
+pimento deactivate contoso-dev --role Contributor
+pimento renew contoso-dev --role Contributor -j "INC-1234 still on it" --hours 2
+# Ask an administrator to extend an admin-assigned, time-bound assignment
+pimento extend fabrikam --role Reader -j "project runs until March" --days 90
+
 # Presets (shared with the app)
 pimento presets save On-call prod --role Owner -j "on-call" --hours max
 pimento activate --preset On-call
@@ -262,13 +306,16 @@ pimento presets list
 | --- | --- |
 | `pimento list [FILTER…] [--role NAME] [--active \| --eligible]` | Table of your eligible roles, with status and expiry |
 | `pimento activate (FILTER… \| --role NAME \| --all \| --preset NAME) -j TEXT [--hours N\|max] [--yes] [--dry-run] [--max-parallel N]` | Activates the matching roles that are not active yet, in parallel (8 at a time by default) |
+| `pimento deactivate (FILTER… \| --role NAME \| --all \| --preset NAME) [-j TEXT] [--yes] [--dry-run]` | Ends the matching activations now (`SelfDeactivate`) |
+| `pimento renew (FILTER… \| --role NAME \| --all \| --preset NAME) -j TEXT [--hours N\|max] [--yes] [--dry-run]` | Ends and activates the matching roles again, for a fresh duration (the role is off for a few minutes in between) |
+| `pimento extend (FILTER… \| --role NAME \| --all) -j TEXT [--days N] [--yes] [--dry-run]` | Asks an administrator to extend admin-assigned, time-bound assignments (`SelfExtend`) |
 | `pimento status` | Active roles with the time left, soonest-expiring first |
 | `pimento tenants` | Tenants by ID, name and domain |
 | `pimento presets [list] \| show NAME \| save NAME FILTER… [--role NAME] [--exact] [-j TEXT] [--hours N\|max] [--force] \| delete NAME` | Saved presets (see below) |
 | `pimento completions zsh\|bash\|fish` | Prints a shell completion script |
 | `pimento version`, `pimento help [COMMAND]` | Version; help for a command (also `COMMAND --help`) |
 
-`list`, `activate`, `status` and `tenants` take `-t, --tenant ID` and `--json`. The tenant is
+`list`, `activate`, `deactivate`, `renew`, `extend`, `status` and `tenants` take `-t, --tenant ID` and `--json`. The tenant is
 `--tenant`, else `$PIMENTO_TENANT`, else az's current tenant.
 
 **Selecting roles.** A FILTER matches the resource name (case-insensitive substring); several
@@ -281,6 +328,16 @@ it. `--role` matches the whole role name, case-insensitively, with `*` as a wild
 each role's PIM policy (`roleManagementPolicyAssignments`) and requests at most its maximum: the
 plan has a DURATION column and a note when a role was capped. When a policy cannot be read, the
 asked duration is used (8 hours for `max`). `pimento list` shows the maximum in a MAX column.
+
+**Ending and renewing.** `deactivate`, `renew` and `extend` follow the same safety rules as
+`activate`: an explicit selection, the plan first, a `[y/N]` prompt on a terminal, `--yes` required
+otherwise, and `--dry-run` sends nothing. `deactivate` and `renew` only consider active roles;
+a role activated less than 5 minutes ago is reported as *too soon* with the time from which it
+can be ended (exit code 1). `renew` warns that the role is off between the two requests, retries
+the activation for up to 5 minutes while PIM removes the old one, and skips roles whose policy
+requires approval. `extend` leaves PIM activations out (use `renew`) and asks for the end of each
+matching admin-assigned assignment to move `--days` later (default 30); an administrator decides.
+See [Ending and renewing](#ending-and-renewing-activations).
 
 **Presets.** `pimento activate --preset NAME` activates the roles of a preset saved in the app or
 with `pimento presets save`. The preset's justification and duration apply unless you pass `-j` or
@@ -407,6 +464,16 @@ directly with the PIM APIs (`api-version=2020-10-01`):
 6. **Results.** `RoleAssignmentExists` becomes *Skipped (already active)*;
    `RoleAssignmentRequestPolicyValidationFailed` lists the failing rules; token errors point
    to `az login`.
+7. **Deactivate.** The same `PUT` with `requestType: SelfDeactivate`, `principalId`, the role
+   definition, `linkedRoleEligibilityScheduleId` and the eligibility's `condition` (if any), and no
+   `scheduleInfo`. In an activation's first 5 minutes PIM answers `RoleAssignmentDoesNotExist`
+   (Microsoft's docs also name `ActiveDurationTooShort`); both become *Too soon*.
+   `RoleAssignmentDoesNotExist` later on means the activation had already ended.
+8. **Renew** = 7, then 5 with a new request id and start time. Until PIM has removed the old
+   assignment it answers `RoleAssignmentExists`; Pimento retries for about 5 minutes.
+9. **Extend** (`pimento extend`): `requestType: SelfExtend` with `targetRoleAssignmentScheduleId`
+   and `scheduleInfo.expiration = {type: AfterDateTime, endDateTime: <end + days>}`. PIM answers
+   `201` with status `PendingAdminDecision`.
 
 ## Security and privacy
 
@@ -417,8 +484,10 @@ directly with the PIM APIs (`api-version=2020-10-01`):
 - It keeps its settings in `UserDefaults`: the chosen tenant ID, the hidden tenant IDs, table
   columns, the options from the Settings window and, unless you turn it off, your last
   10 justifications (Settings › Activation clears them).
-- The only write call is the activation `PUT`. It runs after you press Activate in the app (and
-  confirm, for Owner roles), or when `pimento activate` has your confirmation (or `--yes`).
+- The only write calls are the `roleAssignmentScheduleRequests` `PUT`s: activate, deactivate,
+  renew (both) and extend. They run after you confirm in the app (Activate asks for Owner roles;
+  Deactivate and Renew always ask), after a tap on *Renew* / *End Now* in a reminder, or when the
+  CLI command has your confirmation (or `--yes`).
   **Preview** in the app and `pimento activate --dry-run` show the requests without sending them.
 - Presets are kept in `~/Library/Application Support/Pimento/presets.json` (mode 600): names,
   ARM scopes and role definition IDs, and the justification and duration you chose to save.
@@ -436,7 +505,12 @@ See [SECURITY.md](SECURITY.md) for how to report a vulnerability.
   Microsoft Graph and need Graph permissions such as `RoleManagement.ReadWrite.Directory` /
   `PrivilegedAccess.ReadWrite.AzureADGroup`, which the Azure CLI's first-party app cannot obtain.
 - **Approval-required roles** are submitted; the row shows *Submitted (PendingApproval)* until
-  an approver acts.
+  an approver acts. They are not renewed (the role would be off until someone approves).
+- **No self-service extension of an activation.** PIM does not offer one; *Renew* starts a new
+  activation and leaves a gap of a few minutes. Extension requests for admin-assigned time-bound
+  assignments are CLI-only (`pimento extend`), and the app does not list those assignments.
+- **Reminder actions** need Pimento to be able to run: *End Now* works in the background, *Renew*
+  brings the app forward. They act on the tenant the app is showing.
 - **Roles that require MFA or an authentication context** at activation fail with `MfaRule` /
   `AuthenticationContextRule` unless your az token already carries the required claims (see FAQ).
 - You choose whole hours (or *Maximum allowed*); a role whose policy allows less, such as 90

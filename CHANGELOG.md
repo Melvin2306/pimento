@@ -8,6 +8,27 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- End activations early and renew them.
+  - **Deactivate** (`SelfDeactivate`): check active rows (they can be checked now) or right-click a
+    row, then *Deactivate* / *End Now…* (⇧⌘E), with a confirmation. Roles activated less than 5 minutes
+    ago are not sent and show *Too soon* with the time from which PIM allows it (PIM answers
+    `RoleAssignmentDoesNotExist` then; `ActiveDurationTooShort` is handled the same way).
+  - **Renew**: deactivate, then activate again for the chosen duration (capped at the policy
+    maximum), with a confirmation that warns about the gap and lists Owner roles (⇧⌘R). PIM refuses
+    the new activation (`RoleAssignmentExists`) until it has removed the old one, about 3 minutes in
+    tests; Pimento retries for 5 minutes and shows the attempts. Roles whose policy requires
+    approval are not renewed.
+  - Ended and renewed rows keep their new state while Azure catches up (refresh now, after 20 and
+    60 seconds); per-row results and a completion notification for both.
+  - CLI: `pimento deactivate` and `pimento renew` (FILTER…, `--role`, `--all` or `--preset`;
+    `--yes`, `--dry-run`, `--json`, same prompts and exit codes as `activate`), and `pimento extend`,
+    which sends `SelfExtend` for admin-assigned time-bound assignments (`--days`, default 30): a
+    request an administrator must approve. Activations are left out with a pointer to `renew`,
+    because PIM files `SelfExtend` on an activation as `PendingAdminDecision` and keeps its end time.
+  - Expiry reminders have **Renew** and **End Now** actions. Renew reuses the duration and, when
+    recent justifications are kept, the justification; otherwise, or for Owner roles, the app asks.
+    Reminders of ended roles are withdrawn or rewritten; renewed roles get new ones.
+
 - Presets: named sets of roles with an optional justification and duration, per tenant.
   - App: a Presets toolbar menu and menu-bar menu. Picking a preset (⌘1–⌘9) checks exactly its
     roles and fills in its justification and duration; *Activate Preset* also activates (Owner
