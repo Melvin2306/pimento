@@ -1,0 +1,51 @@
+Sources/PimentoCore/CLI/CLIPolicy.swift
+  s_4884204a812fec::t_58f1a42f8496cd 14-15,53
+Sources/PimentoCore/ScheduledRequest.swift
+  s_4884204a812fec::t_9819b9898b2d73 185,188-191,196-205
+  s_4884204a812fec::t_9556d2bdbf2e87 206-221
+  s_4884204a812fec::t_be91a25828bf1a 222-223
+Sources/PimentoCore/CLI/CLIOutput.swift
+  s_4884204a812fec::t_cf12e7996de960 280-281,341
+Sources/PimentoCore/CLI/CLICommand.swift
+  s_4884204a812fec::t_58f1a42f8496cd 131-174,276-280,287-288,326-329,362-391,393-403,489-501,529-544,667-700
+  s_4884204a812fec::t_3248e69d371a3e 701
+Sources/PimentoCore/CLI/CLIScheduled.swift
+  s_4884204a812fec::t_8b0e375b68180b 67-68,87
+Sources/PimentoCore/CLI/CLIApprovals.swift
+  s_4884204a812fec::t_e01239c7ff3bbc 1-572
+Tests/PimentoCoreTests/ApprovalTests.swift
+  s_4884204a812fec::t_63569e5af271b0 319-320
+Sources/PimentoCore/CLI/CLIHelp.swift
+  s_4884204a812fec::t_ee87046e9bdcd1 19-23,47-51,67-68,145-149,479-483,550-561,573,593,600,609-611,616,634-638,645-647,658,664-667,670
+  s_4884204a812fec::t_e21d943447c1c6 206-296
+Tests/PimentoCoreTests/Fixtures/schedule-requests.json
+  s_4884204a812fec::t_1902d9a2d5f168 42-43
+Sources/PimentoCore/ActivationRequest.swift
+  s_4884204a812fec::t_24f2d183678f99 129,131
+  s_4884204a812fec::t_cf12e7996de960 130
+Sources/PimentoCore/CLI/CLIRunner.swift
+  s_4884204a812fec::t_24f2d183678f99 23-24,35-36,49,104-107,458,468-470,475-479,493,495-496,501-503
+Sources/PimentoCore/Approvals.swift
+  s_4884204a812fec::t_5a068b6817c271 712
+Tests/PimentoCoreTests/CLIApprovalTests.swift
+  s_4884204a812fec::t_5dc95f2980ba53 185-186
+  s_4884204a812fec::t_5a068b6817c271 1-184,187-319
+Tests/PimentoCoreTests/CLIRunnerTests.swift
+  s_4884204a812fec::t_1902d9a2d5f168 20-28,50-55,81,83-86,106,114,118-124
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a3a69e0d8543092342db4c58c813be23055cb749",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
