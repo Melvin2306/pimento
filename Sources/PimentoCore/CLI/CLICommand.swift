@@ -1092,7 +1092,11 @@ public enum CLIParser {
                 if let inline {
                     value = inline
                 } else {
-                    guard i < args.count, !args[i].hasPrefix("--") else { throw CLIParseError.missingValue(name) }
+                    // Another flag of this command is no value (`-j -y` must not
+                    // make "-y" the justification and drop --yes).
+                    guard i < args.count, !args[i].hasPrefix("--"), flags[args[i]] == nil, args[i] != "-h" else {
+                        throw CLIParseError.missingValue(name)
+                    }
                     value = args[i]
                     i += 1
                 }
