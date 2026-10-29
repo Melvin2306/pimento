@@ -3,6 +3,7 @@ import Foundation
 import Observation
 import PimentoCore
 import SwiftUI
+import UniformTypeIdentifiers
 
 enum RowProgress: Equatable {
     case queued
@@ -127,6 +128,29 @@ final class AppModel {
     /// "Load roles on launch" is off and nothing has been loaded yet.
     private(set) var awaitingManualRefresh = false
 
+    // History: every write this app (and the CLI) sent, from the shared file.
+    let historyStore = HistoryStore()
+    let historyRecorder: HistoryRecorder
+    /// Whether history is kept, and for how long (shared with the CLI).
+    var historySettings: HistorySettings {
+        didSet { historySettingsChanged(from: oldValue) }
+    }
+    var historyRecords: [HistoryRecord] = []
+    var showHistory = false
+    var historySearch = ""
+    var historyPeriod: HistoryPeriod = .all
+    var historyFrom = Date().addingTimeInterval(-7 * 86400)
+    var historyTo = Date()
+    var historyAction: HistoryAction?
+    var historyResult: HistoryResult?
+    /// A tenant GUID (lower-case), or nil for all.
+    var historyTenant: String?
+    var historySortOrder: [KeyPathComparator<HistoryRecord>] = [KeyPathComparator(\.at, order: .reverse)]
+    var historySelection: Set<HistoryRecord.ID> = []
+    var historyImportState: LoadState = .idle
+    var historyMessage: Banner?
+    var showClearHistoryConfirmation = false
+
     // Settings (⌘,), saved to UserDefaults on every change.
     var prefs: Preferences {
         didSet { preferencesChanged(from: oldValue) }
@@ -147,7 +171,9 @@ final class AppModel {
     private(set) var tenant: TenantSelection
     /// An invalid `--tenant` / `PIMENTO_TENANT` value; shown instead of the table.
     private(set) var tenantError: String?
-    var knownTenants: [TenantInfo] = []
+    var knownTenants: [TenantInfo] = [] {
+        didSet { historyRecorder.setTenantLabels(Dictionary(knownTenants.compactMap { t in t.name.map { (t.id, $0) } }, uniquingKeysWith: { a, _ in a })) }
+    }
     private(set) var isLoadingTenants = false
     /// Tenants the user hid from the picker (lower-case IDs).
     private(set) var hiddenTenantIds: Set<String> = []
@@ -224,9 +250,15 @@ final class AppModel {
             tenantError = error.localizedDescription
         }
         tenant = selection
-        service = PIMService(tokens: AzureCLITokenProvider(tenantId: selection.tenantId))
+        let recorder = HistoryRecorder(store: historyStore, source: .app)
+        historyRecorder = recorder
+        historySettings = historyStore.loadSettings()
+        service = PIMService(tokens: AzureCLITokenProvider(tenantId: selection.tenantId), history: recorder)
         restartAutoRefresh()
         reloadPresets()
+        // Old records go once per launch (the CLI and later writes prune too).
+        let store = historyStore, retention = historySettings.retention
+        Task.detached(priority: .utility) { _ = try? store.prune(retention: retention) }
     }
 
     // MARK: Derived state
@@ -731,7 +763,7 @@ final class AppModel {
             UserDefaults.standard.removeObject(forKey: Keys.tenant)
             tenant = TenantSelection(tenantId: nil, source: .azDefault)
         }
-        service = PIMService(tokens: AzureCLITokenProvider(tenantId: tenant.tenantId))
+        service = PIMService(tokens: AzureCLITokenProvider(tenantId: tenant.tenantId), history: historyRecorder)
         tenantGeneration += 1
         roles = []
         identity = nil
@@ -1384,6 +1416,174 @@ final class AppModel {
             selectManagedPreset(visiblePresets.first?.id)
         } catch {
             presetDraftError = error.localizedDescription
+        }
+    }
+
+    // MARK: History
+
+    /// Reads the history file again (it is shared with the CLI).
+    func reloadHistory() {
+        historyRecords = historyStore.records(settings: historySettings, knownTenants: knownTenantLabels)
+    }
+
+    private var knownTenantLabels: [String: String] {
+        Dictionary(knownTenants.compactMap { t in t.name.map { (t.id, $0) } }, uniquingKeysWith: { a, _ in a })
+    }
+
+    func openHistory() {
+        historyMessage = nil
+        reloadHistory()
+        showHistory = true
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    /// The filter of the History window's controls.
+    var historyFilter: HistoryFilter {
+        var filter = HistoryFilter(text: historySearch)
+        if historyPeriod == .custom {
+            (filter.since, filter.until) = HistoryPeriod.customRange(from: historyFrom, to: historyTo)
+        } else {
+            filter.since = historyPeriod.since(now: Date())
+        }
+        if let historyAction { filter.actions = [historyAction] }
+        if let historyResult { filter.results = [historyResult] }
+        filter.tenant = historyTenant
+        return filter
+    }
+
+    /// The rows of the History window: filtered, in the table's sort order.
+    var visibleHistory: [HistoryRecord] {
+        historyFilter.apply(historyRecords).sorted(using: historySortOrder)
+    }
+
+    var historyTenants: [(id: String, label: String)] { HistoryLog.tenants(in: historyRecords) }
+
+    var historyFiltersActive: Bool {
+        !historySearch.trimmingCharacters(in: .whitespaces).isEmpty || historyAction != nil || historyResult != nil
+            || historyTenant != nil || historyPeriod != .all
+    }
+
+    func resetHistoryFilters() {
+        historySearch = ""
+        historyAction = nil
+        historyResult = nil
+        historyTenant = nil
+        historyPeriod = .all
+    }
+
+    /// Reads your past requests from Azure (read-only) and adds the ones the
+    /// history does not have yet.
+    func importHistoryFromAzure() async {
+        guard historyImportState != .loading, tenantError == nil else { return }
+        historyImportState = .loading
+        historyMessage = nil
+        let service = service
+        let store = historyStore
+        let label = effectiveTenantId.flatMap(knownTenant)?.name
+        let cutoff = historySettings.retention.cutoff(now: Date())
+        do {
+            let records = try await service.loadHistoryFromAzure(tenantLabel: label)
+            let kept = records.filter { cutoff == nil || $0.at >= cutoff! }
+            let result = try await Task.detached { try store.importRecords(kept) }.value
+            historyImportState = .loaded
+            var text = "Read \(records.count) request\(records.count == 1 ? "" : "s") from Azure: \(result.added) added, \(result.known) already here"
+            if records.count > kept.count { text += ", \(records.count - kept.count) older than \(historySettings.retention.title.lowercased())" }
+            historyMessage = Banner(kind: .success, text: text + ".")
+            reloadHistory()
+        } catch {
+            historyImportState = .failed(message: error.localizedDescription, needsLogin: (error as? AzureCLIError)?.needsLogin ?? false)
+            historyMessage = Banner(kind: .error, text: "Import from Azure failed: \(error.localizedDescription)")
+        }
+    }
+
+    /// Asks where to save, then writes the rows shown (filtered and sorted) as CSV.
+    func exportHistoryCSV() {
+        let records = visibleHistory
+        let panel = NSSavePanel()
+        panel.title = "Export History"
+        panel.nameFieldStringValue = "pimento-history-\(Date().formatted(.iso8601.year().month().day())).csv"
+        panel.allowedContentTypes = [.commaSeparatedText]
+        panel.canCreateDirectories = true
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try HistoryCSV.write(records, to: url)
+            historyMessage = Banner(kind: .success, text: "Exported \(records.count) record\(records.count == 1 ? "" : "s") to \(url.lastPathComponent).")
+        } catch {
+            historyMessage = Banner(kind: .error, text: error.localizedDescription)
+        }
+    }
+
+    func showHistoryInFinder() {
+        let fm = FileManager.default
+        if fm.fileExists(atPath: historyStore.url.path) {
+            NSWorkspace.shared.activateFileViewerSelecting([historyStore.url])
+        } else {
+            let dir = historyStore.url.deletingLastPathComponent()
+            try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+            NSWorkspace.shared.open(dir)
+        }
+    }
+
+    func clearHistory() {
+        do {
+            try historyStore.clear()
+            historyMessage = Banner(kind: .success, text: "History cleared.")
+        } catch {
+            historyMessage = Banner(kind: .error, text: error.localizedDescription)
+        }
+        reloadHistory()
+    }
+
+    /// Checks the role of `record` and fills in its justification, ticket and
+    /// duration, ready to activate again.
+    func activateAgain(_ record: HistoryRecord) {
+        switch HistoryReplay.verdict(for: record, roles: roles, tenantId: identity?.tenantId ?? effectiveTenantId) {
+        case .ready(let role):
+            showHistory = false
+            search = ""
+            checked = [role.id]
+            checkedActive = []
+            scheduleStart = nil
+            if let text = record.justification { justification = text }
+            if let d = HistoryReplay.duration(of: record) { duration = d }
+            if let ticket = record.ticket {
+                ticketNumber = ticket.ticketNumber ?? ""
+                if let system = ticket.ticketSystem { ticketSystem = system }
+                showTicketFields = true
+            }
+            loadPolicies(for: [role])
+            banner = Banner(kind: .info, text: "\(role.roleName) · \(role.scopeName) selected with the justification"
+                + (record.ticket == nil ? "" : " and ticket") + " of \(record.at.formatted(date: .abbreviated, time: .shortened)). Press Activate.")
+            justificationFocusRequest += 1
+        case .alreadyActive(let role):
+            historyMessage = Banner(kind: .info, text: "\(role.roleName) · \(role.scopeName) is active now.")
+        case .notEligible:
+            historyMessage = Banner(kind: .error, text: "\(record.roleDisplay) · \(record.scopeDisplay) is not among your eligible roles here.")
+        case .otherTenant(let id):
+            historyMessage = Banner(kind: .error, text: "That was in tenant \(record.tenantLabel ?? id). Switch to it (⇧⌘T), then try again.")
+        case .notAnActivation:
+            break
+        }
+    }
+
+    /// Whether "Activate Again" applies to `record` right now.
+    func canActivateAgain(_ record: HistoryRecord) -> Bool {
+        guard !isActivating else { return false }
+        if case .ready = HistoryReplay.verdict(for: record, roles: roles, tenantId: identity?.tenantId ?? effectiveTenantId) { return true }
+        return false
+    }
+
+    private func historySettingsChanged(from old: HistorySettings) {
+        guard historySettings != old else { return }
+        do { try historyStore.saveSettings(historySettings) } catch {
+            historyMessage = Banner(kind: .error, text: error.localizedDescription)
+        }
+        if historySettings.retention != old.retention {
+            let store = historyStore, retention = historySettings.retention
+            Task {
+                _ = try? await Task.detached { try store.prune(retention: retention) }.value
+                self.reloadHistory()
+            }
         }
     }
 

@@ -429,3 +429,44 @@ struct HistoryImportTests {
         #expect(HistoryImport.action(requestType: "SelfRenew", start: nil, createdOn: nil) == .renew)
     }
 }
+
+@Suite("History window logic")
+struct HistoryWindowTests {
+    @Test func periods() {
+        #expect(HistoryPeriod.week.since(now: Fixture.now) == Fixture.now.addingTimeInterval(-7 * 86400))
+        #expect(HistoryPeriod.all.since(now: Fixture.now) == nil)
+        #expect(HistoryPeriod.custom.since(now: Fixture.now) == nil)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let (from, to) = HistoryPeriod.customRange(
+            from: AzureDate.parse("2026-10-20T15:00:00Z")!, to: AzureDate.parse("2026-10-18T09:00:00Z")!, calendar: calendar)
+        #expect(from == AzureDate.parse("2026-10-18T00:00:00Z"))
+        #expect(abs(to.timeIntervalSince(AzureDate.parse("2026-10-21T00:00:00Z")!)) < 0.01 && to < AzureDate.parse("2026-10-21T00:00:00Z")!)
+    }
+
+    @Test func activateAgainFindsTheEligibleRow() throws {
+        let rows = try Fixture.rows()
+        let staging = try Fixture.role("Contoso Staging", "Contributor")
+        var record = HistoryRecord.sample(1, tenantId: "t-1", role: "Contributor", scopeName: "Contoso Staging")
+        record.scope = staging.scope
+        record.roleDefinitionId = staging.roleDefinitionId
+        #expect(HistoryReplay.verdict(for: record, roles: rows, tenantId: "T-1") == .ready(staging))
+        #expect(HistoryReplay.verdict(for: record, roles: rows, tenantId: "t-2") == .otherTenant("t-1"))
+        #expect(HistoryReplay.verdict(for: record, roles: [], tenantId: "t-1") == .notEligible)
+        var active = staging
+        active.isActive = true
+        #expect(HistoryReplay.verdict(for: record, roles: [active], tenantId: nil) == .alreadyActive(active))
+        record.action = .approve
+        #expect(HistoryReplay.verdict(for: record, roles: rows, tenantId: "t-1") == .notAnActivation)
+
+        record.requestedDuration = "max"
+        #expect(HistoryReplay.duration(of: record) == .maximum)
+        record.requestedDuration = "PT4H"
+        #expect(HistoryReplay.duration(of: record) == .hours(4))
+        record.requestedDuration = nil
+        record.durationMinutes = 120
+        #expect(HistoryReplay.duration(of: record) == .hours(2))
+        record.durationMinutes = 90
+        #expect(HistoryReplay.duration(of: record) == nil)
+    }
+}

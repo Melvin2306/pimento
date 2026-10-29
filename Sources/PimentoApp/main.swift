@@ -68,6 +68,8 @@ struct PimentoApp: App {
                 Button("Approvals…") { model.openApprovals() }
                     .keyboardShortcut("p", modifiers: [.command, .shift])
                     .disabled(model.identity == nil)
+                Button("History…") { model.openHistory() }
+                    .keyboardShortcut("h", modifiers: [.command, .shift])
                 Button("Clear Results") { model.clearResults() }
                     .keyboardShortcut("k")
                     .disabled(model.progress.isEmpty || model.isActivating)

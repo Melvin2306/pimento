@@ -12,6 +12,8 @@ struct SettingsView: View {
                 .tabItem { Label("Activation", systemImage: "bolt.shield") }
             NotificationSettings()
                 .tabItem { Label("Notifications", systemImage: "bell.badge") }
+            HistorySettingsView()
+                .tabItem { Label("History", systemImage: "clock.arrow.circlepath") }
         }
         .frame(width: 500)
     }

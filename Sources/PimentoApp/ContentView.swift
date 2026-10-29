@@ -32,6 +32,7 @@ struct ContentView: View {
         .sheet(isPresented: $model.showManagePresets) { ManagePresetsSheet() }
         .sheet(isPresented: $model.showScheduled) { ScheduledSheet() }
         .sheet(isPresented: $model.showApprovals) { ApprovalsSheet() }
+        .sheet(isPresented: $model.showHistory) { HistorySheet() }
         .alert(ownerAlertTitle, isPresented: $model.showOwnerConfirmation) {
             Button(model.activateTitle, role: .destructive) {
                 Task { await model.activate() }
@@ -220,6 +221,14 @@ struct ContentView: View {
             .help("Requests you can approve or deny as a PIM approver (⇧⌘P)")
             .accessibilityLabel(model.approvalCount > 0 ? "Approvals, \(model.approvalCount) waiting" : "Approvals")
             .disabled(model.identity == nil)
+            Button {
+                model.openHistory()
+            } label: {
+                Label("History", systemImage: "clock.arrow.circlepath")
+                    .labelStyle(.titleAndIcon)
+            }
+            .help("What Pimento sent and how it went; export as CSV (⇧⌘H)")
+            .accessibilityLabel("History")
             PresetsMenu()
             Button("Select All Eligible") { model.selectAllEligible() }
                 .help("Check every role that is not active yet, within the current filter (⇧⌘A)")

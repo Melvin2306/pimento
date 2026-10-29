@@ -610,3 +610,78 @@ public enum HistoryDate {
         return nil
     }
 }
+
+// MARK: - The app's History window
+
+/// The period the History window shows.
+public enum HistoryPeriod: String, CaseIterable, Sendable {
+    case day, week, month, quarter, year, all
+    /// From and to dates picked by hand.
+    case custom
+
+    public var title: String {
+        switch self {
+        case .day: "Last 24 Hours"
+        case .week: "Last 7 Days"
+        case .month: "Last 30 Days"
+        case .quarter: "Last 90 Days"
+        case .year: "Last Year"
+        case .all: "All Time"
+        case .custom: "Custom Range…"
+        }
+    }
+
+    /// The start of the period; nil for all time and the custom range.
+    public func since(now: Date) -> Date? {
+        let days: Double? = switch self {
+        case .day: 1
+        case .week: 7
+        case .month: 30
+        case .quarter: 90
+        case .year: 365
+        case .all, .custom: nil
+        }
+        return days.map { now.addingTimeInterval(-$0 * 86400) }
+    }
+
+    /// A custom range covers whole days: from the start of `from` to the end of `to`.
+    public static func customRange(from: Date, to: Date, calendar: Calendar = .current) -> (Date, Date) {
+        let start = calendar.startOfDay(for: min(from, to))
+        let lastDay = calendar.startOfDay(for: max(from, to))
+        let end = calendar.date(byAdding: .day, value: 1, to: lastDay)?.addingTimeInterval(-0.001) ?? max(from, to)
+        return (start, end)
+    }
+}
+
+/// "Activate Again" on a history row: which eligible row to check, if any.
+public enum HistoryReplay {
+    public enum Verdict: Equatable, Sendable {
+        /// Check this row; justification, ticket and duration come from the record.
+        case ready(EligibleRole)
+        case alreadyActive(EligibleRole)
+        /// Not among your eligible roles (any more).
+        case notEligible
+        /// Recorded in another tenant (its id).
+        case otherTenant(String)
+        /// Not an activation (cancel, approve, …).
+        case notAnActivation
+    }
+
+    public static func verdict(for record: HistoryRecord, roles: [EligibleRole], tenantId: String?) -> Verdict {
+        guard record.action.isActivation, let key = record.policyKey else { return .notAnActivation }
+        if let recorded = record.tenantId, let tenantId, recorded.caseInsensitiveCompare(tenantId) != .orderedSame {
+            return .otherTenant(recorded)
+        }
+        let rows = roles.filter { $0.policyKey == key }
+        guard !rows.isEmpty else { return .notEligible }
+        if let active = rows.first(where: \.isActive) { return .alreadyActive(active) }
+        // Prefer the direct eligibility when it is held directly and through a group.
+        return .ready(rows.first { $0.membership == .direct } ?? rows[0])
+    }
+
+    /// The duration to ask for again: as asked then (`max` included).
+    public static func duration(of record: HistoryRecord) -> RequestedDuration? {
+        record.requestedDuration.flatMap(RequestedDuration.init(stringValue:))
+            ?? record.durationMinutes.flatMap { $0 > 0 && $0 % 60 == 0 ? RequestedDuration(argument: String($0 / 60)) : nil }
+    }
+}
