@@ -8,6 +8,25 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Menu bar extra (Settings › General › Menu bar › *Show in menu bar*, on by default): a template
+  shield-and-arrow glyph drawn by `scripts/make-icon.swift`, followed by the number of active roles and,
+  with *Show remaining time in menu bar* (off by default), the soonest end (`1:24`, or `2 · 1:24`).
+  - Popover: active roles soonest first (one per scope + role), each with a live countdown (`1:24:05`;
+    warning colour within the expiry-reminder lead time) and **Renew** / **End Now**, which confirm inline
+    with the main window's texts (now shared in `ConfirmationText.swift`); **Presets** with one-click
+    **Activate** (the preset's justification, or an inline field; the Owner confirmation still applies;
+    always now); **Scheduled (N)** and **Approvals (N)** links and the count awaiting approval; **Open
+    Pimento**, **Refresh**, **Settings…**, **Quit**. Follows the theme and mode (Native, Azure-style,
+    Windows XP-style, ultra dark).
+  - One timer for every countdown: each second while the popover is open, otherwise only when the menu
+    bar text changes (at most about once a minute), none without active roles. Refresh as in the app.
+  - Closing the last window keeps Pimento running while the menu bar extra is shown.
+  - *Hide Dock icon (menu bar only)* (off by default; only with the menu bar extra): accessory activation
+    policy, applied live and at launch.
+  - *Launch at login* via `SMAppService.mainApp`, with the login item's state (needs approval in
+    System Settings, not a bundled app) and the system's reason when macOS refuses (as it may for
+    ad-hoc signed builds).
+
 - Appearance mode **Ultra dark** (Settings › General › Appearance): the dark appearance with pure black
   window, page, table, sheet and Settings backgrounds for the Native and Azure-style themes (OLED).
   Near-black surfaces and bottom bar (`#0A0A0A`), `#1F1F1F` borders, accent-coloured checked rows, a

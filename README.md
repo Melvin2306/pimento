@@ -57,6 +57,10 @@ does the whole list in one go, as you, using the Azure CLI session you already h
   searchable **History** window (<kbd>⇧</kbd><kbd>⌘</kbd><kbd>H</kbd>) and `pimento history`. Export it as CSV,
   import your past requests from Azure (portal activity too), and *Activate Again* from a row.
   See [History](#history).
+- **Menu bar**: a shield icon with the number of active roles (optionally the soonest end, *2 · 1:24*).
+  Click it for a live countdown of each active role, **Renew** and **End Now**, one-click preset
+  activation and links to Scheduled and Approvals; Pimento keeps running there when you close the
+  window, optionally without a Dock icon. See [Menu bar](#menu-bar).
 - **Preview (dry run)**: shows the exact `PUT` URLs and JSON bodies without sending anything (<kbd>⌥</kbd><kbd>⌘</kbd><kbd>↩</kbd>).
 - **Notifications**: a macOS notification when a batch finishes, and a reminder before activated roles
   expire (10 minutes by default; adjustable in Settings).
@@ -351,6 +355,45 @@ Presets are saved per tenant; the menu shows the presets of the tenant you are l
 A role is identified by its scope and role definition, so a preset keeps working after renames.
 The app and the `pimento` CLI share one file (see [Preset file](#preset-file)).
 
+### Menu bar
+
+Pimento shows a shield icon in the menu bar (Settings › General › Menu bar › *Show in menu bar*, on by
+default). While roles are active, the number of them follows the icon; with *Show remaining time in
+menu bar* the soonest end too: `1:24` for one role, `2 · 1:24` for more (hours:minutes, a day or more as
+`2d 3h`). Click the icon for:
+
+- **Active roles**, soonest end first (one row per scope + role, also when you hold it directly and
+  through a group), with a countdown that ticks every second while the popover is open. A role ending
+  within the expiry-reminder lead time (Settings › Notifications) shows in the warning colour.
+  **Renew** and **End Now** on each row ask first, inline, with the same text as the main window's
+  confirmations; Renew shows the justification to send (and needs one). Roles whose renewal needs a
+  ticket are left to the main window, which has the ticket fields.
+- **Presets** of the current tenant, with **Activate**: it selects the preset's roles (like the Presets
+  menu) and activates them now, with the preset's justification and duration. A preset without a
+  justification asks for one first (unless one is already typed in the window); Owner roles still ask
+  when that setting is on. A start time picked in the window is reset, as the popover always activates now.
+- **Scheduled (N)** and **Approvals (N)** open those views in the main window; requests of yours
+  awaiting approval are counted.
+- **Open Pimento** (<kbd>⌘</kbd><kbd>O</kbd>), **Refresh** (<kbd>⌘</kbd><kbd>R</kbd>), **Settings…** and **Quit**.
+
+The popover follows the theme and mode (Native on the system material, Azure-style with its dark top
+bar, Windows XP-style with the blue title band, ultra dark in black). Refreshing works as in the window:
+on launch (when that is on), automatically (Settings › General › Refresh), after each change, and on
+Refresh; opening the popover loads the roles only if nothing was loaded yet. One timer drives every
+countdown: each second while the popover is open; otherwise only when the menu bar text changes (about
+once a minute with the remaining time shown, at each expiry without it), and none without active roles.
+
+With the menu bar icon shown, closing the window keeps Pimento running; **Open Pimento** brings it back.
+*Hide Dock icon (menu bar only)* removes the Dock icon and the app menu (applied right away and at
+launch); it applies only while the menu bar icon is on, so Pimento never becomes unreachable. Without
+the menu bar icon, closing the window quits, as before. ⌘-drag the icon out of the menu bar to turn
+*Show in menu bar* off.
+
+*Launch at login* registers Pimento.app as a login item (`SMAppService`). It needs the bundled app
+(`scripts/bundle.sh --install`); macOS may refuse an ad-hoc signed build, and Settings then shows the
+system's reason. If it does, add Pimento under System Settings › General › Login Items. A login item
+that is switched off there shows a note.
+
 ### Choosing the tenant
 
 Pimento talks to one Microsoft Entra tenant at a time. It uses the first of:
@@ -378,7 +421,7 @@ is under General.
 
 | Tab | Options |
 | --- | --- |
-| General | tenant to open with (last used, az's current, or a specific one); load roles on launch; refresh automatically (off, 1, 5 or 15 minutes); theme (see below); show or hide the Type, Membership, Condition and Duration columns (also via right-click on a column header); unhide hidden tenants |
+| General | tenant to open with (last used, az's current, or a specific one); load roles on launch; refresh automatically (off, 1, 5 or 15 minutes); menu bar icon (on by default), its remaining time, hide the Dock icon, launch at login (see [Menu bar](#menu-bar)); theme (see below); show or hide the Type, Membership, Condition and Duration columns (also via right-click on a column header); unhide hidden tenants |
 | Activation | default duration; parallel requests (1 to 16, default 8); confirm before activating Owner roles (on by default); remember recent justifications and tickets and offer them from the clock buttons next to the fields; start with the last justification filled in |
 | History | keep a history (on by default); keep records for 30, 90 or 365 days or forever; the file, Show in Finder, Clear History |
 | Notifications | macOS permission state, with a shortcut to System Settings when it is off; send a test notification; notify when activations finish, or only when something fails; expiry reminders and how long before (5, 10, 15 or 30 minutes); notify when a scheduled activation starts; approval decisions on your requests; new approval requests for you; sound |
@@ -789,6 +832,8 @@ See [SECURITY.md](SECURITY.md) for how to report a vulnerability.
   approval request that is decided later keeps its *Pending* entry; importing does not update
   entries Pimento already has. Import reads one tenant at a time, only your own self-service
   requests, and only as far back as Azure lists them.
+- **Launch at login** may be refused for an ad-hoc signed build; add Pimento under System Settings ›
+  General › Login Items instead. Pimento then opens its window at login like any launch.
 - Not notarized (yet), so Gatekeeper asks before the first launch of a downloaded build.
 - The CLI is built and tested for macOS only. Its code avoids AppKit and imports
   `FoundationNetworking` where Linux needs it, but there is no Linux build in CI.
@@ -846,7 +891,7 @@ Sources/PimentoCore/CLI/ the CLI's commands: parser, selection, confirmation, ex
 Sources/pimento/         the `pimento` executable (Foundation only: terminal + network wiring)
 Sources/PimentoApp/      SwiftUI app (product PimentoApp, Pimento.app/Contents/MacOS/Pimento)
 Tests/PimentoCoreTests/  Swift Testing tests with synthetic JSON fixtures and a fake transport
-Assets/                  app icon (generated by scripts/make-icon.swift)
+Assets/                  app icon and menu bar glyph (generated by scripts/make-icon.swift)
 scripts/bundle.sh        builds, signs (ad hoc) and optionally zips Pimento.app, CLI inside
 scripts/package-cli.sh   builds the universal CLI and packs pimento-cli-<version>-macos.tar.gz
 scripts/make-icon.swift  draws the icon with CoreGraphics and runs iconutil
