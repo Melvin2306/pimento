@@ -28,6 +28,8 @@ struct ContentView: View {
         }
         .sheet(isPresented: $model.showDryRunSheet) { DryRunSheet(plans: model.dryRunPlans) }
         .sheet(isPresented: $model.showTenantSheet) { TenantSheet() }
+        .sheet(isPresented: $model.showSavePresetSheet) { SavePresetSheet() }
+        .sheet(isPresented: $model.showManagePresets) { ManagePresetsSheet() }
         .alert(ownerAlertTitle, isPresented: $model.showOwnerConfirmation) {
             Button(model.activateTitle, role: .destructive) {
                 Task { await model.activate() }
@@ -116,6 +118,7 @@ struct ContentView: View {
             .accessibilityLabel("Settings")
         }
         ToolbarItemGroup(placement: .primaryAction) {
+            PresetsMenu()
             Button("Select All Eligible") { model.selectAllEligible() }
                 .help("Check every role that is not active yet, within the current filter (⇧⌘A)")
                 .disabled(model.isActivating || model.roles.isEmpty)
@@ -136,7 +139,7 @@ struct ContentView: View {
         let more = owners.count > 12 ? "\n… and \(owners.count - 12) more" : ""
         let total = model.checkedRoles.count
         return "You are about to activate \(owners.count) Owner role\(owners.count == 1 ? "" : "s") "
-            + "(\(total) role\(total == 1 ? "" : "s") in total) for \(model.hours) h:\n\n\(names)\(more)"
+            + "(\(total) role\(total == 1 ? "" : "s") in total) for \(model.durationSummary):\n\n\(names)\(more)"
             + "\n\nJustification: \(model.trimmedJustification)"
     }
 }
@@ -241,6 +244,13 @@ struct RoleTable: View {
             .width(44)
             .customizationID(AppModel.Column.condition.rawValue)
 
+            TableColumn("Duration") { role in
+                DurationCell(role: role, checked: model.isChecked(role))
+                    .themedCell(checked: model.isChecked(role))
+            }
+            .width(min: 100, ideal: 130)
+            .customizationID(AppModel.Column.duration.rawValue)
+
             TableColumn("Status", value: \.statusSortKey) { role in
                 StatusCell(role: role, checked: model.isChecked(role))
                     .themedCell(checked: model.isChecked(role))
@@ -320,6 +330,78 @@ struct StatusCell: View {
         Calendar.current.isDateInToday(date)
             ? date.formatted(date: .omitted, time: .shortened)
             : date.formatted(.dateTime.weekday(.abbreviated).hour().minute())
+    }
+}
+
+/// The policy maximum of a role, and for checked rows the duration it will
+/// be requested for: `8 h (max 8 h)`, orange when capped.
+struct DurationCell: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.appTheme) private var theme
+    @Environment(\.colorScheme) private var scheme
+    let role: EligibleRole
+    var checked = false
+
+    var body: some View {
+        let lookup = model.policyLookup(for: role)
+        let palette = ThemePalette(theme, scheme)
+        let secondary: Color = theme == .native ? .secondary : checked ? palette.selectionText : palette.secondaryText
+        Group {
+            if checked && !role.isActive {
+                let d = model.effectiveDuration(for: role)
+                if d.isClamped || d.isFallback {
+                    Label {
+                        // Short: the tooltip says what was asked and why.
+                        Text(d.isFallback ? "\(d.text) (max ?)" : "\(d.text) (max)").lineLimit(1)
+                    } icon: {
+                        Image(systemName: "exclamationmark.triangle.fill").imageScale(.small)
+                    }
+                    .foregroundStyle(warning(palette))
+                } else {
+                    Text(d.label).lineLimit(1)
+                }
+            } else {
+                switch lookup {
+                case nil:
+                    Text("…").foregroundStyle(secondary)
+                case .loaded(let p)?:
+                    Text(p.maxMinutes.map { "max \(DurationText.short(minutes: $0))" } ?? "no max").foregroundStyle(secondary)
+                case .notFound?:
+                    Text("–").foregroundStyle(secondary)
+                case .failed?:
+                    Text("max ?").foregroundStyle(secondary)
+                }
+            }
+        }
+        .monospacedDigit()
+        .help(help(lookup))
+    }
+
+    private func warning(_ palette: ThemePalette) -> Color {
+        switch theme {
+        case .native: .orange
+        case .azure: palette.warning
+        case .windowsXP: checked ? palette.selectionText : palette.warning
+        }
+    }
+
+    private func help(_ lookup: PolicyLookup?) -> String {
+        var lines: [String] = []
+        if checked && !role.isActive, let note = model.effectiveDuration(for: role).note { lines.append(note.prefix(1).uppercased() + note.dropFirst() + ".") }
+        switch lookup {
+        case nil: lines.append("Reading the role's PIM policy…")
+        case .notFound?: lines.append("No PIM policy found for this role.")
+        case .failed(let message)?: lines.append("Could not read the role's PIM policy: \(message)")
+        case .loaded(let p)?:
+            var rules = [p.maxMinutes.map { "Longest activation: \(DurationText.short(minutes: $0))" } ?? "No maximum duration"]
+            if p.requiresJustification { rules.append("justification required") }
+            if p.requiresTicket { rules.append("ticket required") }
+            if p.requiresMFA { rules.append("MFA required") }
+            if p.authenticationContext != nil { rules.append("authentication context required") }
+            if p.requiresApproval { rules.append("approval required") }
+            lines.append(rules.joined(separator: " · "))
+        }
+        return lines.joined(separator: "\n")
     }
 }
 
@@ -414,13 +496,16 @@ struct ActivationBar: View {
             }
             .frame(minWidth: 280)
 
-            Picker("Duration", selection: $model.hours) {
+            Picker("Duration", selection: $model.duration) {
+                Text("Maximum allowed").tag(RequestedDuration.maximum)
+                Divider()
                 ForEach(1...ActivationRequestBuilder.maxHours, id: \.self) { h in
-                    Text("\(h) h").tag(h)
+                    Text("\(h) h").tag(RequestedDuration.hours(h))
                 }
             }
             .fixedSize()
-            .help("How long the roles stay active. Each role's PIM policy sets its own maximum (8 h unless changed).")
+            .help("How long the roles stay active. Each role gets at most what its PIM policy allows: "
+                + "see the Duration column. Maximum allowed asks for exactly that.")
 
             Button {
                 model.buildDryRun()
@@ -464,6 +549,8 @@ struct ActivationBar: View {
         if n == 0 { return "Select roles in the table to activate them." }
         var parts = ["\(n) selected"]
         if owners > 0 { parts.append("\(owners) Owner") }
+        let capped = model.cappedCheckedRoles.count
+        if capped > 0 { parts.append("\(capped) capped at the policy maximum") }
         if model.trimmedJustification.isEmpty { parts.append("justification required") }
         return parts.joined(separator: " · ")
     }

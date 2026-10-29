@@ -23,7 +23,9 @@ final class AppModel {
     var checked: Set<EligibleRole.ID> = []
     var search = ""
     var justification = ""
-    var hours = ActivationRequestBuilder.defaultHours
+    /// Hours, or the maximum each role's policy allows. Each role gets at
+    /// most its policy maximum either way (`effectiveDuration(for:)`).
+    var duration: RequestedDuration = .hours(ActivationRequestBuilder.defaultHours)
     var sortOrder: [KeyPathComparator<EligibleRole>] = [KeyPathComparator(\.scopeName)]
     var loadState: LoadState = .idle
     var identity: Identity?
@@ -39,6 +41,28 @@ final class AppModel {
     var showDryRunSheet = false
     var showOwnerConfirmation = false
     var banner: Banner?
+
+    // PIM policies, per scope + role, for this session (cleared on a tenant
+    // switch; failed lookups are retried on refresh).
+    var policies: [RoleMatcher.Key: PolicyLookup] = [:]
+    private var policyTask: Task<Void, Never>?
+
+    // Presets, shared with the CLI through the presets file.
+    let presetStore = PresetStore()
+    var presetLibrary = PresetLibrary()
+    /// The presets file could not be read (or written).
+    var presetFileError: String?
+    var showSavePresetSheet = false
+    var showManagePresets = false
+    var savePresetName = ""
+    var savePresetJustification = ""
+    var savePresetIncludesJustification = true
+    var savePresetIncludesDuration = false
+    var savePresetError: String?
+    /// The preset selected in Manage Presets, and its unsaved edits.
+    var managedPresetId: UUID?
+    var presetDraft: Preset?
+    var presetDraftError: String?
     /// "Load roles on launch" is off and nothing has been loaded yet.
     private(set) var awaitingManualRefresh = false
 
@@ -89,12 +113,13 @@ final class AppModel {
 
     /// Table columns the Settings window can show or hide.
     enum Column: String, CaseIterable {
-        case type, membership, condition
+        case type, membership, condition, duration
         var title: String {
             switch self {
             case .type: "Type"
             case .membership: "Membership"
             case .condition: "Condition"
+            case .duration: "Duration"
             }
         }
     }
@@ -112,7 +137,7 @@ final class AppModel {
         self.commandLineTenant = commandLineTenant
         let prefs = Preferences.load(from: defaults)
         self.prefs = prefs
-        hours = prefs.defaultHours
+        duration = .hours(prefs.defaultHours)
         awaitingManualRefresh = !prefs.refreshOnLaunch
         hiddenTenantIds = Set(defaults.stringArray(forKey: Keys.hiddenTenants) ?? [])
         let recent = prefs.rememberJustifications ? defaults.stringArray(forKey: Keys.recentJustifications) ?? [] : []
@@ -133,6 +158,7 @@ final class AppModel {
         tenant = selection
         service = PIMService(tokens: AzureCLITokenProvider(tenantId: selection.tenantId))
         restartAutoRefresh()
+        reloadPresets()
     }
 
     // MARK: Derived state
@@ -187,6 +213,60 @@ final class AppModel {
         !isActivating && !checkedRoles.isEmpty && !trimmedJustification.isEmpty && identity != nil
     }
 
+    // MARK: Durations and policies
+
+    func policyLookup(for role: EligibleRole) -> PolicyLookup? { policies[role.policyKey] }
+
+    /// What `role` is requested for: the chosen duration, capped at its
+    /// policy maximum when that is known.
+    func effectiveDuration(for role: EligibleRole) -> EffectiveDuration {
+        EffectiveDuration.resolve(duration, policyMaxMinutes: policies[role.policyKey]?.maxMinutes,
+                                  fallbackHours: prefs.defaultHours)
+    }
+
+    /// Checked roles whose duration is capped at their policy maximum.
+    var cappedCheckedRoles: [EligibleRole] { checkedRoles.filter { effectiveDuration(for: $0).isClamped } }
+
+    /// `8 h`, or `up to 8 h` when the checked roles get different durations.
+    var durationSummary: String {
+        let minutes = Set(checkedRoles.map { effectiveDuration(for: $0).minutes })
+        guard let longest = minutes.max() else { return duration.label }
+        let text = DurationText.short(minutes: longest)
+        return minutes.count == 1 ? text : "up to \(text)"
+    }
+
+    /// Reads the PIM policy of every role not looked up yet (and retries
+    /// failed lookups), a few at a time, in the background.
+    func loadPolicies(for roles: [EligibleRole]? = nil, retryFailures: Bool = false) {
+        let candidates = roles ?? self.roles
+        let missing = candidates.filter { role in
+            switch policies[role.policyKey] {
+            case nil: true
+            case .failed?: retryFailures
+            default: false
+            }
+        }
+        guard !missing.isEmpty else { return }
+        let generation = tenantGeneration
+        let service = service
+        let previous = policyTask
+        policyTask = Task { [weak self] in
+            await previous?.value
+            _ = try? await service.loadPolicies(for: missing) { key, lookup in
+                await MainActor.run {
+                    guard let self, generation == self.tenantGeneration else { return }
+                    self.policies[key] = lookup
+                }
+            }
+        }
+    }
+
+    /// Waits for the policies of `roles`; used before building requests.
+    private func ensurePolicies(for roles: [EligibleRole]) async {
+        loadPolicies(for: roles)
+        await policyTask?.value
+    }
+
     var activateTitle: String {
         let n = checkedRoles.count
         let noun = n == 1 ? "role" : "roles"
@@ -212,6 +292,8 @@ final class AppModel {
             checked.formIntersection(selectable)
             lastRefreshed = Date()
             loadState = .loaded
+            reloadPresets()
+            loadPolicies(retryFailures: true)
         } catch let error as AzureCLIError {
             guard generation == tenantGeneration else { return }
             loadState = .failed(message: error.localizedDescription, needsLogin: error.needsLogin)
@@ -288,6 +370,8 @@ final class AppModel {
         roles = []
         identity = nil
         checked = []
+        policies = [:]
+        policyTask = nil
         progress = [:]
         pendingActive = [:]
         banner = nil
@@ -326,25 +410,31 @@ final class AppModel {
         }
     }
 
-    private func plans() throws -> [PlannedRequest] {
+    /// One request per checked role, each capped at its policy maximum.
+    private func plans() async throws -> [PlannedRequest] {
         guard let identity else { throw ActivationRequestError.missingPrincipal }
-        return try ActivationRequestBuilder.plan(
-            checkedRoles, principalId: identity.objectId, justification: justification, hours: hours)
+        let roles = checkedRoles
+        await ensurePolicies(for: roles)
+        return try ActivationRequestBuilder.plan(roles, principalId: identity.objectId, justification: justification) {
+            self.effectiveDuration(for: $0)
+        }
     }
 
     func buildDryRun() {
-        do {
-            dryRunPlans = try plans()
-            showDryRunSheet = true
-        } catch {
-            banner = Banner(kind: .error, text: error.localizedDescription)
+        Task {
+            do {
+                dryRunPlans = try await plans()
+                showDryRunSheet = true
+            } catch {
+                banner = Banner(kind: .error, text: error.localizedDescription)
+            }
         }
     }
 
     func activate() async {
         guard !isActivating else { return }
         let planned: [PlannedRequest]
-        do { planned = try plans() } catch {
+        do { planned = try await plans() } catch {
             banner = Banner(kind: .error, text: error.localizedDescription)
             return
         }
@@ -407,6 +497,186 @@ final class AppModel {
 
     func clearResults() { progress.removeAll() }
 
+    // MARK: Presets
+
+    /// The tenant presets are saved for: the token's tenant (a GUID), else the chosen one.
+    var presetTenantId: String? { identity?.tenantId ?? tenant.tenantId }
+
+    /// Presets for the tenant in use (and presets for any tenant).
+    var visiblePresets: [Preset] { presetLibrary.presets(forTenant: presetTenantId) }
+
+    func reloadPresets() {
+        do {
+            presetLibrary = try presetStore.load()
+            presetFileError = nil
+        } catch {
+            presetFileError = error.localizedDescription
+        }
+    }
+
+    /// Read-modify-write, so presets saved by the CLI meanwhile are kept.
+    @discardableResult
+    private func updatePresets<T>(_ change: (inout PresetLibrary) throws -> T) throws -> T {
+        let (library, result) = try presetStore.update(change)
+        presetLibrary = library
+        presetFileError = nil
+        return result
+    }
+
+    /// Checks the preset's roles (only those), and takes over its
+    /// justification and duration. Says what is active or missing.
+    @discardableResult
+    func applyPreset(_ preset: Preset) -> PresetResolution {
+        let resolution = preset.resolve(in: roles)
+        search = ""
+        checked = Set(resolution.eligible.map(\.id))
+        if let text = preset.trimmedJustification { justification = text }
+        if let d = preset.duration { duration = d }
+        loadPolicies(for: resolution.eligible)
+        var parts = ["\(preset.name): \(resolution.eligible.count) role\(resolution.eligible.count == 1 ? "" : "s") selected"]
+        if !resolution.active.isEmpty { parts.append("\(resolution.active.count) already active") }
+        if !resolution.missing.isEmpty {
+            let names = resolution.missing.prefix(3).map(\.label).joined(separator: ", ")
+            parts.append("\(resolution.missing.count) no longer eligible (\(names)\(resolution.missing.count > 3 ? ", …" : ""))")
+        }
+        banner = Banner(kind: resolution.missing.isEmpty ? .info : .error, text: parts.joined(separator: " · ") + ".")
+        return resolution
+    }
+
+    /// Selects the preset's roles and activates them (with the Owner
+    /// confirmation when that is on).
+    func activatePreset(_ preset: Preset) {
+        guard !isActivating, !roles.isEmpty else { return }
+        let resolution = applyPreset(preset)
+        if resolution.eligible.isEmpty {
+            let why = resolution.roles.isEmpty ? "none of its roles are eligible" : "all of its roles are already active"
+            banner = Banner(kind: resolution.missing.isEmpty ? .info : .error, text: "\(preset.name): nothing to activate, \(why).")
+            return
+        }
+        guard !trimmedJustification.isEmpty else {
+            banner = Banner(kind: .error, text: "\(preset.name) has no justification: enter one, then press Activate.")
+            return
+        }
+        requestActivation()
+    }
+
+    func beginSavePreset() {
+        guard !checkedRoles.isEmpty else { return }
+        savePresetName = ""
+        savePresetJustification = trimmedJustification
+        savePresetIncludesJustification = !trimmedJustification.isEmpty
+        savePresetIncludesDuration = duration != .hours(prefs.defaultHours)
+        savePresetError = nil
+        showSavePresetSheet = true
+    }
+
+    /// A preset of that name exists for this tenant: saving replaces it.
+    var savePresetReplaces: Bool {
+        visiblePresets.contains { PresetLibrary.sameName($0.name, savePresetName) && PresetLibrary.sameTenant($0.tenantId, presetTenantId) }
+    }
+
+    /// Saves the checked roles as a preset. True when it worked.
+    func saveSelectionAsPreset() -> Bool {
+        var seen = Set<RoleMatcher.Key>()
+        let roles = checkedRoles.filter { seen.insert($0.policyKey).inserted }.map(PresetRole.init)
+        let text = savePresetJustification.trimmingCharacters(in: .whitespacesAndNewlines)
+        let preset = Preset(
+            name: savePresetName, tenantId: presetTenantId, roles: roles,
+            justification: savePresetIncludesJustification && !text.isEmpty ? text : nil,
+            duration: savePresetIncludesDuration ? duration : nil)
+        do {
+            let saved = try updatePresets { try $0.save(preset, replacing: true) }
+            banner = Banner(kind: .success, text: "Saved preset “\(saved.name)” with \(saved.summary).")
+            return true
+        } catch {
+            savePresetError = error.localizedDescription
+            return false
+        }
+    }
+
+    func openManagePresets() {
+        reloadPresets()
+        presetDraftError = nil
+        selectManagedPreset(managedPresetId.flatMap { id in visiblePresets.first { $0.id == id } }?.id ?? visiblePresets.first?.id)
+        showManagePresets = true
+    }
+
+    func selectManagedPreset(_ id: UUID?) {
+        managedPresetId = id
+        presetDraft = id.flatMap { id in presetLibrary.presets.first { $0.id == id } }
+        presetDraftError = nil
+    }
+
+    /// The draft differs from what is saved.
+    var presetDraftIsDirty: Bool {
+        guard let draft = presetDraft else { return false }
+        return presetLibrary.presets.first { $0.id == draft.id } != draft
+    }
+
+    func draftContains(_ role: EligibleRole) -> Bool {
+        presetDraft?.roles.contains { $0.key == role.policyKey } ?? false
+    }
+
+    func setDraft(_ role: EligibleRole, included: Bool) {
+        guard presetDraft != nil else { return }
+        presetDraft!.roles.removeAll { $0.key == role.policyKey }
+        if included { presetDraft!.roles.append(PresetRole(role)) }
+    }
+
+    /// Exact roles of the draft that are not among the current eligibilities.
+    var draftMissingRoles: [PresetRole] {
+        guard let draft = presetDraft, !roles.isEmpty else { return [] }
+        return draft.resolve(in: roles).missing
+    }
+
+    func removeFromDraft(_ item: PresetRole) { presetDraft?.roles.removeAll { $0.key == item.key } }
+    func removeFromDraft(_ rule: PresetRule) { presetDraft?.match.removeAll { $0 == rule } }
+
+    /// Replaces the draft's roles with the checked ones.
+    func setDraftRolesToSelection() {
+        var seen = Set<RoleMatcher.Key>()
+        presetDraft?.roles = checkedRoles.filter { seen.insert($0.policyKey).inserted }.map(PresetRole.init)
+    }
+
+    func newPreset() {
+        var n = 1
+        var name = "New Preset"
+        while visiblePresets.contains(where: { PresetLibrary.sameName($0.name, name) }) {
+            n += 1
+            name = "New Preset \(n)"
+        }
+        var seen = Set<RoleMatcher.Key>()
+        let roles = checkedRoles.filter { seen.insert($0.policyKey).inserted }.map(PresetRole.init)
+        managedPresetId = nil
+        presetDraft = Preset(name: name, tenantId: presetTenantId, roles: roles,
+                             justification: trimmedJustification.isEmpty ? nil : trimmedJustification)
+        presetDraftError = nil
+    }
+
+    func saveDraft() {
+        guard let draft = presetDraft else { return }
+        do {
+            let saved = try updatePresets { try $0.save(draft) }
+            presetDraft = saved
+            managedPresetId = saved.id
+            presetDraftError = nil
+        } catch {
+            presetDraftError = error.localizedDescription
+        }
+    }
+
+    func revertDraft() { selectManagedPreset(managedPresetId) }
+
+    func deleteManagedPreset() {
+        guard let id = presetDraft?.id else { return }
+        do {
+            try updatePresets { $0.delete(id) }
+            selectManagedPreset(visiblePresets.first?.id)
+        } catch {
+            presetDraftError = error.localizedDescription
+        }
+    }
+
     // MARK: Settings
 
     private func preferencesChanged(from old: Preferences) {
@@ -418,7 +688,7 @@ final class AppModel {
         guard prefs != old else { return }
         prefs.save(to: UserDefaults.standard)
         if prefs.effectiveAppearance != old.effectiveAppearance { AppAppearance.apply(prefs) }
-        if prefs.defaultHours != old.defaultHours, !isActivating { hours = prefs.defaultHours }
+        if prefs.defaultHours != old.defaultHours, !isActivating { duration = .hours(prefs.defaultHours) }
         if prefs.autoRefreshMinutes != old.autoRefreshMinutes { restartAutoRefresh() }
         if !prefs.rememberJustifications, old.rememberJustifications { clearRecentJustifications() }
         if !prefs.expiryReminders, old.expiryReminders {

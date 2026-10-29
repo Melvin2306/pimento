@@ -278,7 +278,7 @@ public struct PresetLibrary: Equatable, Sendable {
 
     public mutating func delete(_ id: UUID) { presets.removeAll { $0.id == id } }
 
-    static func sameTenant(_ a: String?, _ b: String?) -> Bool {
+    public static func sameTenant(_ a: String?, _ b: String?) -> Bool {
         switch (a, b) {
         case (nil, nil): true
         case let (x?, y?): x.caseInsensitiveCompare(y) == .orderedSame

@@ -70,6 +70,10 @@ struct PimentoApp: App {
                     .keyboardShortcut("t", modifiers: [.command, .shift])
                     .disabled(model.isActivating)
             }
+            CommandMenu("Presets") {
+                PresetMenuItems(shortcuts: true)
+                    .environment(model)
+            }
             CommandGroup(replacing: .help) {
                 Button("\(AppInfo.name) on GitHub") { NSWorkspace.shared.open(AppInfo.repositoryURL) }
                 Button("Report an Issue") { NSWorkspace.shared.open(AppInfo.issuesURL) }
