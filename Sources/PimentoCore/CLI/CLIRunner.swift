@@ -231,7 +231,8 @@ public struct CLIRunner: Sendable {
     // MARK: tenants
 
     func tenants(_ o: TenantsOptions) async throws -> CLIExit {
-        let preferred = try o.tenant.map { try resolveTenant($0).tenantId } ?? nil
+        // `--tenant`, else $PIMENTO_TENANT (as for every command), else az's default.
+        let preferred = try resolveTenant(o.tenant).tenantId
         let tenants = try await env.loadTenants(preferred, auth.source == .az ? nil : auth.tokens(tenantId: preferred))
         if o.json {
             out(CLIJSON.encode(CLIJSON.TenantList(tenants: tenants.map(CLIJSON.Tenant.init))))

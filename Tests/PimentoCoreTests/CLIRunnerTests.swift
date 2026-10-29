@@ -40,6 +40,8 @@ final class CLIHarness: @unchecked Sendable {
     var useAuthTokens = false
     /// The token providers the commands asked for, in order.
     let givenTokens = TestBox<[TokenProvider]>([])
+    /// The preferred tenant each `loadTenants` was given.
+    let givenPreferredTenants = TestBox<[String?]>([])
 
     /// Policy maxima the fake ARM returns, by role GUID: Owner 2 h (with
     /// approval), Contributor 4 h, anything else 8 h.
@@ -130,7 +132,8 @@ final class CLIHarness: @unchecked Sendable {
                 givenTokens.value = (givenTokens.value ?? []) + [given]
                 return PIMService(transport: readOnly ? ReadOnlyTransport(transport) : transport, tokens: useAuthTokens ? given : tokens)
             },
-            loadTenants: { [self] _, given in
+            loadTenants: { [self] preferred, given in
+                givenPreferredTenants.value = (givenPreferredTenants.value ?? []) + [preferred]
                 if let given { givenTokens.value = (givenTokens.value ?? []) + [given] }
                 return tenants
             },
@@ -252,6 +255,13 @@ struct CLIRunnerTests {
 
         let none = CLIHarness()
         #expect(await none.run("tenants") == 3)
+
+        // The tenant is --tenant, else $PIMENTO_TENANT, as the README says.
+        let env = CLIHarness()
+        env.variables[TenantResolver.environmentVariable] = "contoso.onmicrosoft.com"
+        _ = await env.run("tenants")
+        _ = await env.run("tenants", "-t", "fabrikam.onmicrosoft.com")
+        #expect(env.givenPreferredTenants.value == ["contoso.onmicrosoft.com", "fabrikam.onmicrosoft.com"])
     }
 
     // MARK: activate safety
