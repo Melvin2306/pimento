@@ -1,0 +1,21 @@
+Sources/PimentoCore/SignIn/TokenBroker.swift
+  s_4884204a812fec::t_260eac029027b0 16-18,54,56,62,85,87-89
+Tests/PimentoCoreTests/SignInTests.swift
+  s_4884204a812fec::t_d2405939441861 557-588,702-731
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f707fc6bc512f08b137d9ce7ac51499ebc93ff87",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
