@@ -103,16 +103,22 @@ public struct PlannedRequest: Identifiable, Sendable, Equatable {
     /// Unused for a deactivation.
     public let duration: EffectiveDuration
     public var action: RequestAction = .activate
+    /// When a scheduled activation starts; nil: right away.
+    public var start: Date?
 
     public init(role: EligibleRole, url: URL, body: ActivationRequestBody, requestedAt: Date,
-                duration: EffectiveDuration, action: RequestAction = .activate) {
+                duration: EffectiveDuration, action: RequestAction = .activate, start: Date? = nil) {
         self.role = role
         self.url = url
         self.body = body
         self.requestedAt = requestedAt
         self.duration = duration
         self.action = action
+        self.start = start
     }
+
+    /// When the activation ends if PIM grants it as asked.
+    public var plannedEnd: Date { (start ?? requestedAt).addingTimeInterval(TimeInterval(duration.minutes) * 60) }
 
     public var minutes: Int { duration.minutes }
 
@@ -147,7 +153,8 @@ public enum ActivationRequestBuilder {
         principalId: String,
         justification: String,
         minutes: Int,
-        now: Date
+        now: Date,
+        start: Date? = nil
     ) throws -> ActivationRequestBody {
         let justification = justification.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !justification.isEmpty else { throw ActivationRequestError.missingJustification }
@@ -162,7 +169,8 @@ public enum ActivationRequestBuilder {
             linkedRoleEligibilityScheduleId: role.eligibilityScheduleId,
             justification: justification,
             scheduleInfo: .init(
-                startDateTime: AzureDate.format(now),
+                // A later start schedules the activation (PIM: `Granted` until then).
+                startDateTime: AzureDate.format(start ?? now),
                 expiration: .init(type: "AfterDuration", duration: ISODuration.format(minutes: minutes))
             ),
             condition: condition,
@@ -298,11 +306,13 @@ public enum ActivationRequestBuilder {
 
     /// One request per role, each for `duration(role)`: the asked duration
     /// capped at that role's policy maximum (see `EffectiveDuration.resolve`).
+    /// `start`: a later start schedules the activations; nil starts them now.
     public static func plan(
         _ roles: [EligibleRole],
         principalId: String,
         justification: String,
         now: Date = Date(),
+        start: Date? = nil,
         makeId: () -> UUID = UUID.init,
         duration: (EligibleRole) -> EffectiveDuration
     ) throws -> [PlannedRequest] {
@@ -311,9 +321,11 @@ public enum ActivationRequestBuilder {
             return PlannedRequest(
                 role: role,
                 url: url(for: role, requestId: makeId()),
-                body: try body(for: role, principalId: principalId, justification: justification, minutes: d.minutes, now: now),
+                body: try body(for: role, principalId: principalId, justification: justification, minutes: d.minutes,
+                               now: now, start: start),
                 requestedAt: now,
-                duration: d
+                duration: d,
+                start: start
             )
         }
     }

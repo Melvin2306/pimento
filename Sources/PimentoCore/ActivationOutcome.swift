@@ -21,6 +21,9 @@ public enum ActivationOutcome: Equatable, Sendable {
     case tooSoon(possibleAt: Date?)
     /// Deactivated and activated again (Renew).
     case renewed(until: Date?)
+    /// Accepted for a later start (PIM answers `Granted` and activates the
+    /// role at `start`). `until`: when that activation ends.
+    case scheduled(status: String, start: Date, until: Date?)
 
     public var isFailure: Bool {
         switch self {
@@ -34,7 +37,7 @@ public enum ActivationOutcome: Equatable, Sendable {
         switch self {
         case .activated(let status, _): Self.isGranted(status: status)
         case .alreadyActive, .renewed, .tooSoon: true
-        case .deactivated, .notActive: false
+        case .deactivated, .notActive, .scheduled: false
         case .policyViolation, .failed: false
         }
     }
@@ -75,6 +78,8 @@ public enum ActivationOutcome: Equatable, Sendable {
         case .renewed(let until):
             if let until { return "Renewed until \(until.formatted(date: .omitted, time: .shortened))" }
             return "Renewed"
+        case .scheduled(_, let start, _):
+            return "Scheduled for \(ScheduleTime.label(start, now: Date()))"
         }
     }
 
@@ -96,12 +101,14 @@ public enum ActivationResponseMapper {
 
     /// Maps the answer to `action`'s request. `activeSince` (deactivation):
     /// when the activation started, to say when ending it becomes possible.
+    /// `scheduledStart`: the start a scheduled activation asked for.
     public static func outcome(
-        for action: RequestAction, statusCode: Int, data: Data, requestedAt: Date, minutes: Int, activeSince: Date? = nil
+        for action: RequestAction, statusCode: Int, data: Data, requestedAt: Date, minutes: Int, activeSince: Date? = nil,
+        scheduledStart: Date? = nil
     ) -> ActivationOutcome {
         switch action {
         case .activate:
-            return outcome(statusCode: statusCode, data: data, requestedAt: requestedAt, minutes: minutes)
+            return outcome(statusCode: statusCode, data: data, requestedAt: requestedAt, minutes: minutes, scheduledStart: scheduledStart)
         case .deactivate:
             if (200..<300).contains(statusCode) {
                 let response = try? JSONDecoder().decode(RequestResponse.self, from: data)
@@ -159,14 +166,22 @@ public enum ActivationResponseMapper {
     /// Codes PIM uses when another request for the same assignment is open.
     static let pendingRequestCodes: Set<String> = ["RoleAssignmentRequestExistsWithSameAssignmentId", "PendingRoleAssignmentRequest"]
 
-    public static func outcome(statusCode: Int, data: Data, requestedAt: Date, minutes: Int) -> ActivationOutcome {
+    public static func outcome(statusCode: Int, data: Data, requestedAt: Date, minutes: Int, scheduledStart: Date? = nil) -> ActivationOutcome {
         if (200..<300).contains(statusCode) {
             let response = try? JSONDecoder().decode(RequestResponse.self, from: data)
             let p = response?.properties
-            let start = AzureDate.parse(p?.scheduleInfo?.startDateTime) ?? requestedAt
+            let start = AzureDate.parse(p?.scheduleInfo?.startDateTime) ?? scheduledStart ?? requestedAt
             let until = AzureDate.parse(p?.scheduleInfo?.expiration?.endDateTime)
                 ?? start.addingTimeInterval(TimeInterval(minutes) * 60)
-            return .activated(status: p?.status ?? "", until: until)
+            let status = p?.status ?? ""
+            // A start in the future: PIM schedules it (`Granted` until then).
+            // Requests waiting for approval stay "submitted".
+            if start > requestedAt.addingTimeInterval(ScheduleTime.immediateSlack),
+               !ScheduledRequest.approvalStatuses.contains(status.lowercased()),
+               status.caseInsensitiveCompare("Provisioned") != .orderedSame {
+                return .scheduled(status: status.isEmpty ? "Granted" : status, start: start, until: until)
+            }
+            return .activated(status: status, until: until)
         }
         let (code, message) = error(statusCode: statusCode, data: data)
         if code == "RoleAssignmentExists" { return .alreadyActive }

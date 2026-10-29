@@ -61,6 +61,7 @@ public struct ActivationSummary: Equatable, Sendable {
         timeZone: TimeZone = .current
     ) {
         var activated: [(role: EligibleRole, until: Date?)] = []
+        var scheduled: [(role: EligibleRole, start: Date)] = []
         var ended: [EligibleRole] = []
         var skipped = 0
         var failed: [(role: EligibleRole, outcome: ActivationOutcome)] = []
@@ -70,10 +71,11 @@ public struct ActivationSummary: Equatable, Sendable {
             case .activated(_, let until), .renewed(let until): activated.append((role, until))
             case .alreadyActive, .notActive: skipped += 1
             case .deactivated: ended.append(role)
+            case .scheduled(_, let start, _): scheduled.append((role, start))
             case .policyViolation, .failed, .tooSoon: failed.append((role, outcome))
             }
         }
-        guard !activated.isEmpty || !ended.isEmpty || skipped > 0 || !failed.isEmpty else { return nil }
+        guard !activated.isEmpty || !scheduled.isEmpty || !ended.isEmpty || skipped > 0 || !failed.isEmpty else { return nil }
 
         let time = Date.FormatStyle(date: .omitted, time: .shortened, timeZone: timeZone)
         func line(_ role: EligibleRole) -> String { "\(role.roleName) · \(role.scopeName)" }
@@ -85,7 +87,10 @@ public struct ActivationSummary: Equatable, Sendable {
         func plural(_ n: Int, _ noun: String) -> String { "\(n) \(noun)\(n == 1 ? "" : "s")" }
 
         isFailure = !failed.isEmpty
+        // Only scheduled (a start later): say so instead of "activated".
+        let onlyScheduled = activated.isEmpty && !scheduled.isEmpty
         let (done, verb, noun, skippedText): (Int, String, String, String) = switch operation {
+        case .activate where onlyScheduled: (scheduled.count, "scheduled", "Scheduling", "already active")
         case .activate: (activated.count, "activated", "Activation", "already active")
         case .renew: (activated.count, "renewed", "Renewal", "not active")
         case .extend: (activated.count, "requested", "Extension request", "not active")
@@ -118,6 +123,11 @@ public struct ActivationSummary: Equatable, Sendable {
                 parts.append(span)
             }
             parts.append(list(activated.map(\.role)))
+        }
+        if !scheduled.isEmpty {
+            let starts = Set(scheduled.map { ScheduleTime.label($0.start, now: now, timeZone: timeZone) }).sorted()
+            parts.append((onlyScheduled ? "" : "\(scheduled.count) scheduled, ") + "starts " + starts.joined(separator: ", "))
+            parts.append(list(scheduled.map(\.role)))
         }
         if !failed.isEmpty {
             parts.append("Failed:\n" + list(failed.map(\.role)))

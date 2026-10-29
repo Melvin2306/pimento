@@ -254,9 +254,9 @@ public enum CLIJSON {
     }
 
     public struct Result: Encodable, Equatable, Sendable {
-        /// `activated`, `submitted` (pending approval), `skipped` (already
-        /// active / not active), `failed`, `planned` (dry run), `deactivated`
-        /// or `renewed`.
+        /// `activated`, `submitted` (pending approval), `scheduled` (starts
+        /// later), `skipped` (already active / not active), `failed`, `planned`
+        /// (dry run), `deactivated` or `renewed`.
         public let outcome: String
         public let role: Role
         public let status: String?
@@ -275,6 +275,8 @@ public enum CLIJSON {
         public let requests: [Request]?
         /// Too soon to end: from when it is possible.
         public let possibleAt: String?
+        /// A scheduled activation: when it starts (also for a planned one).
+        public let start: String?
 
         public init(role: EligibleRole, outcome: ActivationOutcome?, plan: PlannedRequest?,
                     followUp: PlannedRequest? = nil, skipReason: String = "already active") {
@@ -292,6 +294,7 @@ public enum CLIJSON {
                 requests = nil
             }
             var status: String?, until: String?, code: String?, message: String?, rules: [String]?, possibleAt: String?
+            var start = timed?.start.map(AzureDate.format)
             switch outcome {
             case nil:
                 self.outcome = plan == nil ? "skipped" : "planned"
@@ -326,7 +329,13 @@ public enum CLIJSON {
             case .renewed(let u)?:
                 self.outcome = "renewed"
                 until = u.map(AzureDate.format)
+            case .scheduled(let s, let begin, let u)?:
+                self.outcome = "scheduled"
+                status = s.isEmpty ? nil : s
+                start = AzureDate.format(begin)
+                until = u.map(AzureDate.format)
             }
+            self.start = start
             self.possibleAt = possibleAt
             self.status = status
             self.until = until
@@ -345,6 +354,8 @@ public enum CLIJSON {
         /// Only in deactivate / renew output.
         public var deactivated: Int?
         public var renewed: Int?
+        /// Only when activations were scheduled (`activate --at`).
+        public var scheduled: Int?
 
         public init(_ results: [Result], operation: ActivationSummary.Operation = .activate) {
             if operation == .deactivate { deactivated = 0 }
@@ -357,6 +368,7 @@ public enum CLIJSON {
                 case "planned": planned += 1
                 case "deactivated": deactivated = (deactivated ?? 0) + 1
                 case "renewed": renewed = (renewed ?? 0) + 1
+                case "scheduled": scheduled = (scheduled ?? 0) + 1
                 default: failed += 1
                 }
             }

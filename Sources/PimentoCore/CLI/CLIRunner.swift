@@ -465,6 +465,9 @@ public struct CLIRunner: Sendable {
         case .renewed(let until):
             let when = until.map { " until " + CLIFormat.clock($0, now: now, timeZone: timeZone) } ?? ""
             return style.green("renewed") + "    \(name)\(when)"
+        case .scheduled(_, let start, let until):
+            let end = until.map { " until " + CLIFormat.clock($0, now: start, timeZone: timeZone) } ?? ""
+            return style.green("scheduled") + "  \(name): starts \(ScheduleTime.label(start, now: now, timeZone: timeZone))\(end)"
         }
     }
 }

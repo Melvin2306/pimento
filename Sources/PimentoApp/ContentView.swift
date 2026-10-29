@@ -536,6 +536,7 @@ struct ResultCell: View {
             case .activated, .renewed: (Self.symbol(outcome), palette.success, palette.successFill)
             case .alreadyActive, .notActive, .deactivated: (Self.symbol(outcome), palette.secondaryText, palette.neutralFill)
             case .tooSoon: (Self.symbol(outcome), palette.warning, palette.warningFill)
+            case .scheduled: (Self.symbol(outcome), palette.accent, palette.infoFill)
             case .policyViolation, .failed: (Self.symbol(outcome), palette.danger, palette.dangerFill)
             }
             ThemeBadge(text: outcome.summary, symbol: symbol, foreground: foreground, fill: fill, font: palette.font(12))
@@ -547,6 +548,7 @@ struct ResultCell: View {
             case .activated, .renewed: xp ? ThemePalette(theme, scheme).success : .green
             case .alreadyActive, .notActive, .deactivated: .secondary
             case .tooSoon: xp && !checked ? ThemePalette(theme, scheme).warning : .orange
+            case .scheduled: xp ? (checked ? ThemePalette(theme, scheme).selectionText : ThemePalette(theme, scheme).accent) : .accentColor
             case .policyViolation, .failed: xp && !checked ? ThemePalette(theme, scheme).danger : .red
             }
             let symbol = Self.symbol(outcome)
@@ -567,6 +569,7 @@ struct ResultCell: View {
         case .alreadyActive, .notActive: "arrow.uturn.forward.circle"
         case .deactivated: "stop.circle.fill"
         case .tooSoon: "clock.badge.exclamationmark"
+        case .scheduled: "calendar.badge.clock"
         case .policyViolation, .failed: "xmark.octagon.fill"
         }
     }
@@ -577,6 +580,10 @@ struct ResultCell: View {
         case .tooSoon(let at):
             "PIM does not end an activation in its first 5 minutes."
                 + (at.map { " Try again from \($0.formatted(date: .omitted, time: .shortened))." } ?? "")
+        case .scheduled(let status, let start, let until):
+            "PIM activates the role at \(start.formatted(date: .complete, time: .shortened))"
+                + (until.map { " until \($0.formatted(date: .omitted, time: .shortened))" } ?? "")
+                + ". Request status: \(status). Cancel it under Scheduled."
         default: outcome.summary
         }
     }
