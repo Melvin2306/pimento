@@ -8,6 +8,30 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Approval workflow (Azure-resource PIM).
+  - Requester: an activation that needs approval (`PendingApproval`) shows *Awaiting approval*
+    (app) / `awaiting approval … (request 7a1b2c3d)` with a note and exit code 0 (CLI), gets no expiry
+    reminder, and is listed under Scheduled with when it was asked and when it expires (24 hours).
+    The app follows such requests, reads `roleAssignmentScheduleRequests` (`asTarget()`) every
+    minute while any wait (not when auto-refresh runs every minute; paused during an activation),
+    and notifies when one is approved (with the expiry, plus expiry reminders), denied (with the
+    approver's justification and name when readable), expired or cancelled.
+  - CLI: `pimento pending [--json]` (age, expiry); `pimento wait (REQUEST-ID… | --all) [--timeout 30m]`
+    polls every 30 s until decided: exit 0 approved, 1 denied/expired/cancelled/not found, 4 timeout
+    (new exit code). `activate --json` adds `requestId` to submitted results; `scheduled --json` adds `expiresAt`.
+  - Approver: **Approvals (N)** in the toolbar and *Approvals…* (⇧⌘P) list the requests you may
+    decide (`roleAssignmentScheduleRequests` `asApprover()` joined with `roleAssignmentApprovals`
+    `asApprover()`, 2021-01-01-preview): requester, role, scope, duration and start, justification,
+    ticket, age, expiry. Multi-select, a required justification, Approve and Deny (Deny always asks,
+    Approve asks for Owner roles), per-row results. A refused or empty listing reads "You have no
+    approvals to review".
+  - CLI: `pimento approvals [--json]`, `pimento approve ID… -j TEXT` and `pimento deny ID… -j TEXT`
+    (`--yes`, `--dry-run` on a GET-only transport, TTY prompt, Owner warning), sending
+    `PATCH …/roleAssignmentApprovals/{id}/stages/{stage}` with `{reviewResult, justification}`.
+  - Settings › Notifications: *Approval decisions* and *New approval requests* (both on); a new-request
+    notification opens the Approvals sheet.
+  - Errors in the `{"Message": …}` shape of the approvals endpoints are read like ARM's usual ones.
+
 - Scheduled activation: a `SelfActivate` with a later `scheduleInfo.startDateTime`. PIM answers
   `Granted` and activates the role at the start; it accepts a start up to a month ahead
   (`ScheduleStartTimeTooFarAhead` beyond), also while the role is still active.
@@ -151,6 +175,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- Renew sends ticket information again: the ticket the current activation was requested with
+  (found through your requests), or the ticket fields / `pimento renew --ticket NUMBER
+  [--ticket-system NAME]`. A role whose policy requires a ticket is skipped with a reason when no
+  ticket is known, instead of failing with `TicketingRule` after it was already ended. Roles whose
+  policy requires approval are still not renewed.
+- A role submitted for approval was counted as activated in the completion notification and got an
+  expiry reminder; it now reads "awaiting approval".
 - A role activated from the app showed "Eligible" until the next manual refresh, because
   Azure lists a new activation only after a few seconds. It now shows as active right away
   (with the expiry Azure returned), leaves the selection, and the list is re-checked 20 s

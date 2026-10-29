@@ -49,6 +49,10 @@ does the whole list in one go, as you, using the Azure CLI session you already h
 - **Ticket information**: when a role's policy requires a ticket, ticket number and system fields
   appear (the row says *needs ticket*); any activation can carry one. Recent tickets are offered
   like recent justifications.
+- **Approvals**: a role whose policy requires approval shows *Awaiting approval*; Pimento follows
+  the request and notifies you when it is approved (with the expiry), denied (with the approver's
+  reason), or expires. As an approver, **Approvals (N)** in the toolbar lists requests waiting for
+  you, to approve or deny in bulk with a justification. See [Approvals](#approvals).
 - **Preview (dry run)**: shows the exact `PUT` URLs and JSON bodies without sending anything (<kbd>⌥</kbd><kbd>⌘</kbd><kbd>↩</kbd>).
 - **Notifications**: a macOS notification when a batch finishes, and a reminder before activated roles
   expire (10 minutes by default; adjustable in Settings).
@@ -60,7 +64,7 @@ does the whole list in one go, as you, using the Azure CLI session you already h
 - **Settings** (<kbd>⌘</kbd><kbd>,</kbd>) for notifications, activation defaults, refresh and table columns.
 - **Themes**: Native, Azure-style or, for fun, Windows XP-style (see [Themes](#themes)).
 - **A real command-line tool**, `pimento`: `list`, `activate` (also `--at` and `--ticket`), `deactivate`, `renew`,
-  `scheduled`, `cancel`, `status`, `tenants`, with JSON
+  `scheduled`, `cancel`, `pending`, `wait`, `approvals`, `approve`, `deny`, `status`, `tenants`, with JSON
   output, exit codes and shell completions. Download it on its own, or get it with the app.
 - **No credentials of its own, no dependencies, no telemetry.**
 
@@ -172,6 +176,7 @@ open build/Pimento.app
 | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>R</kbd> | Renew the checked active roles |
 | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>E</kbd> | End the checked active roles now |
 | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>L</kbd> | Scheduled activations |
+| <kbd>⇧</kbd><kbd>⌘</kbd><kbd>P</kbd> | Approvals (requests you can approve or deny) |
 | <kbd>⌘</kbd><kbd>F</kbd> | Filter |
 
 ### Ending and renewing activations
@@ -183,7 +188,7 @@ Both ask first. The same actions are in the menu bar (<kbd>⇧</kbd><kbd>⌘</kb
 | Action | What Pimento sends | What happens |
 | --- | --- | --- |
 | **Deactivate** (End Now) | `SelfDeactivate` | The activation ends; the row goes back to *Eligible*. PIM refuses this in the first **5 minutes** after an activation; Pimento then shows *Too soon* with the time from which it works, and sends nothing. |
-| **Renew** | `SelfDeactivate`, then `SelfActivate` | A fresh activation for the chosen duration (capped at the policy maximum). **In between the role is not active**: PIM accepts the new activation only once it has removed the old one, which took about **3 minutes** in tests. Pimento keeps trying for 5 minutes and shows *Activating again (try n)…*. If that fails, the role stays off: activate it again. Roles whose policy requires approval are not renewed. |
+| **Renew** | `SelfDeactivate`, then `SelfActivate` | A fresh activation for the chosen duration (capped at the policy maximum). **In between the role is not active**: PIM accepts the new activation only once it has removed the old one, which took about **3 minutes** in tests. Pimento keeps trying for 5 minutes and shows *Activating again (try n)…*. If that fails, the role stays off: activate it again. Roles whose policy requires approval are not renewed. The new activation carries the ticket the current one was requested with (or the one in the ticket fields / `--ticket`); a role whose policy requires a ticket is skipped when none is known. |
 | `pimento extend` (CLI) | `SelfExtend` | For **admin-assigned, time-bound** assignments: a *request* that an administrator must approve (`PendingAdminDecision`). Nothing changes until then. |
 
 **Why Renew and not Extend?** PIM has no self-service way to lengthen your own activation.
@@ -244,6 +249,34 @@ clock button (with *Remember recent justifications and tickets*). A preset can s
 ticket system. If PIM still answers with a `TicketingRule` failure, the result says
 *a ticket is required: give a ticket number and ticket system*.
 
+### Approvals
+
+**When your role needs approval.** PIM answers the activation with `PendingApproval`: the row
+says *Awaiting approval* (hourglass), the completion notification lists it apart, and no expiry
+reminder is set. The request appears under **Scheduled** with when you asked and when it expires
+(an approver has **24 hours**, then PIM lets it time out); *Cancel* withdraws it. While any request
+waits, Pimento reads your requests every minute (`roleAssignmentScheduleRequests`, `asTarget()`;
+not when auto-refresh is set to 1 minute, which reads them anyway; paused during an activation)
+and stops once none is left. When one is decided you get a notification:
+
+- **Approved**: *Approved and active: Contributor*, with the end of the activation; the row turns
+  active and gets its expiry reminder.
+- **Denied**: with the approver's justification and name, when Azure lets you read the approval
+  (`roleAssignmentApprovals/{id}/stages`; if not, without them).
+- **Expired** (`TimedOut`) or **cancelled**.
+
+**When you are an approver.** **Approvals** in the toolbar (<kbd>⇧</kbd><kbd>⌘</kbd><kbd>P</kbd>; it reads
+*Approvals (2)* when two wait) lists the requests you may decide: requester, role, resource,
+duration and start, justification, ticket, when it was asked and when it expires. Check one or more
+(or *All*), enter a justification (required; the requester sees it) and press **Approve** or
+**Deny**. Deny always asks first; Approve asks when Owner roles are among them (with *Confirm before
+activating Owner roles* on). Each row shows *Sending…*, then *Approved* / *Denied*, or why not (for
+example decided by another approver meanwhile). The first approver's decision counts, and you
+cannot approve your own requests. Without approver permissions the sheet simply says *You have no
+approvals to review*. The list is read whenever Pimento refreshes; with *New approval requests* on
+(Settings › Notifications), new ones get a notification that opens the sheet. For timely
+notifications, turn on auto-refresh (Settings › General).
+
 ### Presets
 
 A preset is a named set of eligibilities, with an optional justification and duration. Use the
@@ -292,7 +325,7 @@ is under General.
 | --- | --- |
 | General | tenant to open with (last used, az's current, or a specific one); load roles on launch; refresh automatically (off, 1, 5 or 15 minutes); theme (see below); show or hide the Type, Membership, Condition and Duration columns (also via right-click on a column header); unhide hidden tenants |
 | Activation | default duration; parallel requests (1 to 16, default 8); confirm before activating Owner roles (on by default); remember recent justifications and tickets and offer them from the clock buttons next to the fields; start with the last justification filled in |
-| Notifications | macOS permission state, with a shortcut to System Settings when it is off; send a test notification; notify when activations finish, or only when something fails; expiry reminders and how long before (5, 10, 15 or 30 minutes); notify when a scheduled activation starts; sound |
+| Notifications | macOS permission state, with a shortcut to System Settings when it is off; send a test notification; notify when activations finish, or only when something fails; expiry reminders and how long before (5, 10, 15 or 30 minutes); notify when a scheduled activation starts; approval decisions on your requests; new approval requests for you; sound |
 
 ### Themes
 
@@ -348,6 +381,14 @@ pimento cancel 5f0c1d2e
 # A role whose policy requires a ticket
 pimento activate prod --role Owner -j "change" --ticket CHG-1001 --ticket-system ServiceNow
 
+# Roles that need approval: see what waits, wait for the decision (exit 0 approved, 1 denied, 4 timeout)
+pimento pending
+pimento wait --all --timeout 2h && ./deploy.sh
+# As an approver: list, approve or deny (asks first; --dry-run sends nothing)
+pimento approvals
+pimento approve 5f0c1d2e -j "matches CHG-1001"
+pimento deny 7a1b -j "use the staging subscription"
+
 # End roles early, or renew them for a fresh duration (asks first)
 pimento deactivate contoso-dev --role Contributor
 pimento renew contoso-dev --role Contributor -j "INC-1234 still on it" --hours 2
@@ -365,17 +406,22 @@ pimento presets list
 | `pimento list [FILTER…] [--role NAME] [--active \| --eligible]` | Table of your eligible roles, with status and expiry |
 | `pimento activate (FILTER… \| --role NAME \| --all \| --preset NAME) -j TEXT [--hours N\|max] [--at WHEN] [--ticket NUMBER [--ticket-system NAME]] [--yes] [--dry-run] [--max-parallel N]` | Activates the matching roles that are not active yet, in parallel (8 at a time by default), or schedules them with `--at` |
 | `pimento deactivate (FILTER… \| --role NAME \| --all \| --preset NAME) [-j TEXT] [--yes] [--dry-run]` | Ends the matching activations now (`SelfDeactivate`) |
-| `pimento renew (FILTER… \| --role NAME \| --all \| --preset NAME) -j TEXT [--hours N\|max] [--yes] [--dry-run]` | Ends and activates the matching roles again, for a fresh duration (the role is off for a few minutes in between) |
+| `pimento renew (FILTER… \| --role NAME \| --all \| --preset NAME) -j TEXT [--hours N\|max] [--ticket NUMBER [--ticket-system NAME]] [--yes] [--dry-run]` | Ends and activates the matching roles again, for a fresh duration (the role is off for a few minutes in between), with the original activation's ticket or `--ticket` |
 | `pimento extend (FILTER… \| --role NAME \| --all) -j TEXT [--days N] [--yes] [--dry-run]` | Asks an administrator to extend admin-assigned, time-bound assignments (`SelfExtend`) |
 | `pimento scheduled` | Your scheduled activations and requests awaiting approval, from Azure |
 | `pimento cancel (REQUEST-ID… \| FILTER… \| --role NAME \| --all) [--yes] [--dry-run]` | Cancels them (`POST …/cancel`) |
+| `pimento pending` | Your requests waiting for approval, with when you asked and when they expire |
+| `pimento wait (REQUEST-ID… \| --all) [--timeout 30m]` | Waits until they are decided (read-only, every 30 s): exit 0 approved, 1 denied/expired/cancelled/not found, 4 timeout |
+| `pimento approvals` | Requests you can approve or deny as a PIM approver |
+| `pimento approve REQUEST-ID… -j TEXT [--yes] [--dry-run]`, `pimento deny …` | Decides them (`PATCH …/roleAssignmentApprovals/{id}/stages/{stage}`) |
 | `pimento status` | Active roles with the time left, soonest-expiring first |
 | `pimento tenants` | Tenants by ID, name and domain |
 | `pimento presets [list] \| show NAME \| save NAME FILTER… [--role NAME] [--exact] [-j TEXT] [--hours N\|max] [--ticket-system NAME] [--force] \| delete NAME` | Saved presets (see below) |
 | `pimento completions zsh\|bash\|fish` | Prints a shell completion script |
 | `pimento version`, `pimento help [COMMAND]` | Version; help for a command (also `COMMAND --help`) |
 
-`list`, `activate`, `deactivate`, `renew`, `extend`, `scheduled`, `cancel`, `status` and `tenants` take `-t, --tenant ID` and `--json`. The tenant is
+`list`, `activate`, `deactivate`, `renew`, `extend`, `scheduled`, `cancel`, `pending`, `wait`, `approvals`, `approve`,
+`deny`, `status` and `tenants` take `-t, --tenant ID` and `--json`. The tenant is
 `--tenant`, else `$PIMENTO_TENANT`, else az's current tenant.
 
 **Selecting roles.** A FILTER matches the resource name (case-insensitive substring); several
@@ -415,13 +461,30 @@ accepts it. When a role's policy requires a ticket and the number or the system 
 `activate` names the roles and stops with exit code 2 (checked against the policies it reads, also
 in a dry run). A preset's ticket system (`presets save --ticket-system`) completes `--ticket`.
 
+**Approvals.** A role whose policy requires approval is submitted: `activate` prints
+`awaiting approval  Contributor · Contoso Staging (request 7a1b2c3d)`, a note that nothing is active
+until an approver decides, and exits 0. `pimento pending` lists such requests (ASKED, EXPIRES:
+approvers have 24 hours). `pimento wait ID…` (ids or their first 4+ characters, also already decided
+ones) or `--all` reads your requests every 30 seconds until each is decided, printing *approved* with
+the end of the activation, *denied* with the approver's justification when Azure shows it,
+*expired* or *cancelled*. `--timeout` takes `30m` (default), `2h`, `1h30m`, `90s` or minutes, up to 24h.
+Exit codes: 0 all approved, 1 any denied, expired, cancelled, failed or not found, 4 timed out.
+
+`pimento approvals` lists the requests you can decide (an empty list, exit 0, when you have none or
+no approver permissions). `pimento approve ID… -j TEXT` and `pimento deny ID… -j TEXT` follow the
+safety rules below: the requests first (Owner roles highlighted for approve), a `[y/N]` prompt on a
+terminal, `--yes` otherwise, `--dry-run` prints the `PATCH` and its body and sends nothing. A
+request decided by someone else meanwhile is reported as not pending (exit 1).
+
 **Ending and renewing.** `deactivate`, `renew` and `extend` follow the same safety rules as
 `activate`: an explicit selection, the plan first, a `[y/N]` prompt on a terminal, `--yes` required
 otherwise, and `--dry-run` sends nothing. `deactivate` and `renew` only consider active roles;
 a role activated less than 5 minutes ago is reported as *too soon* with the time from which it
 can be ended (exit code 1). `renew` warns that the role is off between the two requests, retries
 the activation for up to 5 minutes while PIM removes the old one, and skips roles whose policy
-requires approval. `extend` leaves PIM activations out (use `renew`) and asks for the end of each
+requires approval. It sends the ticket the current activation was requested with, or `--ticket`
+(with `--ticket-system`, or the preset's); a role whose policy requires a ticket is skipped when
+neither is known. `extend` leaves PIM activations out (use `renew`) and asks for the end of each
 matching admin-assigned assignment to move `--days` later (default 30); an administrator decides.
 See [Ending and renewing](#ending-and-renewing-activations).
 
@@ -489,6 +552,10 @@ exactly one JSON document (the plan and progress of `activate` go to stderr):
 | `activate` | `{dryRun, tenantId, user, hours, duration, preset, justification, start, ticket: {ticketNumber, ticketSystem}, results: [{outcome, role, status, start, until, code, message, rules, request, duration, maxDuration, capped}], missing: [{scope, roleDefinitionId, roleName, scopeName}], summary: {activated, submitted, scheduled, skipped, failed, planned}}` (`outcome` is `activated`, `submitted` (pending approval), `scheduled` (`--at`), `skipped`, `failed` or `planned`; `start` and `summary.scheduled` only with `--at`; `request` only in a dry run; `duration` at the top is `max` or the asked ISO duration, `hours` only for a number; per result, `duration` is what was requested for that role) |
 | `scheduled` | `{tenantId, user, requests: [{id, name, kind, status, start, end, duration, roleName, roleDefinitionId, scope, scopeName, scopeType, justification, ticketNumber, ticketSystem, createdOn}]}` (`kind` is `scheduled` or `awaitingApproval`; `name` is the request id) |
 | `cancel` | `{dryRun, tenantId, user, results: [{outcome, request, code, message, url}], notFound, summary: {cancelled, failed, planned}}` (`outcome` is `cancelled`, `failed` or `planned`; `url` only in a dry run) |
+| `pending` | as `scheduled`, only requests waiting for approval; each has `expiresAt` (also in `scheduled`) |
+| `wait` | `{tenantId, user, timeout, results: [{target, outcome, status, request, until, reviewer, reviewJustification}], summary: {approved, rejected, timedOut, notFound}}` (`outcome` is `approved`, `denied`, `expired`, `canceled`, `failed`, `timeout` or `notFound`) |
+| `approvals` | `{tenantId, user, available, note, requests: [{id, name, approvalId, stageId, requester: {objectId, name, email}, roleName, roleDefinitionId, scope, scopeName, scopeType, isOwner, status, start, end, duration, justification, ticketNumber, ticketSystem, createdOn, expiresAt}]}` (`available: false` with a `note` when Azure refused the listing) |
+| `approve`, `deny` | `{decision, dryRun, tenantId, user, justification, results: [{outcome, request, code, message, url, body}], notFound, summary: {decided, skipped, failed, planned}}` (`outcome` is `approved`, `denied`, `planned`, `skipped` or `failed`; `url` and `body` only in a dry run) |
 | `presets list`, `presets show` | `{file, presets: [{id, name, tenantId, roles, match, justification, duration, ticketSystem, createdAt, updatedAt}]}`; `show` prints one preset |
 
 Times are ISO 8601 in UTC. Keys without a value are left out.
@@ -501,6 +568,7 @@ Times are ISO 8601 in UTC. Keys without a value are left out.
 | 1 | An activation or request failed, no role matched (or none of a preset's roles is eligible), or you answered no |
 | 2 | Usage error: unknown option, no justification or selection, invalid tenant or `--at` time, a required ticket missing, or a command that changes roles without `--yes` when stdin is not a terminal |
 | 3 | az is missing or not signed in, or ARM rejected the token (run the `az login` command it prints) |
+| 4 | `pimento wait`: still no decision when `--timeout` ran out |
 
 #### Shell completions
 
@@ -562,6 +630,23 @@ directly with the PIM APIs (`api-version=2020-10-01`):
 9. **Extend** (`pimento extend`): `requestType: SelfExtend` with `targetRoleAssignmentScheduleId`
    and `scheduleInfo.expiration = {type: AfterDateTime, endDateTime: <end + days>}`. PIM answers
    `201` with status `PendingAdminDecision`.
+10. **Your requests** (Scheduled, `pending`, `wait`, Renew's ticket):
+   `GET /providers/Microsoft.Authorization/roleAssignmentScheduleRequests?$filter=asTarget()` lists
+   pending and past requests. A request waiting for approval has status `PendingApproval` and an
+   `approvalId`; once decided it becomes `Provisioned`/`Granted`, `Denied`, `TimedOut` (after 24
+   hours) or `Canceled`. A request's name is the last segment of the `targetRoleAssignmentScheduleId`
+   it creates, which is how Renew finds the ticket an active role was requested with.
+11. **Approvals** (approver side; the `roleAssignmentApprovals` API is a **preview**,
+   `api-version=2021-01-01-preview`): `GET …/roleAssignmentScheduleRequests?$filter=asApprover()`
+   (2020-10-01) lists the requests you may decide, with requester, role, schedule, justification and
+   ticket; `GET /providers/Microsoft.Authorization/roleAssignmentApprovals?$filter=asApprover()`
+   their stages (`asApprover()` is the only filter it accepts at the tenant root; anything else is a
+   400). A decision is
+   `PATCH /providers/Microsoft.Authorization/roleAssignmentApprovals/{approvalId}/stages/{stageId}`
+   with `{"reviewResult": "Approve" | "Deny", "justification": "…"}` on the stage that is
+   `InProgress` and `assignedToMe` (read from `…/stages` when the listing does not name it). A 400,
+   403 or 404 listing means no approvals to show. Microsoft documents that ARM cannot approve
+   extend and renew requests.
 
 ## Security and privacy
 
@@ -572,10 +657,11 @@ directly with the PIM APIs (`api-version=2020-10-01`):
 - It keeps its settings in `UserDefaults`: the chosen tenant ID, the hidden tenant IDs, table
   columns, the options from the Settings window and, unless you turn it off, your last
   10 justifications (Settings › Activation clears them).
-- The only write calls are the `roleAssignmentScheduleRequests` `PUT`s: activate, deactivate,
-  renew (both) and extend. They run after you confirm in the app (Activate asks for Owner roles;
-  Deactivate and Renew always ask), after a tap on *Renew* / *End Now* in a reminder, or when the
-  CLI command has your confirmation (or `--yes`).
+- The only write calls are the `roleAssignmentScheduleRequests` `PUT`s (activate, deactivate,
+  renew, extend), `POST …/cancel`, and the approval `PATCH` (approve, deny). They run after you
+  confirm in the app (Activate and Approve ask for Owner roles; Deactivate, Renew, Cancel All and
+  Deny always ask), after a tap on *Renew* / *End Now* in a reminder, or when the CLI command has
+  your confirmation (or `--yes`). Following your requests for a decision is read-only (`GET`).
   **Preview** in the app and `pimento activate --dry-run` show the requests without sending them.
 - Presets are kept in `~/Library/Application Support/Pimento/presets.json` (mode 600): names,
   ARM scopes and role definition IDs, and the justification and duration you chose to save.
@@ -592,8 +678,14 @@ See [SECURITY.md](SECURITY.md) for how to report a vulnerability.
   **Microsoft Entra roles** (Global Administrator, ...) and **PIM for Groups** are managed through
   Microsoft Graph and need Graph permissions such as `RoleManagement.ReadWrite.Directory` /
   `PrivilegedAccess.ReadWrite.AzureADGroup`, which the Azure CLI's first-party app cannot obtain.
-- **Approval-required roles** are submitted; the row shows *Submitted (PendingApproval)* until
-  an approver acts. They are not renewed (the role would be off until someone approves).
+- **Approval-required roles** are submitted and shown as *Awaiting approval* until an approver
+  acts; they are not renewed (the role would be off until someone approves). Approving and denying
+  uses ARM's **preview** approvals API; it was not exercised against a live approval while writing
+  Pimento (see the changelog), and Microsoft documents that ARM cannot approve extend or renew requests.
+- **The approver's reason** on a denied request is shown only when Azure lets the requester read the
+  approval's stages.
+- **New approval requests** are noticed when Pimento refreshes (and while your own requests wait);
+  with auto-refresh off, that is at launch and on Refresh.
 - **No self-service extension of an activation.** PIM does not offer one; *Renew* starts a new
   activation and leaves a gap of a few minutes. Extension requests for admin-assigned time-bound
   assignments are CLI-only (`pimento extend`), and the app does not list those assignments.
@@ -603,7 +695,6 @@ See [SECURITY.md](SECURITY.md) for how to report a vulnerability.
   `AuthenticationContextRule` unless your az token already carries the required claims (see FAQ).
 - You choose whole hours (or *Maximum allowed*); a role whose policy allows less, such as 90
   minutes, is requested for exactly its maximum.
-- Ticket information is not sent yet; roles whose policy requires a ticket fail with `TicketingRule`.
 - Not notarized (yet), so Gatekeeper asks before the first launch of a downloaded build.
 - The CLI is built and tested for macOS only. Its code avoids AppKit and imports
   `FoundationNetworking` where Linux needs it, but there is no Linux build in CI.
@@ -622,7 +713,8 @@ policy could not be read (the Duration column shows *max ?*; hover for the reaso
 shorter duration (8 hours is PIM's default maximum).
 
 **`JustificationRule` / `TicketingRule` failed.** The role's policy requires a justification or
-ticket information. Pimento always sends a justification; ticket fields are not supported yet.
+ticket information. Pimento always sends a justification; fill in the ticket fields (or pass
+`--ticket NUMBER --ticket-system NAME`) for roles that need a ticket.
 
 **`MfaRule` / `AuthenticationContextRule` failed, or a "claims challenge".** The role requires
 MFA (or a Conditional Access authentication context) at activation. Sign in again so the token
