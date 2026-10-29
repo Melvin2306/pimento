@@ -21,7 +21,7 @@ All notable changes to this project are documented here. The format follows
     `io.github.melvin2306.pimento`, one item per account, after first unlock, this device only; the
     account info in the item's attributes, so listing reads no secret), shared by the app and the
     CLI; on other systems or with `PIMENTO_TOKEN_STORE=file`, `~/.config/pimento/tokens.json`
-    (mode 600, less secure). Access tokens stay in memory, per account and tenant, renewed five
+    (mode 600, less secure; `%APPDATA%\Pimento\tokens.json` on Windows). Access tokens stay in memory, per account and tenant, renewed five
     minutes before `expires_in` runs out. Rotated refresh tokens are kept. Other tenants get tokens
     by redeeming the refresh token there, so the tenant picker works without signing in again.
   - Errors: `invalid_grant` / `interaction_required` ask you to sign in again; common AADSTS codes

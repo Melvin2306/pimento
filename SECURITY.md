@@ -27,8 +27,10 @@ In scope, for example:
   `login.microsoftonline.com`, stored outside the Keychain (or the documented token file), or
   readable by other users; the loopback listener accepting a redirect without the right `state`,
   listening beyond the loopback interface, or staying open after sign-in;
-- any way to make the read-only CLI mode send a write request;
-- activation requests sent while dry run is on, or Owner roles activated without confirmation;
+- any way to make a preview or `--dry-run`, or a read-only command (`list`, `status`, `tenants`,
+  `scheduled`, `pending`, `wait`, `approvals`, `history import-azure`), send a write request;
+- a write sent without the confirmation it should have: a CLI write without its `[y/N]` answer or
+  `--yes`, or Owner roles activated without the Owner confirmation;
 - argument injection into the `az` process.
 
 Out of scope: the security of Azure, Microsoft Entra ID or the Azure CLI themselves, and
@@ -43,6 +45,10 @@ anything that requires an attacker to already control your user account or `az` 
 - Pimento sign-in: authorization code with PKCE (S256), `state` and `nonce`, or the device code
   flow; a transport guard lets sign-in data reach only the HTTPS token and device-code endpoints of
   `login.microsoftonline.com`. Refresh tokens are kept in the login Keychain (this device only) or,
-  without one, in a mode-600 file; never logged or displayed.
+  without one, in a file (mode 600 on macOS and Linux; in the user profile on Windows); never logged
+  or displayed.
 - `az` is started with an argv array, never through a shell; tenant values are validated.
-- The only write request is the activation `PUT`, sent only from the app after explicit user action.
+- The only write requests are the `roleAssignmentScheduleRequests` `PUT`s (activate, deactivate,
+  renew, extend), `POST …/cancel` and the approval `PATCH` (approve, deny), from the app after you
+  confirm or tap a reminder action, and from the CLI after its `[y/N]` prompt or `--yes`. Previews
+  and `--dry-run` go through a transport that refuses anything but `GET`.

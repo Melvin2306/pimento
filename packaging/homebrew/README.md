@@ -9,7 +9,8 @@ Templates for a Homebrew tap, ready for when the repository is public:
 
 Both install the prebuilt archives of a GitHub release: nothing is built from source and there
 are no bottles. The formula needs `curl` on Linux (the binary links libcurl). Install one or the
-other, not both: they both provide `pimento` (the cask says so with `conflicts_with`).
+other, not both: they both provide `pimento`. The cask declares it with `conflicts_with formula:`,
+which Homebrew does not enforce yet, so installing both fails only when the second links `pimento`.
 
 The cask's `zap` removes `~/Library/Application Support/Pimento` (presets, history, sign-in
 settings), the preferences, the saved window state and `~/.config/pimento` (the token file, when

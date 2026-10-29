@@ -7,7 +7,7 @@ import Foundation
 /// `SelfExtend`, `SelfRenew`); assignments an administrator made are not.
 public enum HistoryImport {
     /// The action of a request type; nil for types that are not yours to make.
-    /// A `SelfActivate` that starts more than two minutes after it was made is
+    /// A `SelfActivate` that starts more than a minute (`ScheduleTime.immediateSlack`) after it was made is
     /// a scheduled activation.
     public static func action(requestType: String?, start: Date?, createdOn: Date?) -> HistoryAction? {
         switch requestType?.lowercased() {
