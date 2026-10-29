@@ -132,6 +132,15 @@ public struct Preferences: Equatable, Sendable {
     /// When light, dark and ultra dark apply in `.timeOfDay` mode.
     public var appearanceSchedule = AppearanceSchedule()
 
+    // Menu bar
+    /// The menu bar extra: active roles with their countdown, presets, quick actions.
+    public var showInMenuBar = true
+    /// The soonest end (`1:24`) next to the menu bar icon, not only the count.
+    public var menuBarShowsRemainingTime = false
+    /// No Dock icon or app menu: the app lives in the menu bar. Applies only
+    /// while `showInMenuBar` is on (`AppPresence`).
+    public var hideDockIcon = false
+
     public static let reminderLeadOptions = [5, 10, 15, 30]
     public static let autoRefreshOptions = [0, 1, 5, 15]
     public static let maxParallelRange = 1...16
@@ -198,6 +207,10 @@ public struct Preferences: Equatable, Sendable {
 
     // MARK: Persistence
 
+    /// The stored key of `showInMenuBar`: the app's scene reads it directly
+    /// (`@AppStorage`) to insert or remove the menu bar extra.
+    public static let showInMenuBarKey = Key.showInMenuBar
+
     enum Key {
         static let notifyOnCompletion = "notifications.onCompletion"
         static let notifyOnlyOnFailure = "notifications.onlyOnFailure"
@@ -218,12 +231,16 @@ public struct Preferences: Equatable, Sendable {
         static let theme = "general.theme"
         static let appearanceMode = "general.appearanceMode"
         static let appearanceSchedule = "general.appearanceSchedule"
+        static let showInMenuBar = "general.showInMenuBar"
+        static let menuBarShowsRemainingTime = "general.menuBarRemainingTime"
+        static let hideDockIcon = "general.hideDockIcon"
 
         static let all = [
             notifyOnCompletion, notifyOnlyOnFailure, playSound, expiryReminders, reminderLeadMinutes, notifyScheduledStart,
             notifyApprovalDecisions, notifyNewApprovals,
             defaultHours, rememberJustifications, prefillLastJustification, confirmOwnerRoles, maxParallelRequests,
             launchTenant, refreshOnLaunch, autoRefreshMinutes, theme, appearanceMode, appearanceSchedule,
+            showInMenuBar, menuBarShowsRemainingTime, hideDockIcon,
         ]
     }
 
@@ -255,6 +272,9 @@ public struct Preferences: Equatable, Sendable {
         p.theme = AppTheme(storedValue: store.object(forKey: Key.theme) as? String)
         p.appearanceMode = AppearanceMode(storedValue: store.object(forKey: Key.appearanceMode) as? String)
         p.appearanceSchedule = AppearanceSchedule(storedValue: store.object(forKey: Key.appearanceSchedule))
+        bool(Key.showInMenuBar, &p.showInMenuBar)
+        bool(Key.menuBarShowsRemainingTime, &p.menuBarShowsRemainingTime)
+        bool(Key.hideDockIcon, &p.hideDockIcon)
         return p.validated()
     }
 
@@ -284,6 +304,9 @@ public struct Preferences: Equatable, Sendable {
         store.set(p.theme.rawValue, forKey: Key.theme)
         store.set(p.appearanceMode.rawValue, forKey: Key.appearanceMode)
         store.set(p.appearanceSchedule.storedValue, forKey: Key.appearanceSchedule)
+        store.set(p.showInMenuBar, forKey: Key.showInMenuBar)
+        store.set(p.menuBarShowsRemainingTime, forKey: Key.menuBarShowsRemainingTime)
+        store.set(p.hideDockIcon, forKey: Key.hideDockIcon)
     }
 
     /// Removes every stored setting, so the defaults apply again.
