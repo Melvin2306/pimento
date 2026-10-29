@@ -947,20 +947,27 @@ final class AppModel {
     /// the chosen start (now, or scheduled) and with the ticket, if any.
     private func plans() async throws -> [PlannedRequest] {
         guard let identity else { throw ActivationRequestError.missingPrincipal }
+        // What the user chose when pressing the button: the policy lookup
+        // below can take seconds, and edits made meanwhile must not be sent.
         let roles = checkedRoles
+        let justification = justification
+        let ticket = currentTicket
+        let start = scheduleStart
+        let requested = duration
         let now = Date()
-        if let start = scheduleStart { try ScheduleTime.validate(start, now: now) }
+        if let start { try ScheduleTime.validate(start, now: now) }
         await ensurePolicies(for: roles)
-        let needTicket = TicketRequirement.missing(roles, ticket: currentTicket) { self.policies[$0.policyKey] }
+        let needTicket = TicketRequirement.missing(roles, ticket: ticket) { self.policies[$0.policyKey] }
         if !needTicket.isEmpty {
             showTicketFields = true
             throw TicketMissing(roles: needTicket)
         }
         return try ActivationRequestBuilder.plan(
             roles, principalId: identity.objectId, justification: justification, now: now,
-            start: scheduleStart, ticket: currentTicket
+            start: start, ticket: ticket
         ) {
-            self.effectiveDuration(for: $0)
+            EffectiveDuration.resolve(requested, policyMaxMinutes: self.policies[$0.policyKey]?.maxMinutes,
+                                      fallbackHours: self.prefs.defaultHours)
         }
     }
 
@@ -986,16 +993,23 @@ final class AppModel {
 
     func activate() async {
         guard !isActivating else { return }
+        // Busy before the first await: loading the policies can take seconds,
+        // and a second click (or ⌘↩, a preset, a reminder) must not send the
+        // batch again meanwhile.
+        isActivating = true
+        let justification = trimmedJustification
+        let ticket = currentTicket
+        let requested = duration
+        let scheduling = scheduleStart != nil
         let planned: [PlannedRequest]
         do { planned = try await plans() } catch {
+            isActivating = false
             banner = Banner(kind: .error, text: error.localizedDescription)
             return
         }
-        isActivating = true
         banner = nil
-        rememberJustification(trimmedJustification)
-        rememberTicket(currentTicket)
-        let scheduling = scheduleStart != nil
+        rememberJustification(justification)
+        rememberTicket(ticket)
         for plan in planned { progress[plan.id] = .queued }
         do {
             try await service.execute(
@@ -1050,7 +1064,7 @@ final class AppModel {
         isActivating = false
         Notifier.operationFinished(
             roles: planned.map(\.role), outcomes: finishedOutcomes, operation: .activate,
-            context: reminderContext(justification: trimmedJustification), prefs: prefs)
+            context: reminderContext(justification: justification, duration: requested), prefs: prefs)
         await refreshAfterChange()
     }
 
@@ -1209,10 +1223,12 @@ final class AppModel {
             banner = Banner(kind: .error, text: ActivationRequestError.missingJustification.localizedDescription)
             return
         }
+        // Busy before the first await (see activate()): no second renewal of the same roles.
+        isActivating = true
+        let requested = asked ?? duration
         await ensurePolicies(for: targets)
         // The tickets the activations were requested with, read fresh: Renew sends them again.
         if let history = try? await service.loadRequestHistory() { activationTickets = history.activationTickets }
-        let requested = asked ?? duration
         let selection = renewalSelection(targets)
         let plans: [RenewPlan]
         do {
@@ -1224,10 +1240,10 @@ final class AppModel {
                                           fallbackHours: self.prefs.defaultHours)
             }
         } catch {
+            isActivating = false
             banner = Banner(kind: .error, text: error.localizedDescription)
             return
         }
-        isActivating = true
         banner = nil
         rememberJustification(justification)
         for role in selection.tooSoon {

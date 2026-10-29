@@ -93,4 +93,23 @@ import Testing
         let scene = try #require(main.range(of: "MenuBarExtra(")).lowerBound
         #expect(main[scene...].contains(".environment(model)"), "the menu bar extra's content gets the model in its environment")
     }
+
+    /// Regression: `activate()` and `renew()` set `isActivating` only after
+    /// loading the policies (seconds), so a second click, ⌘↩ or preset sent
+    /// the same PUTs twice. Busy must be set before the first `await`.
+    @Test func writesAreMarkedBusyBeforeTheirFirstAwait() throws {
+        let model = try String(contentsOf: Self.appSources.appendingPathComponent("AppModel.swift"), encoding: .utf8)
+        for signature in ["func activate() async {", "func renew(_ targets: [EligibleRole]", "func deactivate(_ targets: [EligibleRole]) async {"] {
+            guard let start = model.range(of: signature) else {
+                Issue.record("\(signature) not found")
+                continue
+            }
+            // The code after the signature, without `//` comments.
+            let body = model[start.upperBound...].components(separatedBy: "\n")
+                .map { $0.components(separatedBy: "//")[0] }.joined(separator: "\n")
+            let busy = try #require(body.range(of: "isActivating = true"), "\(signature) sets isActivating")
+            let firstAwait = try #require(body.range(of: "await "), "\(signature) awaits")
+            #expect(busy.lowerBound < firstAwait.lowerBound, "\(signature) is busy before its first await")
+        }
+    }
 }
