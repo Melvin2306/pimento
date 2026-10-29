@@ -249,6 +249,7 @@ private struct ScheduledRow: View {
     @Environment(AppModel.self) private var model
     @Environment(\.appTheme) private var theme
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.ultraDark) private var ultra
     let request: ScheduledRequest
 
     private var whenText: String {
@@ -274,7 +275,7 @@ private struct ScheduledRow: View {
     }
 
     var body: some View {
-        let palette = ThemePalette(theme, scheme)
+        let palette = ThemePalette(theme, scheme, ultra: ultra)
         HStack(alignment: .center, spacing: 12) {
             Image(systemName: request.kind == .scheduled ? "calendar.badge.clock" : "hourglass")
                 .font(.title3)

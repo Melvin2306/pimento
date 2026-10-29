@@ -18,7 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Needed when launched as a bare executable (`swift run`) rather than a .app.
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
-        MainActor.assumeIsolated { AppAppearance.apply(AppModel.shared.prefs) }
+        MainActor.assumeIsolated { AppAppearance.apply(AppModel.shared.appearance) }
         Task { @MainActor in Notifier.setUp() }
     }
 

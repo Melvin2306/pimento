@@ -129,6 +129,7 @@ private struct ApprovalRow: View {
     @Environment(AppModel.self) private var model
     @Environment(\.appTheme) private var theme
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.ultraDark) private var ultra
     let request: ApprovalRequest
 
     private var selected: Bool { model.approvalSelection.contains(request.name) }
@@ -154,7 +155,7 @@ private struct ApprovalRow: View {
     }
 
     var body: some View {
-        let palette = ThemePalette(theme, scheme)
+        let palette = ThemePalette(theme, scheme, ultra: ultra)
         HStack(alignment: .center, spacing: 12) {
             Toggle(isOn: Binding(get: { selected }, set: { model.setApproval(request, selected: $0) })) { EmptyView() }
                 .toggleStyle(.checkbox)

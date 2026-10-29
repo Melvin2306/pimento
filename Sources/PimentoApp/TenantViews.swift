@@ -6,6 +6,7 @@ import SwiftUI
 struct TenantToolbarButton: View {
     @Environment(AppModel.self) private var model
     @Environment(\.appTheme) private var theme
+    @Environment(\.ultraDark) private var ultra
 
     var body: some View {
         @Bindable var model = model
@@ -35,7 +36,7 @@ struct TenantToolbarButton: View {
         .popover(isPresented: $model.showTenantPicker, arrowEdge: .bottom) {
             TenantPicker()
                 .environment(model)
-                .appTheme(theme)
+                .appTheme(theme, ultra: ultra)
                 .appAppearanceInPopover()
         }
     }
@@ -270,6 +271,7 @@ private struct PickerRowButton<Content: View>: View {
     @Environment(AppModel.self) private var model
     @Environment(\.appTheme) private var theme
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.ultraDark) private var ultra
     let id: String
     let disabled: Bool
     let action: () -> Void
@@ -282,7 +284,7 @@ private struct PickerRowButton<Content: View>: View {
                 .padding(.vertical, 5)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(
-                    RoundedRectangle(cornerRadius: theme == .native ? 6 : ThemePalette(theme, scheme).cornerRadius)
+                    RoundedRectangle(cornerRadius: theme == .native ? 6 : ThemePalette(theme, scheme, ultra: ultra).cornerRadius)
                         .fill(model.hoveredTenantId == id && !disabled ? hoverFill : .clear))
                 .contentShape(Rectangle())
         }
@@ -294,7 +296,7 @@ private struct PickerRowButton<Content: View>: View {
     }
 
     private var hoverFill: Color {
-        theme == .native ? Color.accentColor.opacity(0.14) : ThemePalette(theme, scheme).rowHover
+        theme == .native ? Color.accentColor.opacity(0.14) : ThemePalette(theme, scheme, ultra: ultra).rowHover
     }
 }
 

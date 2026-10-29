@@ -430,6 +430,7 @@ struct StatusCell: View {
     var needsTicket = false
     @Environment(\.appTheme) private var theme
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.ultraDark) private var ultra
 
     var body: some View {
         HStack(spacing: 6) {
@@ -438,7 +439,7 @@ struct StatusCell: View {
             } else if theme == .native {
                 native
             } else {
-                themed(ThemePalette(theme, scheme))
+                themed(ThemePalette(theme, scheme, ultra: ultra))
             }
             if let scheduled, role.isActive {
                 Image(systemName: "calendar.badge.clock")
@@ -457,7 +458,7 @@ struct StatusCell: View {
     }
 
     private var secondary: Color {
-        let palette = ThemePalette(theme, scheme)
+        let palette = ThemePalette(theme, scheme, ultra: ultra)
         return theme == .native ? .secondary : checked ? palette.selectionText : palette.secondaryText
     }
 
@@ -473,7 +474,7 @@ struct StatusCell: View {
     }
 
     @ViewBuilder private func scheduledBadge(_ r: ScheduledRequest) -> some View {
-        let palette = ThemePalette(theme, scheme)
+        let palette = ThemePalette(theme, scheme, ultra: ultra)
         Group {
             switch theme {
             case .azure:
@@ -557,12 +558,13 @@ struct DurationCell: View {
     let model: AppModel
     @Environment(\.appTheme) private var theme
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.ultraDark) private var ultra
     let role: EligibleRole
     var checked = false
 
     var body: some View {
         let lookup = model.policyLookup(for: role)
-        let palette = ThemePalette(theme, scheme)
+        let palette = ThemePalette(theme, scheme, ultra: ultra)
         let secondary: Color = theme == .native ? .secondary : checked ? palette.selectionText : palette.secondaryText
         Group {
             if checked && !role.isActive {
@@ -628,6 +630,7 @@ struct ResultCell: View {
     var checked = false
     @Environment(\.appTheme) private var theme
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.ultraDark) private var ultra
 
     var body: some View {
         switch progress {
@@ -641,7 +644,7 @@ struct ResultCell: View {
                 Text(label).foregroundStyle(.secondary)
             }
         case .done(let outcome) where theme == .azure:
-            let palette = ThemePalette(theme, scheme)
+            let palette = ThemePalette(theme, scheme, ultra: ultra)
             let (symbol, foreground, fill): (String, Color, Color) = switch outcome {
             case .activated where outcome.isAwaitingApproval: (Self.symbol(outcome), palette.warning, palette.warningFill)
             case .activated, .renewed: (Self.symbol(outcome), palette.success, palette.successFill)
@@ -656,12 +659,12 @@ struct ResultCell: View {
         case .done(let outcome):
             let xp = theme == .windowsXP
             let color: Color = switch outcome {
-            case .activated where outcome.isAwaitingApproval: xp && !checked ? ThemePalette(theme, scheme).warning : .orange
-            case .activated, .renewed: xp ? ThemePalette(theme, scheme).success : .green
+            case .activated where outcome.isAwaitingApproval: xp && !checked ? ThemePalette(theme, scheme, ultra: ultra).warning : .orange
+            case .activated, .renewed: xp ? ThemePalette(theme, scheme, ultra: ultra).success : .green
             case .alreadyActive, .notActive, .deactivated: .secondary
-            case .tooSoon: xp && !checked ? ThemePalette(theme, scheme).warning : .orange
-            case .scheduled: xp ? (checked ? ThemePalette(theme, scheme).selectionText : ThemePalette(theme, scheme).accent) : .accentColor
-            case .policyViolation, .failed: xp && !checked ? ThemePalette(theme, scheme).danger : .red
+            case .tooSoon: xp && !checked ? ThemePalette(theme, scheme, ultra: ultra).warning : .orange
+            case .scheduled: xp ? (checked ? ThemePalette(theme, scheme, ultra: ultra).selectionText : ThemePalette(theme, scheme, ultra: ultra).accent) : .accentColor
+            case .policyViolation, .failed: xp && !checked ? ThemePalette(theme, scheme, ultra: ultra).danger : .red
             }
             let symbol = Self.symbol(outcome)
             Label {
@@ -862,6 +865,7 @@ struct BannerView: View {
     let dismiss: () -> Void
     @Environment(\.appTheme) private var theme
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.ultraDark) private var ultra
 
     private var style: (symbol: String, color: Color) {
         switch banner.kind {
@@ -873,7 +877,7 @@ struct BannerView: View {
 
     /// Portal message-bar / XP info-bar colours: (icon, fill).
     private var themedStyle: (icon: Color, fill: Color) {
-        let palette = ThemePalette(theme, scheme)
+        let palette = ThemePalette(theme, scheme, ultra: ultra)
         return switch banner.kind {
         case .info: (palette.accent, palette.infoFill)
         case .success: (palette.success, palette.successFill)

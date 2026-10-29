@@ -155,6 +155,9 @@ final class AppModel {
     var prefs: Preferences {
         didSet { preferencesChanged(from: oldValue) }
     }
+    /// The appearance that applies now (`prefs.resolvedAppearance`), for
+    /// `AppAppearance` and the themed views. Updated with `prefs`.
+    private(set) var appearance: ResolvedAppearance = .system
     /// Most recent first; kept only while `prefs.rememberJustifications` is on.
     private(set) var recentJustifications: [String] = []
     var columnCustomization = TableColumnCustomization<EligibleRole>() {
@@ -226,6 +229,7 @@ final class AppModel {
         self.commandLineTenant = commandLineTenant
         let prefs = Preferences.load(from: defaults)
         self.prefs = prefs
+        appearance = prefs.resolvedAppearance()
         duration = .hours(prefs.defaultHours)
         awaitingManualRefresh = !prefs.refreshOnLaunch
         hiddenTenantIds = Set(defaults.stringArray(forKey: Keys.hiddenTenants) ?? [])
@@ -1597,7 +1601,7 @@ final class AppModel {
         }
         guard prefs != old else { return }
         prefs.save(to: UserDefaults.standard)
-        if prefs.effectiveAppearance != old.effectiveAppearance { AppAppearance.apply(prefs) }
+        updateAppearance()
         if prefs.defaultHours != old.defaultHours, !isActivating { duration = .hours(prefs.defaultHours) }
         if prefs.autoRefreshMinutes != old.autoRefreshMinutes {
             restartAutoRefresh()
@@ -1615,6 +1619,14 @@ final class AppModel {
         } else if prefs.expiryReminders, prefs.reminderLeadMinutes != old.reminderLeadMinutes {
             Notifier.rescheduleReminders(lead: prefs.reminderLead)
         }
+    }
+
+    /// Applies `prefs.resolvedAppearance()` if it changed.
+    func updateAppearance() {
+        let now = prefs.resolvedAppearance()
+        guard now != appearance else { return }
+        appearance = now
+        AppAppearance.apply(now)
     }
 
     /// Back to the defaults. Hidden tenants and the remembered tenant stay.

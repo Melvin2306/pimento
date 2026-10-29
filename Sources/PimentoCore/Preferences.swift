@@ -43,18 +43,40 @@ public enum AppearanceMode: String, Codable, CaseIterable, Sendable {
     case system
     case light
     case dark
+    /// Dark with pure black backgrounds, for OLED screens and dark rooms.
+    case ultraDark
 
     public var title: String {
         switch self {
         case .system: "System"
         case .light: "Light"
         case .dark: "Dark"
+        case .ultraDark: "Ultra dark"
         }
     }
 
     /// The stored value, or `.system` for anything unknown.
     public init(storedValue: String?) {
         self = storedValue.flatMap(AppearanceMode.init(rawValue:)) ?? .system
+    }
+}
+
+/// The appearance that applies right now: the chosen mode, made concrete.
+public enum ResolvedAppearance: String, Codable, CaseIterable, Sendable {
+    /// Whatever the system uses.
+    case system
+    case light
+    case dark
+    /// Dark appearance plus pure black backgrounds.
+    case ultraDark
+
+    public var title: String {
+        switch self {
+        case .system: "System"
+        case .light: "Light"
+        case .dark: "Dark"
+        case .ultraDark: "Ultra dark"
+        }
     }
 }
 
@@ -115,10 +137,20 @@ public struct Preferences: Equatable, Sendable {
 
     public var reminderLead: TimeInterval { TimeInterval(reminderLeadMinutes * 60) }
 
-    /// The appearance the app's windows get: always light for a light-only
-    /// theme, the chosen mode otherwise.
+    /// The mode the app's windows get: always light for a light-only theme,
+    /// the chosen mode otherwise.
     public var effectiveAppearance: AppearanceMode {
         theme.supportsDarkMode ? appearanceMode : .light
+    }
+
+    /// What applies at `date`: `effectiveAppearance` made concrete.
+    public func resolvedAppearance(at date: Date = Date(), calendar: Calendar = .autoupdatingCurrent) -> ResolvedAppearance {
+        switch effectiveAppearance {
+        case .system: .system
+        case .light: .light
+        case .dark: .dark
+        case .ultraDark: .ultraDark
+        }
     }
 
     /// Clamps numbers into range and snaps choices to the offered options.

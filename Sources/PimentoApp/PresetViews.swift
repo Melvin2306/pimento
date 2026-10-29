@@ -180,10 +180,11 @@ private struct RoleName: View {
 struct PresetBox<Content: View>: View {
     @Environment(\.appTheme) private var theme
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.ultraDark) private var ultra
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        let palette = ThemePalette(theme, scheme)
+        let palette = ThemePalette(theme, scheme, ultra: ultra)
         let radius: CGFloat = theme == .native ? 6 : theme == .azure ? palette.cornerRadius : 0
         content()
             .background(theme == .native ? AnyShapeStyle(.background) : AnyShapeStyle(palette.surface),
@@ -200,6 +201,7 @@ struct ManagePresetsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.appTheme) private var theme
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.ultraDark) private var ultra
 
     var body: some View {
         VStack(spacing: 0) {
@@ -232,7 +234,7 @@ struct ManagePresetsSheet: View {
     }
 
     private var sidebarDividerColor: Color {
-        theme == .native ? Color(nsColor: .separatorColor) : ThemePalette(theme, scheme).border
+        theme == .native ? Color(nsColor: .separatorColor) : ThemePalette(theme, scheme, ultra: ultra).border
     }
 
     private var sidebar: some View {
@@ -292,13 +294,14 @@ struct ManagePresetsSheet: View {
 private struct SidebarRow: View {
     @Environment(\.appTheme) private var theme
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.ultraDark) private var ultra
     let title: String
     let subtitle: String
     let selected: Bool
     let action: () -> Void
 
     var body: some View {
-        let palette = ThemePalette(theme, scheme)
+        let palette = ThemePalette(theme, scheme, ultra: ultra)
         let fill: Color = theme == .native ? Color.accentColor.opacity(0.18) : palette.selection
         let text: Color = theme == .native ? .primary : selected ? palette.selectionText : palette.text
         Button(action: action) {

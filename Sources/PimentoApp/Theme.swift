@@ -4,7 +4,8 @@ import SwiftUI
 
 // The look chosen in Settings › General › Appearance. Only styling lives here:
 // every view keeps its controls, actions, shortcuts and accessibility labels,
-// and with `.native` each modifier below returns its content unchanged.
+// and with `.native` (unless ultra dark) each modifier below returns its
+// content unchanged.
 //
 // The themed looks are inspired by the Azure portal and Windows XP. They use
 // only colours and shapes; no Microsoft logo, icon, wallpaper, sound or font is
@@ -17,10 +18,21 @@ private struct AppThemeKey: EnvironmentKey {
     static let defaultValue: AppTheme = .native
 }
 
+private struct UltraDarkKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
 extension EnvironmentValues {
     var appTheme: AppTheme {
         get { self[AppThemeKey.self] }
         set { self[AppThemeKey.self] = newValue }
+    }
+
+    /// Ultra dark applies: dark appearance with pure black backgrounds. Never
+    /// true for a light-only theme.
+    var ultraDark: Bool {
+        get { self[UltraDarkKey.self] }
+        set { self[UltraDarkKey.self] = newValue }
     }
 }
 
@@ -37,29 +49,41 @@ extension Color {
     }
 }
 
-/// Colours and fonts of one theme in one colour scheme. Only read for the
-/// Azure and XP themes; the native look uses the system styles directly.
+/// Colours and fonts of one theme in one colour scheme. Read for the Azure
+/// and XP themes, and for the backgrounds of the native look in ultra dark;
+/// otherwise the native look uses the system styles directly.
 struct ThemePalette {
     let theme: AppTheme
     let isDark: Bool
+    /// Ultra dark: pure black page and list, near-black surfaces. Native or Azure only.
+    let isUltra: Bool
 
-    init(_ theme: AppTheme, _ scheme: ColorScheme) {
+    init(_ theme: AppTheme, _ scheme: ColorScheme, ultra: Bool = false) {
         self.theme = theme
         // XP is light-only: `AppAppearance` keeps the app light while it is selected.
         isDark = scheme == .dark && theme == .azure
+        isUltra = ultra && scheme == .dark && theme.supportsDarkMode
     }
 
-    private func pick(azure light: UInt32, _ dark: UInt32, xp: UInt32) -> Color {
-        Color(hex: theme == .windowsXP ? xp : isDark ? dark : light)
+    /// `ultra` (if given) in ultra dark; else the Azure light or dark colour, or XP's.
+    private func pick(azure light: UInt32, _ dark: UInt32, ultra: UInt32? = nil, xp: UInt32) -> Color {
+        if theme == .windowsXP { return Color(hex: xp) }
+        if isUltra { return Color(hex: ultra ?? dark) }
+        return Color(hex: isDark ? dark : light)
     }
+
+    // Ultra dark keeps every text colour at WCAG AA or better on its
+    // backgrounds: #F3F2F1 on #000000 is 18.6:1, #C8C6C4 on #121212 11.5:1.
 
     /// Window / page background.
-    var page: Color { pick(azure: 0xFAF9F8, 0x1B1A19, xp: 0xECE9D8) }
-    /// Cards, the list area and text fields.
-    var surface: Color { pick(azure: 0xFFFFFF, 0x252423, xp: 0xFFFFFF) }
+    var page: Color { pick(azure: 0xFAF9F8, 0x1B1A19, ultra: 0x000000, xp: 0xECE9D8) }
+    /// Cards and text fields.
+    var surface: Color { pick(azure: 0xFFFFFF, 0x252423, ultra: 0x0A0A0A, xp: 0xFFFFFF) }
+    /// The role and history tables.
+    var listBackground: Color { isUltra ? Color(hex: 0x000000) : surface }
     /// The bottom bar.
-    var bar: Color { pick(azure: 0xFFFFFF, 0x252423, xp: 0xECE9D8) }
-    var border: Color { pick(azure: 0xEDEBE9, 0x3B3A39, xp: 0x7F9DB9) }
+    var bar: Color { pick(azure: 0xFFFFFF, 0x252423, ultra: 0x0A0A0A, xp: 0xECE9D8) }
+    var border: Color { pick(azure: 0xEDEBE9, 0x3B3A39, ultra: 0x1F1F1F, xp: 0x7F9DB9) }
     var fieldBorder: Color { pick(azure: 0x8A8886, 0x8A8886, xp: 0x7F9DB9) }
     var text: Color { pick(azure: 0x323130, 0xF3F2F1, xp: 0x000000) }
     var secondaryText: Color { pick(azure: 0x605E5C, 0xC8C6C4, xp: 0x5A5A5A) }
@@ -72,19 +96,19 @@ struct ThemePalette {
     /// Checked rows.
     var selection: Color { pick(azure: 0xDEECF9, 0x004578, xp: 0x316AC5) }
     var selectionText: Color { pick(azure: 0x323130, 0xFFFFFF, xp: 0xFFFFFF) }
-    var rowHover: Color { pick(azure: 0xF3F2F1, 0x323130, xp: 0xC1D2EE) }
+    var rowHover: Color { pick(azure: 0xF3F2F1, 0x323130, ultra: 0x1A1A1A, xp: 0xC1D2EE) }
 
     var success: Color { pick(azure: 0x107C10, 0x92C353, xp: 0x1E7B1E) }
-    var successFill: Color { pick(azure: 0xDFF6DD, 0x2D3B1E, xp: 0xE3F4DC) }
+    var successFill: Color { pick(azure: 0xDFF6DD, 0x2D3B1E, ultra: 0x1C2613, xp: 0xE3F4DC) }
     var danger: Color { pick(azure: 0xA4262C, 0xF1707B, xp: 0xC00000) }
-    var dangerFill: Color { pick(azure: 0xFDE7E9, 0x442726, xp: 0xFDE3E3) }
+    var dangerFill: Color { pick(azure: 0xFDE7E9, 0x442726, ultra: 0x2E1818, xp: 0xFDE3E3) }
     var warning: Color { pick(azure: 0xD83B01, 0xFC9867, xp: 0xC25A00) }
-    var warningFill: Color { pick(azure: 0xFED9CC, 0x4A2A1C, xp: 0xFFF1C9) }
-    var neutralFill: Color { pick(azure: 0xF3F2F1, 0x3B3A39, xp: 0xF1EFE2) }
-    var infoFill: Color { pick(azure: 0xF3F2F1, 0x323130, xp: 0xFFFFE1) }
+    var warningFill: Color { pick(azure: 0xFED9CC, 0x4A2A1C, ultra: 0x301A10, xp: 0xFFF1C9) }
+    var neutralFill: Color { pick(azure: 0xF3F2F1, 0x3B3A39, ultra: 0x1F1F1F, xp: 0xF1EFE2) }
+    var infoFill: Color { pick(azure: 0xF3F2F1, 0x323130, ultra: 0x121212, xp: 0xFFFFE1) }
 
-    /// The Azure top bar (title bar and toolbar).
-    var headerBackground: Color { pick(azure: 0x1B1A19, 0x0B0A0A, xp: 0x0058EE) }
+    /// The Azure top bar (title bar and toolbar); black in ultra dark, also natively.
+    var headerBackground: Color { pick(azure: 0x1B1A19, 0x0B0A0A, ultra: 0x000000, xp: 0x0058EE) }
 
     var cornerRadius: CGFloat { theme == .windowsXP ? 3 : 2 }
 
@@ -120,9 +144,10 @@ struct ThemePalette {
 struct ThemeReader<Content: View>: View {
     @Environment(\.appTheme) private var theme
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.ultraDark) private var ultra
     @ViewBuilder let content: (ThemePalette) -> Content
 
-    var body: some View { content(ThemePalette(theme, scheme)) }
+    var body: some View { content(ThemePalette(theme, scheme, ultra: ultra)) }
 }
 
 // MARK: - Window root
@@ -132,14 +157,17 @@ struct AppThemed<Content: View>: View {
     @Environment(AppModel.self) private var model
     @ViewBuilder let content: () -> Content
 
-    var body: some View { content().appTheme(model.prefs.theme) }
+    var body: some View {
+        content().appTheme(model.prefs.theme, ultra: model.appearance == .ultraDark)
+    }
 }
 
 extension View {
-    /// Puts `theme` into the environment, with its font and accent. For a
-    /// window's root view. Light / dark is app-wide: see `AppAppearance`.
-    func appTheme(_ theme: AppTheme) -> some View {
-        modifier(ThemeRoot(theme: theme))
+    /// Puts `theme` and ultra dark into the environment, with the theme's
+    /// font and accent. For a window's root view (and popovers). Light / dark
+    /// is app-wide: see `AppAppearance`.
+    func appTheme(_ theme: AppTheme, ultra: Bool) -> some View {
+        modifier(ThemeRoot(theme: theme, ultra: ultra))
     }
 
     /// The themed page background; nothing for the native look.
@@ -150,23 +178,26 @@ extension View {
 
 struct ThemeRoot: ViewModifier {
     let theme: AppTheme
+    let ultra: Bool
 
     func body(content: Content) -> some View {
         content
             .modifier(ThemeFontAndTint())
             .environment(\.appTheme, theme)
+            .environment(\.ultraDark, ultra && theme.supportsDarkMode)
     }
 }
 
 private struct ThemeFontAndTint: ViewModifier {
     @Environment(\.appTheme) private var theme
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.ultraDark) private var ultra
 
     func body(content: Content) -> some View {
         if theme == .native {
             content
         } else {
-            let palette = ThemePalette(theme, scheme)
+            let palette = ThemePalette(theme, scheme, ultra: ultra)
             content
                 .font(palette.font())
                 .tint(palette.accent)
@@ -177,12 +208,51 @@ private struct ThemeFontAndTint: ViewModifier {
 private struct PageBackground: ViewModifier {
     @Environment(\.appTheme) private var theme
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.ultraDark) private var ultra
 
     func body(content: Content) -> some View {
-        if theme == .native {
-            content
+        if theme == .native && !ultra {
+            content.background(WindowBackground(black: false))
         } else {
-            content.background(ThemePalette(theme, scheme).page)
+            content
+                .background(ThemePalette(theme, scheme, ultra: ultra).page)
+                .background(WindowBackground(black: ultra && scheme == .dark))
+        }
+    }
+}
+
+/// Sets the hosting window's own background (behind the title bar, during
+/// resizing, around sheets) to black in ultra dark, and back to the system's
+/// colour after. Only ever changes a window it turned black itself.
+private struct WindowBackground: NSViewRepresentable {
+    let black: Bool
+
+    func makeNSView(context: Context) -> Probe { Probe() }
+
+    func updateNSView(_ view: Probe, context: Context) {
+        view.black = black
+        view.apply()
+    }
+
+    final class Probe: NSView {
+        var black = false
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            apply()
+        }
+
+        func apply() {
+            let black = black
+            // After SwiftUI's update pass, like `TitlebarAppearance`.
+            DispatchQueue.main.async { [weak self] in
+                guard let window = self?.window else { return }
+                if black {
+                    if window.backgroundColor != .black { window.backgroundColor = .black }
+                } else if window.backgroundColor == .black {
+                    window.backgroundColor = .windowBackgroundColor
+                }
+            }
         }
     }
 }
@@ -194,13 +264,15 @@ private struct PageBackground: ViewModifier {
 /// own `appearance` when it updates the scene, which left the toolbar dark
 /// under a forced-light XP window. `nil` hands control back to the system, so
 /// switching themes or modes never leaves a stale forced appearance.
+/// Ultra dark is the dark appearance here; its black backgrounds come from
+/// the `ultraDark` environment value (`AppThemed`).
 @MainActor
 enum AppAppearance {
-    static func apply(_ prefs: Preferences) {
-        let name: NSAppearance.Name? = switch prefs.effectiveAppearance {
+    static func apply(_ appearance: ResolvedAppearance) {
+        let name: NSAppearance.Name? = switch appearance {
         case .system: nil
         case .light: .aqua
-        case .dark: .darkAqua
+        case .dark, .ultraDark: .darkAqua
         }
         guard NSApp.appearance?.name != name else { return }
         NSApp.appearance = name.flatMap(NSAppearance.init(named:))
@@ -219,15 +291,21 @@ extension View {
 private struct ToolbarChrome: ViewModifier {
     @Environment(\.appTheme) private var theme
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.ultraDark) private var ultra
 
     func body(content: Content) -> some View {
         switch theme {
+        case .native where ultra && scheme == .dark:
+            content
+                .toolbarBackground(Color.black, for: .windowToolbar)
+                .toolbarBackground(.visible, for: .windowToolbar)
+                .background(TitlebarAppearance(dark: false))
         case .native:
             content.background(TitlebarAppearance(dark: false))
         case .azure:
-            // The portal's top bar is near-black in light and dark mode.
+            // The portal's top bar is near-black in light and dark mode, black in ultra dark.
             content
-                .toolbarBackground(ThemePalette(theme, scheme).headerBackground, for: .windowToolbar)
+                .toolbarBackground(ThemePalette(theme, scheme, ultra: ultra).headerBackground, for: .windowToolbar)
                 .toolbarBackground(.visible, for: .windowToolbar)
                 .background(TitlebarAppearance(dark: true))
         case .windowsXP:
@@ -321,10 +399,11 @@ enum XPTitleBar {
 struct ThemeHeader: View {
     @Environment(\.appTheme) private var theme
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.ultraDark) private var ultra
 
     var body: some View {
         if theme == .azure {
-            let palette = ThemePalette(theme, scheme)
+            let palette = ThemePalette(theme, scheme, ultra: ultra)
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 Text("My roles")
                     .font(palette.font(20, weight: .semibold))
@@ -356,6 +435,8 @@ extension View {
     func themedTextField(focused: Bool = false) -> some View { modifier(TextFieldChrome(focused: focused)) }
     /// A themed form (Settings): page background behind the grouped sections.
     func themedForm() -> some View { modifier(FormChrome()) }
+    /// The Settings window's tab bar: black in ultra dark; nothing otherwise.
+    func themedSettingsToolbar() -> some View { modifier(SettingsToolbarChrome()) }
 }
 
 /// `Divider()` natively; a line in the theme's border colour otherwise.
@@ -364,6 +445,7 @@ struct ThemedDivider: View {
     var vertical = false
     @Environment(\.appTheme) private var theme
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.ultraDark) private var ultra
 
     var body: some View {
         if vertical {
@@ -378,7 +460,7 @@ struct ThemedDivider: View {
         case .native:
             Divider()
         case .azure:
-            Rectangle().fill(ThemePalette(theme, scheme).border).frame(height: 1)
+            Rectangle().fill(ThemePalette(theme, scheme, ultra: ultra).border).frame(height: 1)
         case .windowsXP:
             // XP's etched separator: shadow line over a white one.
             VStack(spacing: 0) {
@@ -393,7 +475,7 @@ struct ThemedDivider: View {
         case .native:
             Divider()
         case .azure:
-            Rectangle().fill(ThemePalette(theme, scheme).border).frame(width: 1)
+            Rectangle().fill(ThemePalette(theme, scheme, ultra: ultra).border).frame(width: 1)
         case .windowsXP:
             HStack(spacing: 0) {
                 Rectangle().fill(Color(hex: 0xACA899)).frame(width: 1)
@@ -406,16 +488,21 @@ struct ThemedDivider: View {
 private struct ListArea: ViewModifier {
     @Environment(\.appTheme) private var theme
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.ultraDark) private var ultra
 
     func body(content: Content) -> some View {
-        let palette = ThemePalette(theme, scheme)
+        let palette = ThemePalette(theme, scheme, ultra: ultra)
         switch theme {
+        case .native where palette.isUltra:
+            content
+                .scrollContentBackground(.hidden)
+                .background(palette.listBackground)
         case .native:
             content
         case .azure:
             content
                 .scrollContentBackground(.hidden)
-                .background(palette.surface)
+                .background(palette.listBackground)
                 .clipShape(RoundedRectangle(cornerRadius: palette.cornerRadius))
                 .overlay(RoundedRectangle(cornerRadius: palette.cornerRadius).strokeBorder(palette.border))
                 .shadow(color: .black.opacity(palette.isDark ? 0 : 0.06), radius: 2, y: 1)
@@ -435,10 +522,13 @@ private struct ListArea: ViewModifier {
 private struct BarBackground: ViewModifier {
     @Environment(\.appTheme) private var theme
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.ultraDark) private var ultra
 
     func body(content: Content) -> some View {
-        let palette = ThemePalette(theme, scheme)
+        let palette = ThemePalette(theme, scheme, ultra: ultra)
         switch theme {
+        case .native where palette.isUltra:
+            content.background(palette.bar)
         case .native:
             content
         case .azure:
@@ -453,13 +543,14 @@ private struct BarBackground: ViewModifier {
 private struct CellHighlight: ViewModifier {
     @Environment(\.appTheme) private var theme
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.ultraDark) private var ultra
     let checked: Bool
 
     func body(content: Content) -> some View {
         if theme == .native {
             content
         } else {
-            let palette = ThemePalette(theme, scheme)
+            let palette = ThemePalette(theme, scheme, ultra: ultra)
             content
                 .foregroundStyle(checked ? palette.selectionText : palette.text)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
@@ -476,13 +567,14 @@ private struct CellHighlight: ViewModifier {
 private struct TextFieldChrome: ViewModifier {
     @Environment(\.appTheme) private var theme
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.ultraDark) private var ultra
     let focused: Bool
 
     func body(content: Content) -> some View {
         if theme == .native {
             content
         } else {
-            let palette = ThemePalette(theme, scheme)
+            let palette = ThemePalette(theme, scheme, ultra: ultra)
             content
                 .textFieldStyle(.plain)
                 .foregroundStyle(palette.text)
@@ -501,14 +593,32 @@ private struct TextFieldChrome: ViewModifier {
 private struct FormChrome: ViewModifier {
     @Environment(\.appTheme) private var theme
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.ultraDark) private var ultra
 
     func body(content: Content) -> some View {
-        if theme == .native {
-            content
+        let palette = ThemePalette(theme, scheme, ultra: ultra)
+        if theme == .native && !palette.isUltra {
+            content.background(WindowBackground(black: false))
         } else {
             content
                 .scrollContentBackground(.hidden)
-                .background(ThemePalette(theme, scheme).page)
+                .background(palette.page)
+                .background(WindowBackground(black: palette.isUltra))
+        }
+    }
+}
+
+private struct SettingsToolbarChrome: ViewModifier {
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.ultraDark) private var ultra
+
+    func body(content: Content) -> some View {
+        if ultra && scheme == .dark {
+            content
+                .toolbarBackground(Color.black, for: .windowToolbar)
+                .toolbarBackground(.visible, for: .windowToolbar)
+        } else {
+            content
         }
     }
 }
@@ -561,10 +671,11 @@ struct AzureButtonStyle: ButtonStyle {
         let configuration: Configuration
         @Environment(\.isEnabled) private var isEnabled
         @Environment(\.colorScheme) private var scheme
+        @Environment(\.ultraDark) private var ultra
         @StateObject private var hover = HoverState()
 
         var body: some View {
-            let palette = ThemePalette(.azure, scheme)
+            let palette = ThemePalette(.azure, scheme, ultra: ultra)
             let pressed = configuration.isPressed
             let hovering = hover.hovering && isEnabled
             configuration.label

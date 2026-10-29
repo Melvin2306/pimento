@@ -16,6 +16,7 @@ struct SettingsView: View {
                 .tabItem { Label("History", systemImage: "clock.arrow.circlepath") }
         }
         .frame(width: 500)
+        .themedSettingsToolbar()
     }
 }
 
@@ -77,9 +78,9 @@ private struct GeneralSettings: View {
                 }
                 .pickerStyle(.segmented)
                 .disabled(!model.prefs.theme.supportsDarkMode)
-                .help("Light, dark, or follow the system's appearance")
+                .help("Light, dark, ultra dark (pure black), or follow the system's appearance")
                 if !model.prefs.theme.supportsDarkMode {
-                    Text("Windows XP-style is light-only.")
+                    Text(lightOnlyCaption)
                         .font(.caption).foregroundStyle(.secondary)
                 }
             } header: {
@@ -125,6 +126,12 @@ private struct GeneralSettings: View {
         Binding(
             get: { model.prefs.effectiveAppearance },
             set: { model.prefs.appearanceMode = $0 })
+    }
+
+    private var lightOnlyCaption: String {
+        let mode = model.prefs.appearanceMode
+        guard mode != .light, mode != .system else { return "Windows XP-style is light-only." }
+        return "Windows XP-style is light-only. \(mode.title) applies again with another theme."
     }
 
     private var themeFooter: String {

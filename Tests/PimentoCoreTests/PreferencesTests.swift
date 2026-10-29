@@ -133,7 +133,34 @@ struct PreferencesTests {
             #expect(store.values["general.appearanceMode"] as? String == mode.rawValue)
             #expect(Preferences.load(from: store).appearanceMode == mode)
         }
-        #expect(AppearanceMode.allCases.map(\.title) == ["System", "Light", "Dark"])
+        #expect(AppearanceMode.allCases.map(\.title) == ["System", "Light", "Dark", "Ultra dark"])
+        #expect(AppearanceMode(storedValue: "ultraDark") == .ultraDark)
+    }
+
+    @Test func resolvedAppearanceFollowsTheMode() {
+        var p = Preferences()
+        let expected: [AppearanceMode: ResolvedAppearance] = [.system: .system, .light: .light, .dark: .dark, .ultraDark: .ultraDark]
+        for (mode, resolved) in expected {
+            p.appearanceMode = mode
+            for theme in AppTheme.allCases {
+                p.theme = theme
+                #expect(p.resolvedAppearance() == (theme.supportsDarkMode ? resolved : .light), "\(theme) \(mode)")
+            }
+        }
+    }
+
+    @Test func ultraDarkUnderXPStaysLightAndComesBack() {
+        var p = Preferences()
+        p.appearanceMode = .ultraDark
+        p.theme = .windowsXP
+        #expect(p.effectiveAppearance == .light)
+        #expect(p.resolvedAppearance() == .light)
+        let store = MemoryStore()
+        p.save(to: store)
+        #expect(store.values["general.appearanceMode"] as? String == "ultraDark", "the choice is saved, not the forced light")
+        var loaded = Preferences.load(from: store)
+        loaded.theme = .azure
+        #expect(loaded.resolvedAppearance() == .ultraDark)
     }
 
     @Test func unknownOrMistypedAppearanceModeFallsBackToSystem() {

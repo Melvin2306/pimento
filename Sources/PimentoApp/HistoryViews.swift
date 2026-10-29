@@ -366,6 +366,7 @@ private struct HistoryResultCell: View {
     let record: HistoryRecord
     @Environment(\.appTheme) private var theme
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.ultraDark) private var ultra
 
     private var symbol: String {
         switch record.result {
@@ -385,7 +386,7 @@ private struct HistoryResultCell: View {
     }
 
     var body: some View {
-        let palette = ThemePalette(theme, scheme)
+        let palette = ThemePalette(theme, scheme, ultra: ultra)
         Group {
             if theme == .azure {
                 let (foreground, fill): (Color, Color) = switch record.result {
