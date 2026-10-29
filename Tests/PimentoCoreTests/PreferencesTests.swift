@@ -23,6 +23,7 @@ struct PreferencesTests {
         #expect(p.launchTenant == .lastUsed)
         #expect(p.refreshOnLaunch)
         #expect(p.autoRefreshMinutes == 0)
+        #expect(p.theme == .native)
     }
 
     @Test func roundTripsThroughTheStore() {
@@ -35,6 +36,7 @@ struct PreferencesTests {
         p.maxParallelRequests = 3
         p.launchTenant = .specific("contoso.onmicrosoft.com")
         p.autoRefreshMinutes = 5
+        p.theme = .windowsXP
         let store = MemoryStore()
         p.save(to: store)
         #expect(Preferences.load(from: store) == p)
@@ -80,6 +82,38 @@ struct PreferencesTests {
         Preferences.reset(in: store)
         #expect(Preferences.load(from: store) == Preferences())
         #expect(store.values.keys.sorted() == ["tenantId"], "reset leaves data that is not a setting alone")
+    }
+
+    @Test func themeIsStoredByName() {
+        let store = MemoryStore()
+        for theme in AppTheme.allCases {
+            var p = Preferences()
+            p.theme = theme
+            p.save(to: store)
+            #expect(store.values["general.theme"] as? String == theme.rawValue)
+            #expect(Preferences.load(from: store).theme == theme)
+        }
+        store.values["general.theme"] = "azure"
+        #expect(Preferences.load(from: store).theme == .azure)
+        store.values["general.theme"] = "windowsXP"
+        #expect(Preferences.load(from: store).theme == .windowsXP)
+    }
+
+    @Test func unknownOrMistypedThemeFallsBackToNative() {
+        let store = MemoryStore()
+        for value: Any in ["vista", "", "Azure", 3, true] {
+            store.values["general.theme"] = value
+            #expect(Preferences.load(from: store).theme == .native, "\(value)")
+        }
+        #expect(AppTheme(storedValue: nil) == .native)
+        #expect(AppTheme(storedValue: "windowsXP") == .windowsXP)
+    }
+
+    @Test func themeCodableUsesTheRawValue() throws {
+        let data = try JSONEncoder().encode([AppTheme.azure, .windowsXP, .native])
+        #expect(String(decoding: data, as: UTF8.self) == #"["azure","windowsXP","native"]"#)
+        #expect(try JSONDecoder().decode([AppTheme].self, from: data) == [.azure, .windowsXP, .native])
+        #expect(AppTheme.allCases.map(\.title) == ["Native", "Azure-style", "Windows XP-style"])
     }
 
     @Test func startupTenant() {

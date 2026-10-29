@@ -9,6 +9,31 @@ public protocol PreferenceStore: AnyObject {
 
 extension UserDefaults: PreferenceStore {}
 
+/// The look of the app's windows (Settings › General › Appearance). Only
+/// styling changes; every control and shortcut stays the same.
+public enum AppTheme: String, Codable, CaseIterable, Sendable {
+    /// The standard macOS look, following the system's light or dark mode.
+    case native
+    /// Flat and blue, in the style of the Azure portal. Light and dark.
+    case azure
+    /// Beige and glossy blue, in the style of Windows XP. Always light.
+    case windowsXP
+
+    public var title: String {
+        switch self {
+        case .native: "Native"
+        case .azure: "Azure-style"
+        case .windowsXP: "Windows XP-style"
+        }
+    }
+
+    /// The stored value, or `.native` for anything unknown (a theme from a
+    /// newer version, a typo in `defaults write`).
+    public init(storedValue: String?) {
+        self = storedValue.flatMap(AppTheme.init(rawValue:)) ?? .native
+    }
+}
+
 /// The user's settings (Settings window, ⌘,). A plain value: loading clamps
 /// anything out of range, so the app never sees an invalid setting.
 public struct Preferences: Equatable, Sendable {
@@ -44,6 +69,7 @@ public struct Preferences: Equatable, Sendable {
     public var refreshOnLaunch = true
     /// 0 = off.
     public var autoRefreshMinutes = 0
+    public var theme: AppTheme = .native
 
     public static let reminderLeadOptions = [5, 10, 15, 30]
     public static let autoRefreshOptions = [0, 1, 5, 15]
@@ -102,11 +128,12 @@ public struct Preferences: Equatable, Sendable {
         static let launchTenant = "general.launchTenant"
         static let refreshOnLaunch = "general.refreshOnLaunch"
         static let autoRefreshMinutes = "general.autoRefreshMinutes"
+        static let theme = "general.theme"
 
         static let all = [
             notifyOnCompletion, notifyOnlyOnFailure, playSound, expiryReminders, reminderLeadMinutes,
             defaultHours, rememberJustifications, prefillLastJustification, confirmOwnerRoles, maxParallelRequests,
-            launchTenant, refreshOnLaunch, autoRefreshMinutes,
+            launchTenant, refreshOnLaunch, autoRefreshMinutes, theme,
         ]
     }
 
@@ -132,6 +159,7 @@ public struct Preferences: Equatable, Sendable {
         }
         bool(Key.refreshOnLaunch, &p.refreshOnLaunch)
         int(Key.autoRefreshMinutes, &p.autoRefreshMinutes)
+        p.theme = AppTheme(storedValue: store.object(forKey: Key.theme) as? String)
         return p.validated()
     }
 
@@ -155,6 +183,7 @@ public struct Preferences: Equatable, Sendable {
         store.set(launch, forKey: Key.launchTenant)
         store.set(p.refreshOnLaunch, forKey: Key.refreshOnLaunch)
         store.set(p.autoRefreshMinutes, forKey: Key.autoRefreshMinutes)
+        store.set(p.theme.rawValue, forKey: Key.theme)
     }
 
     /// Removes every stored setting, so the defaults apply again.
