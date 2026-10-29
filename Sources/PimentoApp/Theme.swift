@@ -360,10 +360,20 @@ extension View {
 
 /// `Divider()` natively; a line in the theme's border colour otherwise.
 struct ThemedDivider: View {
+    /// A short vertical separator between controls (22 pt high).
+    var vertical = false
     @Environment(\.appTheme) private var theme
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
+        if vertical {
+            verticalBody.frame(height: 22)
+        } else {
+            horizontalBody
+        }
+    }
+
+    @ViewBuilder private var horizontalBody: some View {
         switch theme {
         case .native:
             Divider()
@@ -374,6 +384,20 @@ struct ThemedDivider: View {
             VStack(spacing: 0) {
                 Rectangle().fill(Color(hex: 0xACA899)).frame(height: 1)
                 Rectangle().fill(Color.white).frame(height: 1)
+            }
+        }
+    }
+
+    @ViewBuilder private var verticalBody: some View {
+        switch theme {
+        case .native:
+            Divider()
+        case .azure:
+            Rectangle().fill(ThemePalette(theme, scheme).border).frame(width: 1)
+        case .windowsXP:
+            HStack(spacing: 0) {
+                Rectangle().fill(Color(hex: 0xACA899)).frame(width: 1)
+                Rectangle().fill(Color.white).frame(width: 1)
             }
         }
     }

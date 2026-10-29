@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Observation
 import PimentoCore
@@ -5,8 +6,18 @@ import SwiftUI
 
 enum RowProgress: Equatable {
     case queued
-    case running
+    /// In flight: `Activating…`, `Ending…`, `Activating again…`.
+    case running(String)
     case done(ActivationOutcome)
+}
+
+/// What the app shows for a row until Azure's listing agrees: ARM lists a new
+/// activation, or drops an ended one, only after a few seconds.
+enum PendingState: Equatable {
+    /// Activated (or renewed) from this app; `until`: the expiry Azure returned.
+    case active(until: Date?, since: Date)
+    /// Ended from this app at `since`.
+    case inactive(since: Date)
 }
 
 @MainActor
@@ -31,12 +42,20 @@ final class AppModel {
     var identity: Identity?
     var lastRefreshed: Date?
     var progress: [EligibleRole.ID: RowProgress] = [:]
-    /// Rows activated from this app that Azure does not list as active yet:
-    /// ARM takes a few seconds to show a new activation, so a refresh right
-    /// after activating would still say "Eligible". Value: the expiry Azure
-    /// returned, if any.
-    private var pendingActive: [EligibleRole.ID: Date?] = [:]
+    /// Rows activated, renewed or ended from this app that Azure does not
+    /// list that way yet, so a refresh right after does not flip them back.
+    private var pending: [EligibleRole.ID: PendingState] = [:]
+    /// Active rows checked for Deactivate / Renew (kept apart from `checked`,
+    /// the eligible rows to activate).
+    var checkedActive: Set<EligibleRole.ID> = []
+    /// An activation, deactivation or renewal is running.
     var isActivating = false
+    var showDeactivateConfirmation = false
+    var showRenewConfirmation = false
+    /// The rows the open Deactivate / Renew confirmation is about.
+    var lifecycleTargets: [EligibleRole] = []
+    /// Bumped to move keyboard focus to the justification field.
+    var justificationFocusRequest = 0
     var dryRunPlans: [PlannedRequest] = []
     var showDryRunSheet = false
     var showOwnerConfirmation = false
@@ -173,6 +192,7 @@ final class AppModel {
     }
 
     var checkedRoles: [EligibleRole] { roles.filter { checked.contains($0.id) && !$0.isActive } }
+    var checkedActiveRoles: [EligibleRole] { roles.filter { checkedActive.contains($0.id) && $0.isActive } }
     var checkedOwnerRoles: [EligibleRole] { checkedRoles.filter(\.isOwner) }
     var activeCount: Int { roles.filter(\.isActive).count }
     var trimmedJustification: String { justification.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -286,10 +306,10 @@ final class AppModel {
             // A tenant switch while loading makes this result stale.
             guard generation == tenantGeneration else { return }
             identity = snapshot.identity
-            roles = applyPendingActivations(to: snapshot.roles)
-            // Drop selections that became active or disappeared.
-            let selectable = Set(roles.filter { !$0.isActive }.map(\.id))
-            checked.formIntersection(selectable)
+            roles = applyPending(to: snapshot.roles)
+            // Drop selections that changed state or disappeared.
+            checked.formIntersection(Set(roles.filter { !$0.isActive }.map(\.id)))
+            checkedActive.formIntersection(Set(roles.filter(\.isActive).map(\.id)))
             lastRefreshed = Date()
             loadState = .loaded
             reloadPresets()
@@ -303,20 +323,33 @@ final class AppModel {
         }
     }
 
-    /// Shows rows this app just activated as active until Azure lists them,
-    /// and forgets those Azure now reports (or whose expiry has passed).
-    private func applyPendingActivations(to fresh: [EligibleRole]) -> [EligibleRole] {
+    /// Shows rows this app just changed the way they will be until Azure
+    /// lists them so, and forgets those Azure agrees with (or that are stale).
+    private func applyPending(to fresh: [EligibleRole]) -> [EligibleRole] {
         let now = Date()
         return fresh.map { role in
-            guard let until = pendingActive[role.id] else { return role }
-            if role.isActive || (until.map { $0 <= now } ?? false) {
-                pendingActive[role.id] = nil
-                return role
+            guard let state = pending[role.id] else { return role }
+            switch state {
+            case .active(let until, let since):
+                // Azure lists it with (about) the new expiry: done. A renewal
+                // may still show the old activation for a moment.
+                let caughtUp = role.isActive && (until == nil || (role.activeUntil ?? .distantFuture) >= until!.addingTimeInterval(-90))
+                if caughtUp || (until.map { $0 <= now } ?? false) {
+                    pending[role.id] = nil
+                    return role
+                }
+                var shown = role
+                shown.isActive = true
+                shown.activeUntil = until
+                shown.activeSince = since
+                return shown
+            case .inactive(let since):
+                if !role.isActive || now.timeIntervalSince(since) > 180 {
+                    pending[role.id] = nil
+                    return role
+                }
+                return RenewPlan.asEligible(role)
             }
-            var shown = role
-            shown.isActive = true
-            shown.activeUntil = until
-            return shown
         }
     }
 
@@ -370,10 +403,11 @@ final class AppModel {
         roles = []
         identity = nil
         checked = []
+        checkedActive = []
         policies = [:]
         policyTask = nil
         progress = [:]
-        pendingActive = [:]
+        pending = [:]
         banner = nil
         lastRefreshed = nil
         loadState = .idle
@@ -385,11 +419,17 @@ final class AppModel {
         return tenant.tenantId?.caseInsensitiveCompare(id) == .orderedSame
     }
 
-    func isChecked(_ role: EligibleRole) -> Bool { checked.contains(role.id) }
+    func isChecked(_ role: EligibleRole) -> Bool {
+        role.isActive ? checkedActive.contains(role.id) : checked.contains(role.id)
+    }
 
+    /// Eligible rows are checked for activation, active ones for Deactivate / Renew.
     func setChecked(_ role: EligibleRole, _ on: Bool) {
-        guard !role.isActive else { return }
-        if on { checked.insert(role.id) } else { checked.remove(role.id) }
+        if role.isActive {
+            if on { checkedActive.insert(role.id) } else { checkedActive.remove(role.id) }
+        } else {
+            if on { checked.insert(role.id) } else { checked.remove(role.id) }
+        }
     }
 
     /// Checks every not-yet-active row that matches the current search.
@@ -397,7 +437,10 @@ final class AppModel {
         for role in visibleRoles where !role.isActive { checked.insert(role.id) }
     }
 
-    func clearSelection() { checked.removeAll() }
+    func clearSelection() {
+        checked.removeAll()
+        checkedActive.removeAll()
+    }
 
     /// Entry point of the main button: Owner confirmation, or run. The
     /// preview (dry run) is its own, secondary action: buildDryRun().
@@ -446,7 +489,7 @@ final class AppModel {
             try await service.execute(
                 planned,
                 maxConcurrent: prefs.maxParallelRequests,
-                onStart: { plan in await MainActor.run { self.progress[plan.id] = .running } },
+                onStart: { plan in await MainActor.run { self.progress[plan.id] = .running("Activating…") } },
                 onResult: { plan, outcome in await MainActor.run { self.progress[plan.id] = .done(outcome) } }
             )
         } catch {
@@ -468,8 +511,8 @@ final class AppModel {
         for plan in planned {
             guard case .done(let outcome) = progress[plan.id] else { continue }
             switch outcome {
-            case .activated(_, let until):
-                pendingActive[plan.id] = until
+            case .activated(let status, let until):
+                if ActivationOutcome.isGranted(status: status) { pending[plan.id] = .active(until: until, since: plan.requestedAt) }
                 checked.remove(plan.id)
             case .alreadyActive:
                 checked.remove(plan.id)
@@ -478,19 +521,286 @@ final class AppModel {
             }
         }
         isActivating = false
-        Notifier.activationsFinished(planned: planned, outcomes: progress.compactMapValues { p -> ActivationOutcome? in
+        Notifier.operationFinished(
+            roles: planned.map(\.role), outcomes: finishedOutcomes, operation: .activate,
+            context: reminderContext(justification: trimmedJustification), prefs: prefs)
+        await refreshAfterChange()
+    }
+
+    /// Outcomes of every row that finished.
+    private var finishedOutcomes: [String: ActivationOutcome] {
+        progress.compactMapValues { p -> ActivationOutcome? in
             if case .done(let o) = p { return o }
             return nil
-        }, prefs: prefs)
+        }
+    }
+
+    /// What expiry reminders carry for their Renew / End Now actions.
+    private func reminderContext(justification: String) -> Notifier.ReminderContext {
+        Notifier.ReminderContext(
+            tenantId: effectiveTenantId,
+            // Kept only when the user keeps recent justifications.
+            justification: prefs.rememberJustifications && !justification.isEmpty ? justification : nil,
+            duration: duration)
+    }
+
+    /// Refreshes now and again shortly: ARM lists a change only after a few
+    /// seconds, and the status should come from Azure, not from the overlay.
+    private func refreshAfterChange() async {
         await refresh()
-        // ARM lists a new activation only after a few seconds; check again so
-        // the status comes from Azure rather than from the pending overlay.
-        if !pendingActive.isEmpty {
-            let generation = tenantGeneration
-            Task {
-                try? await Task.sleep(for: .seconds(20))
+        guard !pending.isEmpty else { return }
+        let generation = tenantGeneration
+        Task {
+            for delay in [20, 40] {
+                try? await Task.sleep(for: .seconds(delay))
                 guard generation == self.tenantGeneration else { return }
+                if self.pending.isEmpty { return }
                 await self.refresh()
+            }
+        }
+    }
+
+    // MARK: Deactivate and renew
+
+    var deactivateTitle: String {
+        let n = checkedActiveRoles.count
+        return n == 0 ? "Deactivate" : "Deactivate \(n)"
+    }
+
+    var renewTitle: String {
+        let n = checkedActiveRoles.count
+        return n == 0 ? "Renew" : "Renew \(n)"
+    }
+
+    var canChangeActive: Bool { !isActivating && !checkedActiveRoles.isEmpty && identity != nil }
+
+    /// Asks before ending `roles` (default: the checked active rows).
+    func requestDeactivation(_ roles: [EligibleRole]? = nil) {
+        let targets = (roles ?? checkedActiveRoles).filter(\.isActive)
+        guard !isActivating, !targets.isEmpty, identity != nil else { return }
+        lifecycleTargets = targets
+        showDeactivateConfirmation = true
+    }
+
+    /// Asks before renewing `roles`: always, because of the gap.
+    func requestRenewal(_ roles: [EligibleRole]? = nil) {
+        let targets = (roles ?? checkedActiveRoles).filter(\.isActive)
+        guard !isActivating, !targets.isEmpty, identity != nil else { return }
+        guard !trimmedJustification.isEmpty else {
+            checkedActive = Set(targets.map(\.id))
+            banner = Banner(kind: .error, text: "Renewing activates the roles again: enter a justification, then press Renew.")
+            justificationFocusRequest += 1
+            return
+        }
+        lifecycleTargets = targets
+        loadPolicies(for: targets)
+        showRenewConfirmation = true
+    }
+
+    /// The confirmation's targets split by what PIM allows now.
+    func lifecycleSelection(forRenewal: Bool) -> RoleLifecycle.Selection {
+        RoleLifecycle.select(lifecycleTargets, now: Date(), forRenewal: forRenewal) {
+            self.policies[$0.policyKey]?.policy?.requiresApproval == true
+        }
+    }
+
+    /// Ends the activations of `roles` (SelfDeactivate).
+    func deactivate(_ targets: [EligibleRole]) async {
+        guard !isActivating, let identity else { return }
+        let selection = RoleLifecycle.select(targets, now: Date())
+        let planned: [PlannedRequest]
+        do {
+            planned = try ActivationRequestBuilder.deactivationPlan(selection.ready, principalId: identity.objectId)
+        } catch {
+            banner = Banner(kind: .error, text: error.localizedDescription)
+            return
+        }
+        isActivating = true
+        banner = nil
+        for role in selection.tooSoon {
+            progress[role.id] = .done(.tooSoon(possibleAt: RoleLifecycle.earliestDeactivation(of: role)))
+        }
+        for plan in planned { progress[plan.id] = .queued }
+        do {
+            try await service.execute(
+                planned,
+                maxConcurrent: prefs.maxParallelRequests,
+                onStart: { plan in await MainActor.run { self.progress[plan.id] = .running("Ending…") } },
+                onResult: { plan, outcome in await MainActor.run { self.progress[plan.id] = .done(outcome) } }
+            )
+        } catch {
+            for plan in planned where progress[plan.id] == .queued {
+                progress[plan.id] = .done(.failed(code: "Auth", message: error.localizedDescription))
+            }
+            banner = Banner(kind: .error, text: error.localizedDescription)
+        }
+        var ended: [EligibleRole] = []
+        let now = Date()
+        for plan in planned {
+            guard case .done(let outcome) = progress[plan.id] else { continue }
+            switch outcome {
+            case .deactivated, .notActive:
+                ended.append(plan.role)
+                checkedActive.remove(plan.id)
+                // Every row of that scope + role (direct and through a group).
+                for row in self.roles(sharing: plan.role) { pending[row.id] = .inactive(since: now) }
+            default:
+                break
+            }
+        }
+        let outcomes = finishedOutcomes
+        let all = selection.tooSoon + planned.map(\.role)
+        let failed = all.filter { outcomes[$0.id]?.isFailure == true }
+        banner = Banner(kind: failed.isEmpty ? .success : .error, text: lifecycleBanner(
+            done: ended.count, verb: "deactivated", failed: failed, outcomes: outcomes))
+        isActivating = false
+        roles = applyPending(to: roles)
+        Notifier.rolesEnded(Set(ended.map { ReminderRole.key($0.policyKey) }))
+        Notifier.operationFinished(roles: all, outcomes: outcomes, operation: .deactivate,
+                                   context: reminderContext(justification: ""), prefs: prefs)
+        await refreshAfterChange()
+    }
+
+    /// Ends and re-activates `roles` for the chosen duration (capped at each
+    /// policy maximum). Roles whose policy requires approval are left alone.
+    func renew(_ targets: [EligibleRole], justification text: String? = nil, duration asked: RequestedDuration? = nil) async {
+        guard !isActivating, let identity else { return }
+        let justification = (text ?? trimmedJustification).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !justification.isEmpty else {
+            banner = Banner(kind: .error, text: ActivationRequestError.missingJustification.localizedDescription)
+            return
+        }
+        await ensurePolicies(for: targets)
+        let requested = asked ?? duration
+        let selection = RoleLifecycle.select(targets, now: Date(), forRenewal: true) {
+            self.policies[$0.policyKey]?.policy?.requiresApproval == true
+        }
+        let plans: [RenewPlan]
+        do {
+            plans = try ActivationRequestBuilder.renewPlan(selection.ready, principalId: identity.objectId, justification: justification) {
+                EffectiveDuration.resolve(requested, policyMaxMinutes: self.policies[$0.policyKey]?.maxMinutes,
+                                          fallbackHours: self.prefs.defaultHours)
+            }
+        } catch {
+            banner = Banner(kind: .error, text: error.localizedDescription)
+            return
+        }
+        isActivating = true
+        banner = nil
+        rememberJustification(justification)
+        for role in selection.tooSoon {
+            progress[role.id] = .done(.tooSoon(possibleAt: RoleLifecycle.earliestDeactivation(of: role)))
+        }
+        for role in selection.needsApproval {
+            progress[role.id] = .done(.failed(code: "ApprovalRequired",
+                                              message: "Its policy requires approval: after ending it you would wait for an approver. Not renewed."))
+        }
+        for plan in plans { progress[plan.id] = .queued }
+        do {
+            try await service.renew(
+                plans,
+                maxConcurrent: min(4, prefs.maxParallelRequests),
+                onPhase: { plan, phase in
+                    await MainActor.run {
+                        switch phase {
+                        case .deactivating: self.progress[plan.id] = .running("Ending…")
+                        case .reactivating(let attempt):
+                            self.progress[plan.id] = .running(attempt > 1 ? "Activating again (try \(attempt))…" : "Activating again…")
+                        }
+                    }
+                },
+                onResult: { plan, outcome in await MainActor.run { self.progress[plan.id] = .done(outcome) } }
+            )
+        } catch {
+            for plan in plans where progress[plan.id] == .queued {
+                progress[plan.id] = .done(.failed(code: "Auth", message: error.localizedDescription))
+            }
+            banner = Banner(kind: .error, text: error.localizedDescription)
+        }
+        var renewed: [EligibleRole] = []
+        var lost: [EligibleRole] = []
+        let now = Date()
+        for plan in plans {
+            guard case .done(let outcome) = progress[plan.id] else { continue }
+            switch outcome {
+            case .renewed(let until):
+                renewed.append(plan.role)
+                for row in self.roles(sharing: plan.role) { pending[row.id] = .active(until: until, since: now) }
+            case .failed(let code, _) where code == "ReactivationFailed":
+                lost.append(plan.role)
+                checkedActive.remove(plan.id)
+                for row in self.roles(sharing: plan.role) { pending[row.id] = .inactive(since: now) }
+            default:
+                break
+            }
+        }
+        let outcomes = finishedOutcomes
+        let all = selection.tooSoon + selection.needsApproval + plans.map(\.role)
+        let failed = all.filter { outcomes[$0.id]?.isFailure == true }
+        var text = lifecycleBanner(done: renewed.count, verb: "renewed", failed: failed, outcomes: outcomes)
+        if !lost.isEmpty { text += " \(lost.count) ended but not active again: activate \(lost.count == 1 ? "it" : "them") again." }
+        banner = Banner(kind: failed.isEmpty ? .success : .error, text: text)
+        isActivating = false
+        roles = applyPending(to: roles)
+        // The old reminders are for the old expiry; renewed roles get new ones.
+        Notifier.rolesEnded(Set((renewed + lost).map { ReminderRole.key($0.policyKey) }))
+        Notifier.operationFinished(roles: all, outcomes: outcomes, operation: .renew,
+                                   context: reminderContext(justification: justification), prefs: prefs)
+        await refreshAfterChange()
+    }
+
+    /// Rows for the same scope + role as `role` (one activation).
+    private func roles(sharing role: EligibleRole) -> [EligibleRole] {
+        roles.filter { $0.policyKey == role.policyKey }
+    }
+
+    private func lifecycleBanner(done: Int, verb: String, failed: [EligibleRole], outcomes: [String: ActivationOutcome]) -> String {
+        var parts = ["\(done) \(verb)"]
+        let tooSoon = failed.compactMap { role -> Date? in
+            if case .tooSoon(let at)? = outcomes[role.id] { return at ?? .distantPast }
+            return nil
+        }
+        if !tooSoon.isEmpty {
+            let latest = tooSoon.max().flatMap { $0 == .distantPast ? nil : $0 }
+            parts.append("\(tooSoon.count) too soon (PIM ends an activation only after 5 minutes\(latest.map { "; try again from \($0.formatted(date: .omitted, time: .shortened))" } ?? ""))")
+        }
+        let other = failed.count - tooSoon.count
+        if other > 0 { parts.append("\(other) failed") }
+        return parts.joined(separator: ", ") + "."
+    }
+
+    // MARK: Reminder actions
+
+    /// A tap on "Renew" or "End Now" in an expiry reminder.
+    func handleReminderAction(_ action: ReminderAction, payload: ReminderPayload) async {
+        guard payload.isTenant(effectiveTenantId) else {
+            NSApp.activate(ignoringOtherApps: true)
+            banner = Banner(kind: .error, text: "That reminder is for tenant \(payload.tenantId ?? "?"). Switch to it, then renew or end the roles here.")
+            return
+        }
+        while isActivating { try? await Task.sleep(for: .milliseconds(300)) }
+        await refresh()
+        let targets = payload.matchingActive(in: roles)
+        guard !targets.isEmpty else {
+            if action == .renew { NSApp.activate(ignoringOtherApps: true) }
+            banner = Banner(kind: .info, text: "The roles in that reminder are no longer active.")
+            Notifier.rolesEnded(Set(payload.roles.map(\.key)))
+            return
+        }
+        switch action {
+        case .end:
+            await deactivate(targets)
+        case .renew:
+            checkedActive = Set(targets.map(\.id))
+            if let d = payload.duration { duration = d }
+            if let text = payload.justification { justification = text }
+            let owners = targets.contains(where: \.isOwner) && prefs.confirmOwnerRoles
+            if trimmedJustification.isEmpty || owners {
+                // Needs the user: a justification, or the Owner confirmation.
+                NSApp.activate(ignoringOtherApps: true)
+                requestRenewal(targets)
+            } else {
+                await renew(targets, justification: trimmedJustification, duration: payload.duration)
             }
         }
     }

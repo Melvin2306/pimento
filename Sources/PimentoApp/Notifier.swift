@@ -21,6 +21,7 @@ enum Notifier {
     static func setUp() {
         guard isAvailable else { return }
         let center = installDelegate()
+        center.setNotificationCategories([reminderCategory])
         center.requestAuthorization(options: [.alert, .sound]) { _, error in
             if let error { log.error("requestAuthorization failed: \(error.localizedDescription, privacy: .public)") }
         }
@@ -44,9 +45,32 @@ enum Notifier {
         }
     }
 
-    static func activationsFinished(planned: [PlannedRequest], outcomes: [String: ActivationOutcome], prefs: Preferences) {
+    /// Expiry reminders offer Renew and End Now (`ReminderAction`).
+    private nonisolated static var reminderCategory: UNNotificationCategory {
+        let actions = ReminderAction.allCases.map { action in
+            var options: UNNotificationActionOptions = []
+            if action.opensApp { options.insert(.foreground) }
+            if action.isDestructive { options.insert(.destructive) }
+            return UNNotificationAction(identifier: action.rawValue, title: action.title, options: options)
+        }
+        return UNNotificationCategory(identifier: ReminderAction.categoryIdentifier, actions: actions, intentIdentifiers: [])
+    }
+
+    /// What an expiry reminder needs for its actions.
+    struct ReminderContext {
+        var tenantId: String?
+        var justification: String?
+        var duration: RequestedDuration?
+    }
+
+    /// The completion notification of an activation, deactivation or renewal,
+    /// and expiry reminders for what is active now.
+    static func operationFinished(
+        roles: [EligibleRole], outcomes: [String: ActivationOutcome], operation: ActivationSummary.Operation,
+        context: ReminderContext, prefs: Preferences
+    ) {
         guard isAvailable,
-              let summary = ActivationSummary(planned: planned, outcomes: outcomes, reminderLead: prefs.reminderLead)
+              let summary = ActivationSummary(roles: roles, outcomes: outcomes, operation: operation, reminderLead: prefs.reminderLead)
         else { return }
         if summary.postsCompletion(enabled: prefs.notifyOnCompletion, onlyFailures: prefs.notifyOnlyOnFailure) {
             let content = content(summary.title, summary.body, thread: "activations", sound: prefs.playSound)
@@ -55,10 +79,62 @@ enum Notifier {
 
         guard prefs.expiryReminders else { return }
         for reminder in summary.reminders {
-            let content = content(reminder.title, reminder.body, thread: "expiry", sound: prefs.playSound)
-            let trigger = UNTimeIntervalNotificationTrigger(
-                timeInterval: max(1, reminder.fireAt.timeIntervalSinceNow), repeats: false)
-            schedule(UNNotificationRequest(identifier: reminder.id, content: content, trigger: trigger))
+            let payload = ReminderPayload(roles: reminder.roles, tenantId: context.tenantId,
+                                          justification: context.justification, duration: context.duration)
+            scheduleReminder(reminder, payload: payload, prefs: prefs)
+        }
+    }
+
+    private nonisolated static func scheduleReminder(_ reminder: ActivationSummary.Reminder, payload: ReminderPayload, sound: Bool) {
+        let content = UNMutableNotificationContent()
+        content.title = reminder.title
+        content.body = reminder.body
+        content.sound = sound ? .default : nil
+        content.threadIdentifier = "expiry"
+        content.interruptionLevel = .active
+        content.categoryIdentifier = ReminderAction.categoryIdentifier
+        content.userInfo = payload.userInfo
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: max(1, reminder.fireAt.timeIntervalSinceNow), repeats: false)
+        // Same identifier per expiry minute: replaces a pending one.
+        schedule(UNNotificationRequest(identifier: reminder.id, content: content, trigger: trigger))
+    }
+
+    private static func scheduleReminder(_ reminder: ActivationSummary.Reminder, payload: ReminderPayload, prefs: Preferences) {
+        scheduleReminder(reminder, payload: payload, sound: prefs.playSound)
+    }
+
+    /// Takes roles that were ended or renewed out of pending reminders (a
+    /// reminder left with no role is removed) and clears delivered reminders
+    /// that are only about them.
+    static func rolesEnded(_ keys: Set<String>) {
+        guard isAvailable, !keys.isEmpty else { return }
+        let center = UNUserNotificationCenter.current()
+        center.getPendingNotificationRequests { requests in
+            let pending = requests.compactMap { request -> (id: String, fireAt: Date, payload: ReminderPayload)? in
+                guard ActivationSummary.isReminder(request.identifier),
+                      let payload = ReminderPayload(userInfo: request.content.userInfo),
+                      let trigger = request.trigger as? UNTimeIntervalNotificationTrigger,
+                      let fireAt = trigger.nextTriggerDate()
+                else { return nil }
+                return (request.identifier, fireAt, payload)
+            }
+            let sound = requests.first { ActivationSummary.isReminder($0.identifier) }?.content.sound != nil
+            for update in ReminderUpdate.updates(pending: pending, ended: keys) {
+                switch update {
+                case .remove(let id):
+                    center.removePendingNotificationRequests(withIdentifiers: [id])
+                case .replace(let reminder, let payload):
+                    scheduleReminder(reminder, payload: payload, sound: sound)
+                }
+            }
+        }
+        center.getDeliveredNotifications { delivered in
+            let stale = delivered.filter { note in
+                guard ActivationSummary.isReminder(note.request.identifier),
+                      let payload = ReminderPayload(userInfo: note.request.content.userInfo) else { return false }
+                return payload.removing(keys) == nil
+            }
+            center.removeDeliveredNotifications(withIdentifiers: stale.map(\.request.identifier))
         }
     }
 
@@ -169,7 +245,8 @@ extension NotificationSettingsSnapshot {
 }
 
 /// Without a delegate macOS drops notifications while the app is frontmost,
-/// which is exactly when an activation finishes.
+/// which is exactly when an activation finishes. Also receives the Renew /
+/// End Now actions of expiry reminders.
 private final class ForegroundPresenter: NSObject, UNUserNotificationCenterDelegate, @unchecked Sendable {
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
@@ -177,5 +254,22 @@ private final class ForegroundPresenter: NSObject, UNUserNotificationCenterDeleg
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
         completionHandler([.banner, .list, .sound])
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let action = ReminderAction(rawValue: response.actionIdentifier)
+        let payload = ReminderPayload(userInfo: response.notification.request.content.userInfo)
+        Task { @MainActor in
+            if let action, let payload {
+                await AppModel.shared.handleReminderAction(action, payload: payload)
+            } else if response.actionIdentifier == UNNotificationDefaultActionIdentifier {
+                NSApp.activate(ignoringOtherApps: true)
+            }
+        }
+        completionHandler()
     }
 }

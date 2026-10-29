@@ -38,6 +38,76 @@ struct ContentView: View {
         } message: {
             Text(ownerAlertMessage)
         }
+        .alert(deactivateAlertTitle, isPresented: $model.showDeactivateConfirmation) {
+            Button("End Now", role: .destructive) {
+                let targets = model.lifecycleTargets
+                Task { await model.deactivate(targets) }
+            }
+            .disabled(model.lifecycleSelection(forRenewal: false).ready.isEmpty)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(deactivateAlertMessage)
+        }
+        .alert(renewAlertTitle, isPresented: $model.showRenewConfirmation) {
+            Button("Renew", role: .destructive) {
+                let targets = model.lifecycleTargets
+                Task { await model.renew(targets) }
+            }
+            .disabled(model.lifecycleSelection(forRenewal: true).ready.isEmpty)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(renewAlertMessage)
+        }
+    }
+
+    private func roleList(_ roles: [EligibleRole]) -> String {
+        let lines = roles.prefix(12).map { "• \($0.roleName) · \($0.scopeName)" }
+        return (lines + (roles.count > 12 ? ["… and \(roles.count - 12) more"] : [])).joined(separator: "\n")
+    }
+
+    private func notNowText(_ selection: RoleLifecycle.Selection, renewal: Bool) -> String {
+        var parts: [String] = []
+        if !selection.tooSoon.isEmpty {
+            let at = selection.tooSoon.compactMap(RoleLifecycle.earliestDeactivation(of:)).max()
+            parts.append("\(selection.tooSoon.count) activated less than 5 minutes ago cannot be ended yet"
+                + (at.map { " (from \($0.formatted(date: .omitted, time: .shortened)))" } ?? "") + ".")
+        }
+        if renewal, !selection.needsApproval.isEmpty {
+            parts.append("\(selection.needsApproval.count) need\(selection.needsApproval.count == 1 ? "s" : "") approval to activate, so \(selection.needsApproval.count == 1 ? "it is" : "they are") not renewed.")
+        }
+        return parts.isEmpty ? "" : "\n\n" + parts.joined(separator: "\n")
+    }
+
+    private var deactivateAlertTitle: String {
+        let n = model.lifecycleSelection(forRenewal: false).ready.count
+        return n == 0 ? "Nothing to end yet" : "End \(n) active role\(n == 1 ? "" : "s") now?"
+    }
+
+    private var deactivateAlertMessage: String {
+        let selection = model.lifecycleSelection(forRenewal: false)
+        return "Your access through \(selection.ready.count == 1 ? "this role" : "these roles") ends now:\n\n"
+            + roleList(selection.ready) + notNowText(selection, renewal: false)
+    }
+
+    private var renewAlertTitle: String {
+        let selection = model.lifecycleSelection(forRenewal: true)
+        let owners = selection.ready.filter(\.isOwner).count
+        let n = selection.ready.count
+        if n == 0 { return "Nothing to renew now" }
+        return owners > 0 ? "Renew \(n) role\(n == 1 ? "" : "s"), including \(owners) Owner?" : "Renew \(n) role\(n == 1 ? "" : "s")?"
+    }
+
+    private var renewAlertMessage: String {
+        let selection = model.lifecycleSelection(forRenewal: true)
+        let durations = Set(selection.ready.map { model.effectiveDuration(for: $0).minutes })
+        let longest = durations.max().map { DurationText.short(minutes: $0) } ?? model.duration.label
+        return "Each role is ended and activated again for \(durations.count > 1 ? "up to " : "")\(longest). "
+            + "In between it is NOT active: PIM accepts the new activation only once it has removed the old one, "
+            + "typically after 1–3 minutes (Pimento keeps trying for 5). Operations that need the role fail meanwhile. "
+            + "If activating again fails, the role stays off.\n\n"
+            + roleList(selection.ready)
+            + "\n\nJustification: \(model.trimmedJustification)"
+            + notNowText(selection, renewal: true)
     }
 
     @ViewBuilder private var content: some View {
@@ -124,7 +194,7 @@ struct ContentView: View {
                 .disabled(model.isActivating || model.roles.isEmpty)
             Button("Clear") { model.clearSelection() }
                 .help("Uncheck all roles (⇧⌘D)")
-                .disabled(model.checked.isEmpty || model.isActivating)
+                .disabled((model.checked.isEmpty && model.checkedActive.isEmpty) || model.isActivating)
         }
     }
 
@@ -159,6 +229,41 @@ struct RoleTable: View {
         }
     }
 
+    /// The rows a context menu is about: the clicked row, or every checked
+    /// row of the same kind when the clicked row is checked.
+    private func menuTargets(_ ids: Set<EligibleRole.ID>) -> [EligibleRole] {
+        let clicked = model.roles.filter { ids.contains($0.id) }
+        guard clicked.count == 1, let role = clicked.first, model.isChecked(role) else { return clicked }
+        return role.isActive ? model.checkedActiveRoles : model.checkedRoles
+    }
+
+    @ViewBuilder private func contextMenu(_ ids: Set<EligibleRole.ID>) -> some View {
+        let targets = menuTargets(ids)
+        let active = targets.filter(\.isActive)
+        let eligible = targets.filter { !$0.isActive }
+        let suffix = targets.count > 1 ? " (\(active.isEmpty ? eligible.count : active.count))" : ""
+        if !active.isEmpty {
+            Button("End Now…\(suffix)") { model.requestDeactivation(active) }
+                .disabled(model.isActivating)
+            Button("Renew…\(suffix)") { model.requestRenewal(active) }
+                .disabled(model.isActivating)
+        }
+        if !eligible.isEmpty {
+            Button(eligible.allSatisfy(model.isChecked) ? "Deselect" : "Select for Activation") {
+                let on = !eligible.allSatisfy(model.isChecked)
+                eligible.forEach { model.setChecked($0, on) }
+            }
+            .disabled(model.isActivating)
+        }
+        if let role = targets.first, targets.count == 1 {
+            Divider()
+            Button("Copy Scope") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(role.scope, forType: .string)
+            }
+        }
+    }
+
     private var table: some View {
         @Bindable var model = model
         return Table(model.visibleRoles, sortOrder: $model.sortOrder, columnCustomization: $model.columnCustomization) {
@@ -168,8 +273,8 @@ struct RoleTable: View {
                     set: { model.setChecked(role, $0) }
                 ))
                 .labelsHidden()
-                .disabled(role.isActive || model.isActivating)
-                .help(role.isActive ? "Already active" : "Select for activation")
+                .disabled(model.isActivating)
+                .help(role.isActive ? "Select to deactivate or renew" : "Select for activation")
                 .accessibilityLabel("Select \(role.roleName) on \(role.scopeName)")
                 .themedCell(checked: model.isChecked(role))
             }
@@ -266,6 +371,9 @@ struct RoleTable: View {
             .width(min: 120, ideal: 260)
             .customizationID("result")
             .disabledCustomizationBehavior(.visibility)
+        }
+        .contextMenu(forSelectionType: EligibleRole.ID.self) { ids in
+            contextMenu(ids)
         }
     }
 }
@@ -417,27 +525,31 @@ struct ResultCell: View {
             EmptyView()
         case .queued:
             Text("Queued").foregroundStyle(.secondary)
-        case .running:
+        case .running(let label):
             HStack(spacing: 6) {
                 ProgressView().controlSize(.small)
-                Text("Activating…").foregroundStyle(.secondary)
+                Text(label).foregroundStyle(.secondary)
             }
         case .done(let outcome) where theme == .azure:
             let palette = ThemePalette(theme, scheme)
             let (symbol, foreground, fill): (String, Color, Color) = switch outcome {
-            case .activated: ("checkmark.circle.fill", palette.success, palette.successFill)
-            case .alreadyActive: ("arrow.uturn.forward.circle", palette.secondaryText, palette.neutralFill)
-            case .policyViolation, .failed: ("xmark.octagon.fill", palette.danger, palette.dangerFill)
+            case .activated, .renewed: (Self.symbol(outcome), palette.success, palette.successFill)
+            case .alreadyActive, .notActive, .deactivated: (Self.symbol(outcome), palette.secondaryText, palette.neutralFill)
+            case .tooSoon: (Self.symbol(outcome), palette.warning, palette.warningFill)
+            case .policyViolation, .failed: (Self.symbol(outcome), palette.danger, palette.dangerFill)
             }
             ThemeBadge(text: outcome.summary, symbol: symbol, foreground: foreground, fill: fill, font: palette.font(12))
                 .help(detail(outcome))
                 .textSelection(.enabled)
         case .done(let outcome):
-            let (symbol, color): (String, Color) = switch outcome {
-            case .activated: ("checkmark.circle.fill", theme == .windowsXP ? ThemePalette(theme, scheme).success : .green)
-            case .alreadyActive: ("arrow.uturn.forward.circle", .secondary)
-            case .policyViolation, .failed: ("xmark.octagon.fill", theme == .windowsXP && !checked ? ThemePalette(theme, scheme).danger : .red)
+            let xp = theme == .windowsXP
+            let color: Color = switch outcome {
+            case .activated, .renewed: xp ? ThemePalette(theme, scheme).success : .green
+            case .alreadyActive, .notActive, .deactivated: .secondary
+            case .tooSoon: xp && !checked ? ThemePalette(theme, scheme).warning : .orange
+            case .policyViolation, .failed: xp && !checked ? ThemePalette(theme, scheme).danger : .red
             }
+            let symbol = Self.symbol(outcome)
             Label {
                 Text(outcome.summary).lineLimit(1).truncationMode(.tail)
             } icon: {
@@ -448,9 +560,23 @@ struct ResultCell: View {
         }
     }
 
+    static func symbol(_ outcome: ActivationOutcome) -> String {
+        switch outcome {
+        case .activated: "checkmark.circle.fill"
+        case .renewed: "arrow.clockwise.circle.fill"
+        case .alreadyActive, .notActive: "arrow.uturn.forward.circle"
+        case .deactivated: "stop.circle.fill"
+        case .tooSoon: "clock.badge.exclamationmark"
+        case .policyViolation, .failed: "xmark.octagon.fill"
+        }
+    }
+
     private func detail(_ outcome: ActivationOutcome) -> String {
         switch outcome {
         case .policyViolation(_, let message), .failed(_, let message): message
+        case .tooSoon(let at):
+            "PIM does not end an activation in its first 5 minutes."
+                + (at.map { " Try again from \($0.formatted(date: .omitted, time: .shortened))." } ?? "")
         default: outcome.summary
         }
     }
@@ -504,8 +630,32 @@ struct ActivationBar: View {
                 }
             }
             .fixedSize()
-            .help("How long the roles stay active. Each role gets at most what its PIM policy allows: "
+            .help("How long the roles stay active (also for Renew). Each role gets at most what its PIM policy allows: "
                 + "see the Duration column. Maximum allowed asks for exactly that.")
+
+            if !model.checkedActiveRoles.isEmpty {
+                HStack(spacing: 8) {
+                    Button {
+                        model.requestRenewal()
+                    } label: {
+                        Label(model.renewTitle, systemImage: "arrow.clockwise")
+                    }
+                    .themedButton(.secondary)
+                    .disabled(!model.canChangeActive)
+                    .help("End the selected active roles and activate them again for the chosen duration. "
+                        + "They are off for a few minutes in between (⇧⌘R)")
+                    Button {
+                        model.requestDeactivation()
+                    } label: {
+                        Label(model.deactivateTitle, systemImage: "stop.circle")
+                    }
+                    .themedButton(.secondary)
+                    .disabled(!model.canChangeActive)
+                    .help("End the selected active roles now (⇧⌘E)")
+                }
+                .fixedSize()
+                ThemedDivider(vertical: true)
+            }
 
             Button {
                 model.buildDryRun()
@@ -541,13 +691,20 @@ struct ActivationBar: View {
         .padding(.vertical, 12)
         .themedBar()
         .background(.bar)
+        .onChange(of: model.justificationFocusRequest) { justificationFocused = true }
     }
 
     private var hint: String {
         let n = model.checkedRoles.count
         let owners = model.checkedOwnerRoles.count
-        if n == 0 { return "Select roles in the table to activate them." }
+        let active = model.checkedActiveRoles.count
+        if n == 0 {
+            return active > 0
+                ? "\(active) active selected: Renew or Deactivate\(model.trimmedJustification.isEmpty ? " (Renew needs a justification)" : "")."
+                : "Select roles in the table to activate them, or active ones to renew or end them."
+        }
         var parts = ["\(n) selected"]
+        if active > 0 { parts.append("\(active) active selected") }
         if owners > 0 { parts.append("\(owners) Owner") }
         let capped = model.cappedCheckedRoles.count
         if capped > 0 { parts.append("\(capped) capped at the policy maximum") }

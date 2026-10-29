@@ -58,13 +58,20 @@ struct PimentoApp: App {
                     .disabled(model.isActivating)
                 Button("Clear Selection") { model.clearSelection() }
                     .keyboardShortcut("d", modifiers: [.command, .shift])
-                    .disabled(model.checked.isEmpty || model.isActivating)
+                    .disabled((model.checked.isEmpty && model.checkedActive.isEmpty) || model.isActivating)
                 Button("Preview Requests…") { model.buildDryRun() }
                     .keyboardShortcut(.return, modifiers: [.command, .option])
                     .disabled(!model.canActivate)
                 Button("Clear Results") { model.clearResults() }
                     .keyboardShortcut("k")
                     .disabled(model.progress.isEmpty || model.isActivating)
+                Divider()
+                Button("Renew Selected Active Roles…") { model.requestRenewal() }
+                    .keyboardShortcut("r", modifiers: [.command, .shift])
+                    .disabled(!model.canChangeActive)
+                Button("End Selected Active Roles…") { model.requestDeactivation() }
+                    .keyboardShortcut("e", modifiers: [.command, .shift])
+                    .disabled(!model.canChangeActive)
                 Divider()
                 Button("Choose Tenant…") { model.openTenantPicker() }
                     .keyboardShortcut("t", modifiers: [.command, .shift])
