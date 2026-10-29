@@ -65,6 +65,9 @@ struct PimentoApp: App {
                 Button("Scheduled Activations…") { model.openScheduled() }
                     .keyboardShortcut("l", modifiers: [.command, .shift])
                     .disabled(model.identity == nil)
+                Button("Approvals…") { model.openApprovals() }
+                    .keyboardShortcut("p", modifiers: [.command, .shift])
+                    .disabled(model.identity == nil)
                 Button("Clear Results") { model.clearResults() }
                     .keyboardShortcut("k")
                     .disabled(model.progress.isEmpty || model.isActivating)

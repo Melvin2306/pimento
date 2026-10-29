@@ -160,7 +160,8 @@ struct ScheduledSheet: View {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Scheduled Activations").font(.headline)
-                    Text("From Azure: activations that start later, and requests waiting for approval. "
+                    Text("From Azure: activations that start later, and requests waiting for approval "
+                        + "(Pimento checks those every minute and notifies you of the decision). "
                         + "Cancelling one does not touch a role that is active now.")
                         .font(.caption).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -251,7 +252,14 @@ private struct ScheduledRow: View {
     let request: ScheduledRequest
 
     private var whenText: String {
-        guard request.kind == .scheduled else { return "Waiting for approval" }
+        guard request.kind == .scheduled else {
+            var parts = ["Awaiting approval"]
+            if let asked = request.createdOn { parts.append("asked \(ScheduledRowAge.ago(asked))") }
+            if let expires = request.expiresAt {
+                parts.append(expires > Date() ? "expires in \(DurationText.short(minutes: max(1, Int(expires.timeIntervalSinceNow / 60))))" : "expired")
+            }
+            return parts.joined(separator: " · ")
+        }
         let left = DurationText.short(minutes: max(1, Int(request.start.timeIntervalSinceNow / 60)))
         return "Starts \(model.startLabel(request.start)) · in \(left)"
     }
@@ -275,7 +283,7 @@ private struct ScheduledRow: View {
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
-                    Text(request.roleName).fontWeight(request.isOwner ? .semibold : .regular)
+                    Text(request.roleName).fontWeight(request.isOwner ? .semibold : .regular).lineLimit(1)
                     if request.isOwner {
                         Image(systemName: "crown.fill").foregroundStyle(.orange).imageScale(.small).accessibilityLabel("Owner role")
                     }
@@ -292,7 +300,9 @@ private struct ScheduledRow: View {
                     Text(whenText).foregroundStyle(.secondary)
                 }
             }
-            .help(request.kind == .scheduled ? request.start.formatted(date: .complete, time: .shortened) : "Waiting for an approver")
+            .help(request.kind == .scheduled
+                ? request.start.formatted(date: .complete, time: .shortened)
+                : "Waiting for an approver, who has 24 hours to decide. Pimento checks every minute and notifies you of the decision.")
             trailing.frame(width: 150, alignment: .trailing)
         }
         .padding(.horizontal, 16)
@@ -313,7 +323,9 @@ private struct ScheduledRow: View {
         } else {
             Button("Cancel") { Task { await model.cancelScheduled([request]) } }
                 .themedButton(.secondary)
-                .help("Cancel this request: the role will not be activated at \(model.startLabel(request.start))")
+                .help(request.kind == .scheduled
+                ? "Cancel this request: the role will not be activated at \(model.startLabel(request.start))"
+                : "Withdraw this request: approvers no longer see it")
         }
     }
 }

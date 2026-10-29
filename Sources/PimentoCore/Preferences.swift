@@ -79,6 +79,11 @@ public struct Preferences: Equatable, Sendable {
     public var reminderLeadMinutes = 10
     /// A notification when a scheduled activation starts (local, best-effort).
     public var notifyScheduledStart = true
+    /// A notification when a request of yours that waited for approval is
+    /// approved, denied, expires or is cancelled.
+    public var notifyApprovalDecisions = true
+    /// A notification when someone asks you to approve a request.
+    public var notifyNewApprovals = true
 
     // Activation
     public var defaultHours = ActivationRequestBuilder.defaultHours
@@ -156,6 +161,8 @@ public struct Preferences: Equatable, Sendable {
         static let expiryReminders = "notifications.expiryReminders"
         static let reminderLeadMinutes = "notifications.reminderLeadMinutes"
         static let notifyScheduledStart = "notifications.scheduledStart"
+        static let notifyApprovalDecisions = "notifications.approvalDecisions"
+        static let notifyNewApprovals = "notifications.newApprovals"
         static let defaultHours = "activation.defaultHours"
         static let rememberJustifications = "activation.rememberJustifications"
         static let prefillLastJustification = "activation.prefillLastJustification"
@@ -169,6 +176,7 @@ public struct Preferences: Equatable, Sendable {
 
         static let all = [
             notifyOnCompletion, notifyOnlyOnFailure, playSound, expiryReminders, reminderLeadMinutes, notifyScheduledStart,
+            notifyApprovalDecisions, notifyNewApprovals,
             defaultHours, rememberJustifications, prefillLastJustification, confirmOwnerRoles, maxParallelRequests,
             launchTenant, refreshOnLaunch, autoRefreshMinutes, theme, appearanceMode,
         ]
@@ -185,6 +193,8 @@ public struct Preferences: Equatable, Sendable {
         bool(Key.expiryReminders, &p.expiryReminders)
         int(Key.reminderLeadMinutes, &p.reminderLeadMinutes)
         bool(Key.notifyScheduledStart, &p.notifyScheduledStart)
+        bool(Key.notifyApprovalDecisions, &p.notifyApprovalDecisions)
+        bool(Key.notifyNewApprovals, &p.notifyNewApprovals)
         int(Key.defaultHours, &p.defaultHours)
         bool(Key.rememberJustifications, &p.rememberJustifications)
         bool(Key.prefillLastJustification, &p.prefillLastJustification)
@@ -210,6 +220,8 @@ public struct Preferences: Equatable, Sendable {
         store.set(p.expiryReminders, forKey: Key.expiryReminders)
         store.set(p.reminderLeadMinutes, forKey: Key.reminderLeadMinutes)
         store.set(p.notifyScheduledStart, forKey: Key.notifyScheduledStart)
+        store.set(p.notifyApprovalDecisions, forKey: Key.notifyApprovalDecisions)
+        store.set(p.notifyNewApprovals, forKey: Key.notifyNewApprovals)
         store.set(p.defaultHours, forKey: Key.defaultHours)
         store.set(p.rememberJustifications, forKey: Key.rememberJustifications)
         store.set(p.prefillLastJustification, forKey: Key.prefillLastJustification)

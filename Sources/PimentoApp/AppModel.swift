@@ -69,6 +69,26 @@ final class AppModel {
     var scheduledRequests: [ScheduledRequest] = []
     /// Tickets of your requests by request name: what Renew sends again.
     private(set) var activationTickets: [String: TicketInfo] = [:]
+
+    // Your requests waiting for approval, followed until they are decided.
+    private var approvalTracker = ApprovalTracker()
+    private var approvalPollTask: Task<Void, Never>?
+
+    // Requests you can approve or deny (Approvals sheet).
+    var approvalInbox = ApprovalInbox()
+    var approvalsLoadState: LoadState = .idle
+    var showApprovals = false
+    /// Checked requests, by request name.
+    var approvalSelection: Set<String> = []
+    var approvalJustification = ""
+    /// Requests being decided, and how deciding went.
+    var deciding: Set<String> = []
+    var decisionResults: [String: DecisionOutcome] = [:]
+    var approvalMessage: Banner?
+    var showDecisionConfirmation = false
+    var pendingDecision: ApprovalDecision = .approve
+    /// Names of the last listing, to notice new requests (nil: not listed yet).
+    private var seenApprovals: Set<String>?
     var scheduledLoadState: LoadState = .idle
     var showScheduled = false
     /// Requests being cancelled, and how cancelling went.
@@ -350,10 +370,67 @@ final class AppModel {
             activationTickets = history.activationTickets
             scheduledLoadState = .loaded
             Notifier.syncScheduledStarts(requests, tenantId: history.identity.tenantId ?? effectiveTenantId, prefs: prefs)
+            let decided = approvalTracker.update(items: history.items, principalId: history.identity.objectId, now: Date())
+            updateApprovalPolling()
+            if !decided.isEmpty { Task { await self.announce(decided) } }
         } catch {
             guard generation == tenantGeneration else { return }
             scheduledLoadState = .failed(message: error.localizedDescription, needsLogin: (error as? AzureCLIError)?.needsLogin ?? false)
         }
+    }
+
+    /// Requests of yours waiting for approval that Pimento follows.
+    var awaitingApprovalCount: Int { approvalTracker.count }
+
+    /// Polls your requests every minute while some wait for approval (not
+    /// while an activation runs, and not when auto-refresh already reads them
+    /// every minute); stops once none is left.
+    private func updateApprovalPolling() {
+        guard ApprovalPolling.shouldPoll(pendingCount: approvalTracker.count, autoRefreshMinutes: prefs.autoRefreshMinutes) else {
+            approvalPollTask?.cancel()
+            approvalPollTask = nil
+            return
+        }
+        guard approvalPollTask == nil else { return }
+        approvalPollTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(ApprovalPolling.interval))
+                guard !Task.isCancelled, let self else { return }
+                if !self.isActivating, self.tenantError == nil { await self.loadScheduled() }
+                guard ApprovalPolling.shouldPoll(pendingCount: self.approvalTracker.count, autoRefreshMinutes: self.prefs.autoRefreshMinutes) else {
+                    self.approvalPollTask = nil
+                    return
+                }
+            }
+        }
+    }
+
+    /// Tells the user how requests that waited for approval were decided:
+    /// a notification each (Settings), a banner, and fresh rows for approved ones.
+    private func announce(_ transitions: [ApprovalTransition]) async {
+        let generation = tenantGeneration
+        let service = service
+        if transitions.contains(where: \.resolution.isApproved) { await refresh() }
+        guard generation == tenantGeneration else { return }
+        var approvedRoles: [EligibleRole] = []
+        var outcomes: [String: ActivationOutcome] = [:]
+        var lines: [String] = []
+        for t in transitions {
+            let review = t.resolution.isApproved ? nil : await service.review(approvalId: t.request.approvalId)
+            guard generation == tenantGeneration else { return }
+            let role = roles.first { $0.policyKey == t.request.policyKey && $0.isActive }
+            let notice = ApprovalNotice.decision(t, review: review, until: role?.activeUntil, now: Date())
+            Notifier.approvalDecided(notice, prefs: prefs)
+            lines.append(notice.title)
+            if t.resolution.isApproved, let role {
+                approvedRoles.append(role)
+                outcomes[role.id] = .activated(status: t.status, until: role.activeUntil)
+            }
+        }
+        let rejected = transitions.contains { !$0.resolution.isApproved }
+        banner = Banner(kind: rejected ? .error : .success, text: lines.joined(separator: " · ") + ".")
+        // Approved roles get their expiry reminders like any activation.
+        Notifier.scheduleReminders(roles: approvedRoles, outcomes: outcomes, context: reminderContext(justification: ""), prefs: prefs)
     }
 
     func openScheduled() {
@@ -386,6 +463,104 @@ final class AppModel {
         banner = Banner(kind: failed > 0 ? .error : .success,
                         text: "\(done) scheduled activation\(done == 1 ? "" : "s") cancelled" + (failed > 0 ? ", \(failed) failed." : "."))
         await loadScheduled()
+    }
+
+    // MARK: Approvals (approver side)
+
+    var approvalCount: Int { approvalInbox.requests.count }
+
+    var selectedApprovals: [ApprovalRequest] { approvalInbox.requests.filter { approvalSelection.contains($0.name) } }
+
+    var trimmedApprovalJustification: String { approvalJustification.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    var canDecide: Bool { !selectedApprovals.isEmpty && !trimmedApprovalJustification.isEmpty && deciding.isEmpty }
+
+    /// Reads the requests you can decide (read-only). Azure refusing the
+    /// listing leaves a calm, empty inbox. New requests since the last
+    /// listing get a notification (Settings).
+    func loadApprovals() async {
+        guard tenantError == nil, approvalsLoadState != .loading else { return }
+        approvalsLoadState = .loading
+        let generation = tenantGeneration
+        let service = service
+        do {
+            let (_, inbox) = try await service.loadApprovalInbox()
+            guard generation == tenantGeneration else { return }
+            let arrivals = ApprovalParser.arrivals(previous: seenApprovals, current: inbox.requests)
+            let names = ApprovalParser.names(inbox.requests)
+            seenApprovals = names
+            approvalInbox = inbox
+            approvalSelection = approvalSelection.filter { names.contains($0.lowercased()) }
+            approvalsLoadState = .loaded
+            if let notice = ApprovalNotice.arrivals(arrivals) { Notifier.approvalsArrived(notice, prefs: prefs) }
+        } catch {
+            guard generation == tenantGeneration else { return }
+            approvalsLoadState = .failed(message: error.localizedDescription, needsLogin: (error as? AzureCLIError)?.needsLogin ?? false)
+        }
+    }
+
+    func openApprovals() {
+        decisionResults = [:]
+        approvalMessage = nil
+        showApprovals = true
+        NSApp.activate(ignoringOtherApps: true)
+        Task { await loadApprovals() }
+    }
+
+    func setApproval(_ request: ApprovalRequest, selected: Bool) {
+        if selected { approvalSelection.insert(request.name) } else { approvalSelection.remove(request.name) }
+    }
+
+    func selectAllApprovals(_ on: Bool) {
+        approvalSelection = on ? Set(approvalInbox.requests.map(\.name)) : []
+    }
+
+    /// Deny always asks; Approve asks when Owner roles are among the
+    /// selection (with the Owner confirmation on).
+    func requestDecision(_ decision: ApprovalDecision) {
+        guard canDecide else { return }
+        pendingDecision = decision
+        if decision == .deny || (prefs.confirmOwnerRoles && selectedApprovals.contains(where: \.isOwner)) {
+            showDecisionConfirmation = true
+        } else {
+            Task { await decide(decision) }
+        }
+    }
+
+    /// Approves or denies the selected requests (PATCH on each approval's
+    /// open stage), then reads the inbox again.
+    func decide(_ decision: ApprovalDecision) async {
+        let targets = selectedApprovals.filter { !deciding.contains($0.name) }
+        guard !targets.isEmpty else { return }
+        approvalMessage = nil
+        for r in targets {
+            deciding.insert(r.name)
+            decisionResults[r.name] = nil
+        }
+        let service = service
+        do {
+            let plans = try PlannedDecision.plan(await service.resolvingStages(targets), decision: decision,
+                                                 justification: trimmedApprovalJustification)
+            for p in plans where p.url == nil { decisionResults[p.request.name] = .notPending(DecisionOutcome.noOpenStageMessage) }
+            try await service.decide(plans.filter { $0.url != nil }) { p, outcome in
+                await MainActor.run {
+                    self.deciding.remove(p.request.name)
+                    self.decisionResults[p.request.name] = outcome
+                }
+            }
+        } catch {
+            for r in targets where decisionResults[r.name] == nil {
+                decisionResults[r.name] = .failed(code: "Error", message: error.localizedDescription)
+            }
+        }
+        for r in targets { deciding.remove(r.name) }
+        let done = targets.filter { decisionResults[$0.name] == .decided(decision) }
+        let failed = targets.count - done.count
+        approvalSelection.subtract(done.map(\.name))
+        approvalMessage = Banner(kind: failed > 0 ? .error : .success,
+                                 text: "\(done.count) \(decision.pastTense)" + (failed > 0 ? ", \(failed) not: see the rows." : "."))
+        if failed == 0 { approvalJustification = "" }
+        await loadApprovals()
     }
 
     // MARK: Durations and policies
@@ -471,6 +646,7 @@ final class AppModel {
             reloadPresets()
             loadPolicies(retryFailures: true)
             Task { await loadScheduled() }
+            Task { await loadApprovals() }
         } catch let error as AzureCLIError {
             guard generation == tenantGeneration else { return }
             loadState = .failed(message: error.localizedDescription, needsLogin: error.needsLogin)
@@ -566,6 +742,14 @@ final class AppModel {
         scheduledRequests = []
         scheduledLoadState = .idle
         cancelResults = [:]
+        approvalTracker = ApprovalTracker()
+        updateApprovalPolling()
+        approvalInbox = ApprovalInbox()
+        approvalsLoadState = .idle
+        approvalSelection = []
+        decisionResults = [:]
+        approvalMessage = nil
+        seenApprovals = nil
         progress = [:]
         pending = [:]
         banner = nil
@@ -684,12 +868,14 @@ final class AppModel {
             if case .done(let o) = progress[plan.id] { return o }
             return nil
         }
-        let ok = outcomes.filter { if case .activated = $0 { return true }; return false }.count
+        let awaiting = outcomes.filter(\.isAwaitingApproval).count
+        let ok = outcomes.filter { if case .activated = $0 { return !$0.isAwaitingApproval }; return false }.count
         let scheduledStarts = outcomes.compactMap { o -> Date? in if case .scheduled(_, let start, _) = o { return start }; return nil }
         let skipped = outcomes.filter { $0 == .alreadyActive }.count
         let failed = outcomes.filter(\.isFailure).count
         if scheduledStarts.isEmpty {
-            banner = Banner(kind: failed > 0 ? .error : .success, text: "\(ok) activated, \(skipped) skipped, \(failed) failed.")
+            let waits = awaiting > 0 ? ", \(awaiting) awaiting approval (you get a notification when decided)" : ""
+            banner = Banner(kind: failed > 0 ? .error : .success, text: "\(ok) activated\(waits), \(skipped) skipped, \(failed) failed.")
         } else {
             let when = Set(scheduledStarts.map(startLabel)).sorted().joined(separator: ", ")
             var text = "\(scheduledStarts.count) scheduled for \(when)"
@@ -1213,7 +1399,10 @@ final class AppModel {
         prefs.save(to: UserDefaults.standard)
         if prefs.effectiveAppearance != old.effectiveAppearance { AppAppearance.apply(prefs) }
         if prefs.defaultHours != old.defaultHours, !isActivating { duration = .hours(prefs.defaultHours) }
-        if prefs.autoRefreshMinutes != old.autoRefreshMinutes { restartAutoRefresh() }
+        if prefs.autoRefreshMinutes != old.autoRefreshMinutes {
+            restartAutoRefresh()
+            updateApprovalPolling()
+        }
         if !prefs.rememberJustifications, old.rememberJustifications {
             clearRecentJustifications()
             clearRecentTickets()

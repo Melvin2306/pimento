@@ -182,6 +182,37 @@ enum Notifier {
         }
     }
 
+    /// A request of yours that waited for approval was decided.
+    static func approvalDecided(_ notice: ApprovalNotice, prefs: Preferences) {
+        guard isAvailable, prefs.notifyApprovalDecisions else { return }
+        let content = content(notice.title, notice.body, thread: "approvals", sound: prefs.playSound)
+        schedule(UNNotificationRequest(identifier: notice.id, content: content, trigger: nil))
+    }
+
+    /// Someone asks you to approve; clicking it opens the Approvals sheet.
+    static func approvalsArrived(_ notice: ApprovalNotice, prefs: Preferences) {
+        guard isAvailable, prefs.notifyNewApprovals else { return }
+        let content = content(notice.title, notice.body, thread: "approval-requests", sound: prefs.playSound)
+        content.userInfo = [openKey: "approvals"]
+        schedule(UNNotificationRequest(identifier: notice.id, content: content, trigger: nil))
+    }
+
+    /// What a notification opens when clicked.
+    nonisolated static let openKey = "pimento.open"
+
+    /// Expiry reminders only (no completion notification): for roles that
+    /// became active when an approver approved them.
+    static func scheduleReminders(roles: [EligibleRole], outcomes: [String: ActivationOutcome], context: ReminderContext, prefs: Preferences) {
+        guard isAvailable, prefs.expiryReminders, !roles.isEmpty,
+              let summary = ActivationSummary(roles: roles, outcomes: outcomes, operation: .activate, reminderLead: prefs.reminderLead)
+        else { return }
+        for reminder in summary.reminders {
+            let payload = ReminderPayload(roles: reminder.roles, tenantId: context.tenantId,
+                                          justification: context.justification, duration: context.duration)
+            scheduleReminder(reminder, payload: payload, prefs: prefs)
+        }
+    }
+
     /// Drops every pending expiry reminder (reminders were turned off).
     static func cancelReminders() {
         guard isAvailable else { return }
@@ -289,11 +320,13 @@ private final class ForegroundPresenter: NSObject, UNUserNotificationCenterDeleg
     ) {
         let action = ReminderAction(rawValue: response.actionIdentifier)
         let payload = ReminderPayload(userInfo: response.notification.request.content.userInfo)
+        let opens = response.notification.request.content.userInfo[Notifier.openKey] as? String
         Task { @MainActor in
             if let action, let payload {
                 await AppModel.shared.handleReminderAction(action, payload: payload)
             } else if response.actionIdentifier == UNNotificationDefaultActionIdentifier {
                 NSApp.activate(ignoringOtherApps: true)
+                if opens == "approvals" { AppModel.shared.openApprovals() }
             }
         }
         completionHandler()

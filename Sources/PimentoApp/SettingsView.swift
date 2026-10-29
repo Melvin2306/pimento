@@ -295,6 +295,18 @@ private struct NotificationSettings: View {
             }
 
             Section {
+                Toggle("Approval decisions", isOn: $model.prefs.notifyApprovalDecisions)
+                Toggle("New approval requests", isOn: $model.prefs.notifyNewApprovals)
+            } header: {
+                Text("Approvals")
+            } footer: {
+                Text("Decisions: when a request of yours that needed approval is approved (with its expiry), denied, "
+                    + "expires or is cancelled; Pimento checks every minute while one waits. New requests: when someone "
+                    + "asks you to approve; noticed whenever Pimento refreshes (turn on auto-refresh under General).")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
+            Section {
                 Toggle("Play sound", isOn: $model.prefs.playSound)
             }
         }

@@ -31,6 +31,7 @@ struct ContentView: View {
         .sheet(isPresented: $model.showSavePresetSheet) { SavePresetSheet() }
         .sheet(isPresented: $model.showManagePresets) { ManagePresetsSheet() }
         .sheet(isPresented: $model.showScheduled) { ScheduledSheet() }
+        .sheet(isPresented: $model.showApprovals) { ApprovalsSheet() }
         .alert(ownerAlertTitle, isPresented: $model.showOwnerConfirmation) {
             Button(model.activateTitle, role: .destructive) {
                 Task { await model.activate() }
@@ -209,6 +210,15 @@ struct ContentView: View {
             }
             .help("Your scheduled activations and requests waiting for approval, from Azure, with Cancel (⇧⌘L)")
             .accessibilityLabel("Scheduled activations")
+            .disabled(model.identity == nil)
+            Button {
+                model.openApprovals()
+            } label: {
+                Label(model.approvalCount > 0 ? "Approvals (\(model.approvalCount))" : "Approvals", systemImage: "checkmark.seal")
+                    .labelStyle(.titleAndIcon)
+            }
+            .help("Requests you can approve or deny as a PIM approver (⇧⌘P)")
+            .accessibilityLabel(model.approvalCount > 0 ? "Approvals, \(model.approvalCount) waiting" : "Approvals")
             .disabled(model.identity == nil)
             PresetsMenu()
             Button("Select All Eligible") { model.selectAllEligible() }
@@ -618,6 +628,7 @@ struct ResultCell: View {
         case .done(let outcome) where theme == .azure:
             let palette = ThemePalette(theme, scheme)
             let (symbol, foreground, fill): (String, Color, Color) = switch outcome {
+            case .activated where outcome.isAwaitingApproval: (Self.symbol(outcome), palette.warning, palette.warningFill)
             case .activated, .renewed: (Self.symbol(outcome), palette.success, palette.successFill)
             case .alreadyActive, .notActive, .deactivated: (Self.symbol(outcome), palette.secondaryText, palette.neutralFill)
             case .tooSoon: (Self.symbol(outcome), palette.warning, palette.warningFill)
@@ -630,6 +641,7 @@ struct ResultCell: View {
         case .done(let outcome):
             let xp = theme == .windowsXP
             let color: Color = switch outcome {
+            case .activated where outcome.isAwaitingApproval: xp && !checked ? ThemePalette(theme, scheme).warning : .orange
             case .activated, .renewed: xp ? ThemePalette(theme, scheme).success : .green
             case .alreadyActive, .notActive, .deactivated: .secondary
             case .tooSoon: xp && !checked ? ThemePalette(theme, scheme).warning : .orange
@@ -649,6 +661,7 @@ struct ResultCell: View {
 
     static func symbol(_ outcome: ActivationOutcome) -> String {
         switch outcome {
+        case .activated where outcome.isAwaitingApproval: "hourglass"
         case .activated: "checkmark.circle.fill"
         case .renewed: "arrow.clockwise.circle.fill"
         case .alreadyActive, .notActive: "arrow.uturn.forward.circle"
@@ -661,6 +674,9 @@ struct ResultCell: View {
 
     private func detail(_ outcome: ActivationOutcome) -> String {
         switch outcome {
+        case .activated where outcome.isAwaitingApproval:
+            "Submitted: an approver has 24 hours to decide. Pimento checks every minute and notifies you; "
+                + "the request is listed (and can be cancelled) under Scheduled."
         case .policyViolation(_, let message), .failed(_, let message): message
         case .tooSoon(let at):
             "PIM does not end an activation in its first 5 minutes."
