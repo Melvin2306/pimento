@@ -24,7 +24,7 @@ jobs:
         run: |
           sw_vers
           swift --version
-      - name: Build
+      - name: Build (app, CLI, core)
         run: swift build
       - name: Test
         run: swift test
@@ -33,7 +33,11 @@ jobs:
           scripts/bundle.sh --zip
           plutil -lint build/Pimento.app/Contents/Info.plist
           test -f build/Pimento.app/Contents/Resources/AppIcon.icns
-          build/Pimento.app/Contents/MacOS/pimento --version
+          test -x build/Pimento.app/Contents/MacOS/Pimento
+          build/Pimento.app/Contents/Helpers/pimento version
+          build/Pimento.app/Contents/Helpers/pimento help >/dev/null
+          # 0.1.0's flags on the app binary are handed to the bundled CLI.
+          build/Pimento.app/Contents/MacOS/Pimento --version
       - uses: actions/upload-artifact@v4
         with:
           name: Pimento-app

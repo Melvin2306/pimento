@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 public enum ActivationOutcome: Equatable, Sendable {
     /// Request accepted. `status` is the request status (`Provisioned`, `PendingApproval`, …).
@@ -16,15 +19,23 @@ public enum ActivationOutcome: Equatable, Sendable {
         }
     }
 
+    /// True for a request status that means the role is active now; anything
+    /// else (`PendingApproval`, …) was only submitted.
+    public static func isGranted(status: String) -> Bool {
+        status.isEmpty || ["Provisioned", "Accepted", "Granted"].contains { status.caseInsensitiveCompare($0) == .orderedSame }
+    }
+
+    /// True for ARM's token errors: signing in again is the fix.
+    public var isAuthFailure: Bool {
+        guard case .failed(let code, _) = self else { return false }
+        return ActivationResponseMapper.authErrorCodes.contains(code)
+    }
+
     /// One-line text for the result column.
     public var summary: String {
         switch self {
         case .activated(let status, let until):
-            let provisioned = status.caseInsensitiveCompare("Provisioned") == .orderedSame
-                || status.caseInsensitiveCompare("Accepted") == .orderedSame
-                || status.caseInsensitiveCompare("Granted") == .orderedSame
-                || status.isEmpty
-            if !provisioned { return "Submitted (\(status))" }
+            if !Self.isGranted(status: status) { return "Submitted (\(status))" }
             if let until { return "Activated until \(until.formatted(date: .omitted, time: .shortened))" }
             return "Activated"
         case .alreadyActive:
@@ -39,6 +50,8 @@ public enum ActivationOutcome: Equatable, Sendable {
 }
 
 public enum ActivationResponseMapper {
+    static let authErrorCodes: Set<String> = ["InvalidAuthenticationToken", "ExpiredAuthenticationToken", "AuthenticationFailed"]
+
     public static func outcome(statusCode: Int, data: Data, requestedAt: Date, hours: Int) -> ActivationOutcome {
         if (200..<300).contains(statusCode) {
             let response = try? JSONDecoder().decode(RequestResponse.self, from: data)
@@ -57,7 +70,7 @@ public enum ActivationResponseMapper {
             return .alreadyActive
         case "RoleAssignmentRequestPolicyValidationFailed":
             return .policyViolation(rules: failedRules(in: message), message: message)
-        case "InvalidAuthenticationToken", "ExpiredAuthenticationToken", "AuthenticationFailed":
+        case _ where authErrorCodes.contains(code):
             return .failed(code: code, message: "Token rejected. Refresh, or sign in again with `az login`. (\(message))")
         default:
             return .failed(code: code, message: message)

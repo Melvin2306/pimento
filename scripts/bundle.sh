@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Builds a release binary and wraps it into "build/Pimento.app" (ad-hoc signed).
+# Builds release binaries and wraps them into "build/Pimento.app" (ad-hoc signed):
+#   Contents/MacOS/Pimento        the app
+#   Contents/Helpers/pimento      the command-line tool (Pimento › Install Command Line Tool…)
 #   scripts/bundle.sh            # build the .app
 #   scripts/bundle.sh --install  # ...and move it to ~/Applications
 #   scripts/bundle.sh --zip      # ...and zip it to build/Pimento-<version>.zip
@@ -7,7 +9,9 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 APP_NAME="Pimento"
-EXECUTABLE="pimento"
+APP_PRODUCT="PimentoApp"   # SwiftPM product of the app; installed as Contents/MacOS/Pimento
+CLI_PRODUCT="pimento"      # the command-line tool; installed as Contents/Helpers/pimento
+EXECUTABLE="$APP_NAME"
 BUNDLE_ID="io.github.melvin2306.pimento"
 VERSION="$(sed -n 's/.*static let version = "\(.*\)".*/\1/p' Sources/PimentoCore/AppInfo.swift)"
 BUILD_NUMBER="$(git rev-list --count HEAD 2>/dev/null || echo 1)"
@@ -16,12 +20,14 @@ APP="build/${APP_NAME}.app"
 [[ -n "$VERSION" ]] || { echo "could not read the version from AppInfo.swift" >&2; exit 1; }
 [[ -f Assets/AppIcon.icns ]] || { echo "Assets/AppIcon.icns missing; run: swift scripts/make-icon.swift" >&2; exit 1; }
 
-swift build -c release --product "$EXECUTABLE"
-BIN="$(swift build -c release --show-bin-path)/$EXECUTABLE"
+swift build -c release --product "$APP_PRODUCT"
+swift build -c release --product "$CLI_PRODUCT"
+BIN_DIR="$(swift build -c release --show-bin-path)"
 
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$BIN" "$APP/Contents/MacOS/$EXECUTABLE"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Helpers" "$APP/Contents/Resources"
+cp "$BIN_DIR/$APP_PRODUCT" "$APP/Contents/MacOS/$EXECUTABLE"
+cp "$BIN_DIR/$CLI_PRODUCT" "$APP/Contents/Helpers/$CLI_PRODUCT"
 cp Assets/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
@@ -49,8 +55,12 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 PLIST
 plutil -lint "$APP/Contents/Info.plist" >/dev/null
 
-# Ad-hoc signature so Gatekeeper treats it as a locally built app. Not notarized.
-codesign --force --deep --sign - "$APP" >/dev/null
+# Ad-hoc signatures so Gatekeeper treats it as a locally built app. Not
+# notarized. Nested code first, then the bundle that seals it.
+codesign --force --sign - --identifier "${BUNDLE_ID}.cli" "$APP/Contents/Helpers/$CLI_PRODUCT" >/dev/null 2>&1
+codesign --force --sign - "$APP" >/dev/null 2>&1
+codesign --verify --strict "$APP"
+"$APP/Contents/Helpers/$CLI_PRODUCT" version >/dev/null
 echo "Built $APP ($VERSION, build $BUILD_NUMBER)"
 
 case "${1:-}" in

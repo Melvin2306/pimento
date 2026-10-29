@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// Which Entra tenant to talk to, and where that choice came from.
 public struct TenantSelection: Equatable, Sendable {

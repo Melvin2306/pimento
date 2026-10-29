@@ -3,25 +3,15 @@ import Foundation
 import PimentoCore
 import SwiftUI
 
-// `pimento --list`, `--dry-run …`, `--tenants`, `--help`, `--version` run a
-// read-only CLI; anything else opens the app.
-let options: CLIOptions
-do {
-    options = try CLIOptions.parse(Array(CommandLine.arguments.dropFirst()))
-} catch {
-    fputs("error: \(error.localizedDescription)\n", stderr)
-    exit(64)
+// The command-line tool is the separate `pimento` binary (bundled at
+// Contents/Helpers/pimento). For one release, the old read-only flags on the
+// app binary (`--list`, `--dry-run`, `--tenants`, `--version`, `--help`) are
+// handed to it; anything else opens the app.
+let launchArguments = Array(CommandLine.arguments.dropFirst())
+if LaunchArguments.isLegacyCLICall(launchArguments) {
+    CommandLineTool.forwardLegacyCall(launchArguments)
 }
-
-if options.mode == .app {
-    PimentoApp.main()
-} else {
-    Task {
-        let code = await CLI.run(options)
-        exit(code)
-    }
-    dispatchMain()
-}
+PimentoApp.main()
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {

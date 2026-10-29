@@ -99,7 +99,7 @@ final class AppModel {
         }
     }
 
-    static let shared = AppModel(commandLineTenant: (try? CLIOptions.parse(Array(CommandLine.arguments.dropFirst())))?.tenant)
+    static let shared = AppModel(commandLineTenant: LaunchArguments.tenant(in: Array(CommandLine.arguments.dropFirst())))
 
     private var service: PIMService
     private var tenantGeneration = 0

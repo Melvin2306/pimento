@@ -5,13 +5,18 @@ let package = Package(
     name: "Pimento",
     platforms: [.macOS(.v14)],
     products: [
-        // The app and its read-only CLI mode share one binary.
-        .executable(name: "pimento", targets: ["PimentoApp"]),
+        // The command-line tool: Foundation + PimentoCore only.
+        .executable(name: "pimento", targets: ["pimento"]),
+        // The SwiftUI app. scripts/bundle.sh installs this binary as
+        // Pimento.app/Contents/MacOS/Pimento. (The product is not called
+        // "Pimento": on a case-insensitive disk it would overwrite `pimento`
+        // in the build folder.)
+        .executable(name: "PimentoApp", targets: ["PimentoApp"]),
     ],
     targets: [
-        // Pure logic + Azure plumbing, no UI. Everything here is unit-tested.
+        // Pure logic + Azure plumbing + the CLI's commands, no UI. Unit-tested.
         .target(name: "PimentoCore"),
-        // SwiftUI app (plus the read-only `--list` / `--dry-run` / `--tenants` CLI mode).
+        .executableTarget(name: "pimento", dependencies: ["PimentoCore"]),
         .executableTarget(name: "PimentoApp", dependencies: ["PimentoCore"]),
         .testTarget(
             name: "PimentoCoreTests",
