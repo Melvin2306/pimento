@@ -2,8 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, cross-platform]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -14,6 +15,7 @@ concurrency:
 
 jobs:
   build-and-test:
+    name: macOS
     runs-on: macos-latest
     timeout-minutes: 20
     steps:
@@ -59,4 +61,77 @@ jobs:
         with:
           name: pimento-cli
           path: build/pimento-cli-*-macos.tar.gz
+          if-no-files-found: error
+
+  # The CLI and the core on Linux (the app is macOS-only and not declared there).
+  linux:
+    name: Linux (x86_64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Jammy: the packaged binary then runs on glibc 2.35 and later.
+    container: swift:6.4.1-jammy
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: swift --version
+      - name: Build the CLI
+        run: swift build --product pimento
+      - name: Test
+        run: swift test
+      - name: Package the CLI
+        run: |
+          scripts/package-cli.sh
+          tarball="$(ls build/pimento-cli-*-linux-x86_64.tar.gz)"
+          tar -tzf "$tarball"
+          mkdir -p build/cli-check && tar -xzf "$tarball" -C build/cli-check
+          bin="$(ls build/cli-check/*/pimento)"
+          "$bin" version
+          "$bin" help >/dev/null
+          # The Swift runtime is linked in: no libswift*/libFoundation* from the toolchain.
+          ldd "$bin"
+          ! ldd "$bin" | grep -E 'libswift|libFoundation|libdispatch'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pimento-cli-linux-x86_64
+          path: build/pimento-cli-*-linux-x86_64.tar.gz
+          if-no-files-found: error
+
+  windows:
+    name: Windows (x86_64)
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: compnerd/gha-setup-swift@v0.5.1
+        with:
+          swift-version: swift-6.4.1-release
+          swift-build: 6.4.1-RELEASE
+      - name: Toolchain
+        run: swift --version
+      - name: Build the CLI
+        run: swift build --product pimento
+      - name: Test
+        run: swift test
+      - name: Package the CLI
+        shell: bash
+        run: |
+          scripts/package-cli.sh
+          zip="$(ls build/pimento-cli-*-windows-x86_64.zip)"
+          mkdir -p build/cli-check
+          powershell.exe -NoProfile -Command "Expand-Archive -Path '$zip' -DestinationPath build/cli-check"
+          bin="$(ls build/cli-check/*/pimento.exe)"
+          "$bin" version
+          "$bin" help >/dev/null
+          "$bin" help login | grep -q "device code"
+          "$bin" history --json | grep -q 'AppData'
+          # The runner has the Azure CLI (az.cmd) but no session: pimento must find and run it,
+          # and fail on the missing login, not with "not found".
+          out="$("$bin" status 2>&1)" && exit 1 || true
+          echo "$out"
+          ! echo "$out" | grep -q "not found"
+          echo "$out" | grep -q "az login"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pimento-cli-windows-x86_64
+          path: build/pimento-cli-*-windows-x86_64.zip
           if-no-files-found: error
