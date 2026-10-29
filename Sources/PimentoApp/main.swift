@@ -14,6 +14,12 @@ if LaunchArguments.isLegacyCLICall(launchArguments) {
 PimentoApp.main()
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        // The notification delegate must be set before launch finishes: a tap
+        // on Renew or End Now that launched the app is delivered right then.
+        MainActor.assumeIsolated { Notifier.setUp() }
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         MainActor.assumeIsolated {
             // A Dock icon, or the menu bar only (Settings › General › Menu bar).
@@ -25,7 +31,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Starts the menu bar countdown's timer.
             _ = MenuBarClock.shared
         }
-        Task { @MainActor in Notifier.setUp() }
     }
 
     /// With the menu bar extra, closing the window keeps Pimento running there.

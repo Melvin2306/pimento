@@ -112,4 +112,16 @@ import Testing
             #expect(busy.lowerBound < firstAwait.lowerBound, "\(signature) is busy before its first await")
         }
     }
+
+    /// Regression: the notification delegate was installed in a Task after
+    /// `applicationDidFinishLaunching`, too late for the reminder action
+    /// (Renew / End Now) that launched the app.
+    @Test func notificationDelegateIsSetBeforeLaunchFinishes() throws {
+        let main = try String(contentsOf: Self.appSources.appendingPathComponent("main.swift"), encoding: .utf8)
+        let willFinish = try #require(main.range(of: "func applicationWillFinishLaunching"))
+        let didFinish = try #require(main.range(of: "func applicationDidFinishLaunching"))
+        let setUp = try #require(main.range(of: "Notifier.setUp()"))
+        #expect(willFinish.lowerBound < setUp.lowerBound && setUp.lowerBound < didFinish.lowerBound)
+        #expect(!main.contains("Task { @MainActor in Notifier.setUp() }"))
+    }
 }
