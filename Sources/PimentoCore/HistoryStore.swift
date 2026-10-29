@@ -221,6 +221,8 @@ public struct HistoryStore: Sendable {
     }
 
     /// Drops records older than the retention. Returns how many were removed.
+    /// Lines it cannot read (a newer format, a hand edit) are kept: their age
+    /// is unknown, and `load()` reports them as unreadable.
     @discardableResult
     public func prune(retention: HistoryRetention, now: Date = Date()) throws -> Int {
         guard let cutoff = retention.cutoff(now: now) else { return 0 }
@@ -233,11 +235,11 @@ public struct HistoryStore: Sendable {
                 var dropped = 0
                 let decoder = JSONDecoder()
                 for line in data.split(separator: 0x0A, omittingEmptySubsequences: true) {
-                    if let r = try? decoder.decode(HistoryRecord.self, from: Data(line)), r.at >= cutoff {
+                    if let r = try? decoder.decode(HistoryRecord.self, from: Data(line)), r.at < cutoff {
+                        dropped += 1
+                    } else {
                         kept.append(contentsOf: line)
                         kept.append(0x0A)
-                    } else {
-                        dropped += 1
                     }
                 }
                 guard dropped > 0 else { continue }

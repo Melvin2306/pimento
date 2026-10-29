@@ -215,6 +215,21 @@ struct HistoryStoreTests {
         #expect(hasMode(store.url.path, 0o600))
     }
 
+    @Test func pruneKeepsLinesItCannotRead() throws {
+        let store = HistoryStore(url: temporaryHistoryURL())
+        let day: TimeInterval = 86400
+        try store.append([.sample(1, at: Fixture.now.addingTimeInterval(-400 * day)), .sample(2, at: Fixture.now)])
+        // A line from a newer Pimento (or a hand edit): its age is unknown.
+        let handle = try FileHandle(forWritingTo: store.url)
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data(#"{"v":99,"future":true}"#.utf8 + [0x0A]))
+        try handle.close()
+        #expect(try store.prune(retention: .days365, now: Fixture.now) == 1)
+        let loaded = store.load()
+        #expect(loaded.records.map(\.id) == ["rec-2"])
+        #expect(loaded.unreadableLines == 1)
+    }
+
     @Test func clearRemovesEverythingButSettings() throws {
         let store = HistoryStore(url: temporaryHistoryURL(), maxBytes: 1500)
         try store.saveSettings(HistorySettings(enabled: false, retention: .days90))
