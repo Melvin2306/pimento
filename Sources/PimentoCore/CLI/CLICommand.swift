@@ -401,6 +401,7 @@ public enum CLIParseError: Error, Equatable, LocalizedError {
     case missingExportFile
     case clearNeedsConfirmation
     case invalidClientId(String)
+    case ticketSystemWithoutTicket
 
     public var errorDescription: String? {
         switch self {
@@ -448,6 +449,8 @@ public enum CLIParseError: Error, Equatable, LocalizedError {
         case .missingExportFile: "`pimento history export` needs a file name (FILE.csv, or - for stdout)."
         case .invalidClientId(let v):
             "--client-id takes the Application (client) ID GUID of your app registration, got “\(v)”."
+        case .ticketSystemWithoutTicket:
+            "--ticket-system goes with --ticket NUMBER (--ticket NUMBER --ticket-system NAME)."
         case .clearNeedsConfirmation:
             "Refusing to clear the history without confirmation: stdin is not a terminal. Add --yes."
         }
@@ -785,6 +788,8 @@ public enum CLIParser {
         o.at = scan.values["at"]?.last?.trimmingCharacters(in: .whitespaces)
         o.ticketNumber = scan.values["ticket"]?.last?.trimmingCharacters(in: .whitespaces)
         o.ticketSystem = scan.values["ticket-system"]?.last?.trimmingCharacters(in: .whitespaces)
+        // A system alone is no ticket; for renew it would also replace the original ticket.
+        if o.ticketSystem != nil, o.ticketNumber == nil { throw CLIParseError.ticketSystemWithoutTicket }
         if o.preset != nil {
             if o.criteria.hasSelection || o.all { throw CLIParseError.conflicting("--preset", "filters, --role or --all") }
             // The justification may come from the preset: checked once it is loaded.
@@ -816,6 +821,8 @@ public enum CLIParser {
         }
         o.ticketNumber = scan.values["ticket"]?.last?.trimmingCharacters(in: .whitespaces)
         o.ticketSystem = scan.values["ticket-system"]?.last?.trimmingCharacters(in: .whitespaces)
+        // A system alone is no ticket; for renew it would also replace the original ticket.
+        if o.ticketSystem != nil, o.ticketNumber == nil { throw CLIParseError.ticketSystemWithoutTicket }
         if o.preset != nil {
             if o.criteria.hasSelection || o.all { throw CLIParseError.conflicting("--preset", "filters, --role or --all") }
             return renew ? .renew(o) : .deactivate(o)

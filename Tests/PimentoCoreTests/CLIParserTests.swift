@@ -14,6 +14,9 @@ struct CLIParserTests {
         #expect(try command("--help", "activate") == .help(topic: "activate"))
         #expect(try command("-h", "wait") == .help(topic: "wait"))
         #expect(throws: CLIParseError.unknownCommand("bogus")) { try command("--help", "bogus") }
+        // A ticket system alone is no ticket (and would replace a renewal's original ticket).
+        #expect(throws: CLIParseError.ticketSystemWithoutTicket) { try command("activate", "--all", "-j", "x", "--ticket-system", "SNOW") }
+        #expect(throws: CLIParseError.ticketSystemWithoutTicket) { try command("renew", "--all", "-j", "x", "--ticket-system", "SNOW") }
         #expect(try command("help", "activate") == .help(topic: "activate"))
         #expect(try command("activate", "--help") == .help(topic: "activate"))
         #expect(try command("list", "-h") == .help(topic: "list"))
