@@ -80,6 +80,30 @@ struct AuthTests {
         #expect(JWT.identity(fromToken: "garbage") == nil)
     }
 
+    #if !os(Windows)
+    /// A stand-in `az`: a shell script with `body`.
+    func fakeAz(_ body: String) throws -> String {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("pimento-az-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let az = dir.appendingPathComponent("az")
+        try Data("#!/bin/sh\n\(body)\n".utf8).write(to: az)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: az.path)
+        return az.path
+    }
+
+    @Test func azExitStatusAndSignalAreNotTimeouts() async throws {
+        let failing = try fakeAz("echo 'ERROR: please run az login' >&2; exit 1")
+        await #expect(throws: AzureCLIError.failed("ERROR: please run az login")) { _ = try await AzureCLI.run([], azPath: failing) }
+        // Killed at once: a failure, not "did not answer within 90 seconds".
+        let killed = try fakeAz("kill -KILL $$")
+        await #expect(throws: AzureCLIError.failed("az was ended by signal 9.")) { _ = try await AzureCLI.run([], azPath: killed) }
+        let slow = try fakeAz("exec sleep 5")
+        await #expect(throws: AzureCLIError.timedOut) { _ = try await AzureCLI.run([], azPath: slow, timeout: 0.2) }
+        let ok = try fakeAz("printf token")
+        #expect(try await AzureCLI.run([], azPath: ok) == Data("token".utf8))
+    }
+    #endif
+
     @Test func locatesAzPreferringHomebrew() {
         let present: Set<String> = ["/opt/homebrew/bin/az", "/custom/bin/az"]
         #expect(AzureCLI.locate(environment: ["PATH": "/custom/bin"], platform: .macOS, isExecutable: present.contains) == "/opt/homebrew/bin/az")

@@ -228,7 +228,10 @@ public enum AzureCLI {
         group.wait()
         killer.cancel()
 
-        if timedOut.value || process.terminationReason == .uncaughtSignal { throw AzureCLIError.timedOut }
+        if timedOut.value { throw AzureCLIError.timedOut }
+        if process.terminationReason == .uncaughtSignal {
+            throw AzureCLIError.failed("az was ended by signal \(process.terminationStatus).")
+        }
         guard process.terminationStatus == 0 else {
             let stderr = String(decoding: errData.value, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
             throw AzureCLIError.failed(stderr.isEmpty ? "az exited with status \(process.terminationStatus)" : stderr)
