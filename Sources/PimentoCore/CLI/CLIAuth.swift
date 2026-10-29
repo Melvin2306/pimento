@@ -36,11 +36,17 @@ extension CLIRunner {
             }
         }
         let wasSource = settings.source
-        _ = try? env.signIn.settings?.update {
-            $0.source = .pimento
-            $0.clientId = clientId
-            $0.accountId = account.id
-            $0.claimsChallenge = nil
+        var saved = true
+        do {
+            try env.signIn.settings?.update {
+                $0.source = .pimento
+                $0.clientId = clientId
+                $0.accountId = account.id
+                $0.claimsChallenge = nil
+            }
+        } catch {
+            saved = false
+            warnSettingsNotSaved(error)
         }
         if o.json {
             out(CLIJSON.encode(CLIJSON.Login(account: .init(account, isDefault: true), source: AuthSource.pimento.rawValue,
@@ -48,7 +54,7 @@ extension CLIRunner {
             return .success
         }
         out("Signed in as \(account.displayName) · tenant \(account.tenantId)")
-        if auth.selection.isOverride == false, wasSource != .pimento {
+        if saved, auth.selection.isOverride == false, wasSource != .pimento {
             err(errStyle.dim("Pimento sign-in is now the auth source of the app and the CLI. `--auth az` or Settings › Account switches back."))
         }
         return .success
@@ -72,7 +78,7 @@ extension CLIRunner {
         let backToAz = remaining.isEmpty && settings.source == .pimento
         if backToAz { settings.source = nil }
         settings.claimsChallenge = remaining.isEmpty ? nil : settings.claimsChallenge
-        try? env.signIn.settings?.save(settings)
+        do { try env.signIn.settings?.save(settings) } catch { warnSettingsNotSaved(error) }
         if o.json {
             out(CLIJSON.encode(CLIJSON.Logout(removed: removed.map(\.id), remaining: remaining.count)))
             return .success
@@ -84,6 +90,13 @@ extension CLIRunner {
         for account in removed { out("Signed out \(account.displayName).") }
         if backToAz { err(errStyle.dim("No Pimento sign-in left: the Azure CLI is the auth source again.")) }
         return .success
+    }
+
+    /// The sign-in itself worked, but the auth source, client ID or account
+    /// in auth.json may now be stale: say so instead of pretending.
+    private func warnSettingsNotSaved(_ error: Error) {
+        let location = env.signIn.settings.map { $0.url.path } ?? "auth.json"
+        err(errStyle.yellow("Warning:") + " could not save the sign-in settings to \(location): \(error.localizedDescription)")
     }
 
     func whoami(_ o: WhoamiOptions) async throws -> CLIExit {

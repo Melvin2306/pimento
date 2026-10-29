@@ -141,6 +141,18 @@ struct CLIAuthTests {
         #expect(h.givenTokens.value?.last is BrokerTokenProvider)
     }
 
+    @Test func loginAndLogoutWarnWhenTheSettingsCannotBeSaved() async throws {
+        let h = CLIHarness()
+        h.signInTransport = fakeLogin(pendingPolls: 0)
+        // A folder where auth.json should be: every write fails.
+        try FileManager.default.createDirectory(at: h.authSettings.url, withIntermediateDirectories: true)
+        #expect(await h.run("login", "--device-code", "--client-id", testClientId) == 0)
+        #expect(h.err.contains("could not save the sign-in settings"))
+        #expect(!h.err.contains("now the auth source"))
+        #expect(await h.run("logout") == 0)
+        #expect(h.err.components(separatedBy: "could not save the sign-in settings").count == 3)
+    }
+
     @Test(.enabled(if: LoopbackListener.isSupported, "no loopback listener on Windows"))
     func loginWithTheBrowserPassesASavedClaimsChallenge() async throws {
         let h = CLIHarness()
