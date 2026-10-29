@@ -53,12 +53,16 @@ public enum ActivationResponseMapper {
     static let authErrorCodes: Set<String> = ["InvalidAuthenticationToken", "ExpiredAuthenticationToken", "AuthenticationFailed"]
 
     public static func outcome(statusCode: Int, data: Data, requestedAt: Date, hours: Int) -> ActivationOutcome {
+        outcome(statusCode: statusCode, data: data, requestedAt: requestedAt, minutes: hours * 60)
+    }
+
+    public static func outcome(statusCode: Int, data: Data, requestedAt: Date, minutes: Int) -> ActivationOutcome {
         if (200..<300).contains(statusCode) {
             let response = try? JSONDecoder().decode(RequestResponse.self, from: data)
             let p = response?.properties
             let start = AzureDate.parse(p?.scheduleInfo?.startDateTime) ?? requestedAt
             let until = AzureDate.parse(p?.scheduleInfo?.expiration?.endDateTime)
-                ?? start.addingTimeInterval(TimeInterval(hours) * 3600)
+                ?? start.addingTimeInterval(TimeInterval(minutes) * 60)
             return .activated(status: p?.status ?? "", until: until)
         }
         let envelope = try? JSONDecoder().decode(ARMErrorEnvelope.self, from: data)

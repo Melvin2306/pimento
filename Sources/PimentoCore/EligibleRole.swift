@@ -62,6 +62,11 @@ public struct EligibleRole: Identifiable, Hashable, Sendable {
 
     public var hasCondition: Bool { !(condition ?? "").isEmpty }
 
+    /// Scope + role: identifies the eligibility across refreshes (presets) and
+    /// its PIM policy. Two rows share it when you are eligible both directly
+    /// and through a group.
+    public var policyKey: RoleMatcher.Key { RoleMatcher.key(scope: scope, roleDefinitionId: roleDefinitionId) }
+
     public var scopeTypeLabel: String {
         switch scopeType.lowercased() {
         case "subscription": "Subscription"

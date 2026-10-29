@@ -132,7 +132,7 @@ public final class PIMService: Sendable {
         request.httpBody = plan.bodyJSON
         do {
             let (data, status) = try await transport.send(request)
-            return ActivationResponseMapper.outcome(statusCode: status, data: data, requestedAt: plan.requestedAt, hours: plan.hours)
+            return ActivationResponseMapper.outcome(statusCode: status, data: data, requestedAt: plan.requestedAt, minutes: plan.minutes)
         } catch {
             return .failed(code: "NetworkError", message: error.localizedDescription)
         }

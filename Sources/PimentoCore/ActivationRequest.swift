@@ -30,12 +30,14 @@ public struct ActivationRequestBody: Encodable, Equatable, Sendable {
 public enum ActivationRequestError: Error, Equatable, LocalizedError {
     case missingJustification
     case invalidDuration(Int)
+    case invalidMinutes(Int)
     case missingPrincipal
 
     public var errorDescription: String? {
         switch self {
         case .missingJustification: "A justification is required."
         case .invalidDuration(let h): "Duration must be 1–\(ActivationRequestBuilder.maxHours) hours (got \(h))."
+        case .invalidMinutes(let m): "Duration must be 1 minute to \(ActivationRequestBuilder.maxHours) hours (got \(m) minutes)."
         case .missingPrincipal: "Could not determine your user object id from the token."
         }
     }
@@ -48,7 +50,10 @@ public struct PlannedRequest: Identifiable, Sendable, Equatable {
     public let url: URL
     public let body: ActivationRequestBody
     public let requestedAt: Date
-    public let hours: Int
+    /// The duration this role is requested for, after the policy cap.
+    public let duration: EffectiveDuration
+
+    public var minutes: Int { duration.minutes }
 
     public var bodyJSON: Data { ActivationRequestBuilder.encode(body) }
 
@@ -72,9 +77,20 @@ public enum ActivationRequestBuilder {
         hours: Int,
         now: Date
     ) throws -> ActivationRequestBody {
+        guard (1...maxHours).contains(hours) else { throw ActivationRequestError.invalidDuration(hours) }
+        return try body(for: role, principalId: principalId, justification: justification, minutes: hours * 60, now: now)
+    }
+
+    public static func body(
+        for role: EligibleRole,
+        principalId: String,
+        justification: String,
+        minutes: Int,
+        now: Date
+    ) throws -> ActivationRequestBody {
         let justification = justification.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !justification.isEmpty else { throw ActivationRequestError.missingJustification }
-        guard (1...maxHours).contains(hours) else { throw ActivationRequestError.invalidDuration(hours) }
+        guard (1...maxHours * 60).contains(minutes) else { throw ActivationRequestError.invalidMinutes(minutes) }
         guard !principalId.isEmpty else { throw ActivationRequestError.missingPrincipal }
         // An eligibility with an ABAC condition must have it sent back
         // verbatim, otherwise the request fails policy validation.
@@ -88,7 +104,7 @@ public enum ActivationRequestBuilder {
             justification: justification,
             scheduleInfo: .init(
                 startDateTime: AzureDate.format(now),
-                expiration: .init(type: "AfterDuration", duration: isoDuration(hours: hours))
+                expiration: .init(type: "AfterDuration", duration: ISODuration.format(minutes: minutes))
             ),
             condition: condition,
             conditionVersion: condition == nil ? nil : (role.conditionVersion?.isEmpty == false ? role.conditionVersion : "2.0")
@@ -103,6 +119,7 @@ public enum ActivationRequestBuilder {
         return URL(string: path)!
     }
 
+    /// The same number of hours for every role (no policy cap).
     public static func plan(
         _ roles: [EligibleRole],
         principalId: String,
@@ -111,13 +128,30 @@ public enum ActivationRequestBuilder {
         now: Date = Date(),
         makeId: () -> UUID = UUID.init
     ) throws -> [PlannedRequest] {
+        guard (1...maxHours).contains(hours) else { throw ActivationRequestError.invalidDuration(hours) }
+        return try plan(roles, principalId: principalId, justification: justification, now: now, makeId: makeId) { _ in
+            EffectiveDuration(minutes: hours * 60, requested: .hours(hours), policyMaxMinutes: nil)
+        }
+    }
+
+    /// One request per role, each for `duration(role)`: the asked duration
+    /// capped at that role's policy maximum (see `EffectiveDuration.resolve`).
+    public static func plan(
+        _ roles: [EligibleRole],
+        principalId: String,
+        justification: String,
+        now: Date = Date(),
+        makeId: () -> UUID = UUID.init,
+        duration: (EligibleRole) -> EffectiveDuration
+    ) throws -> [PlannedRequest] {
         try roles.map { role in
-            PlannedRequest(
+            let d = duration(role)
+            return PlannedRequest(
                 role: role,
                 url: url(for: role, requestId: makeId()),
-                body: try body(for: role, principalId: principalId, justification: justification, hours: hours, now: now),
+                body: try body(for: role, principalId: principalId, justification: justification, minutes: d.minutes, now: now),
                 requestedAt: now,
-                hours: hours
+                duration: d
             )
         }
     }

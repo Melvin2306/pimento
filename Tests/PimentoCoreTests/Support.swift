@@ -39,6 +39,45 @@ enum Fixture {
     }
 }
 
+/// A `roleManagementPolicyAssignments` list with one assignment whose
+/// end-user activation rule allows `maxDuration` (omitted: no expiration rule).
+func policyResponse(roleGUID: String, maxDuration: String?, approval: Bool = false, enabled: [String] = ["Justification"]) -> Data {
+    var rules: [[String: Any]] = [
+        ["id": "Expiration_Admin_Assignment", "ruleType": "RoleManagementPolicyExpirationRule",
+         "maximumDuration": "P180D", "target": ["caller": "Admin", "level": "Assignment"]],
+        ["id": "Enablement_EndUser_Assignment", "ruleType": "RoleManagementPolicyEnablementRule",
+         "enabledRules": enabled, "target": ["caller": "EndUser", "level": "Assignment"]],
+        ["id": "Approval_EndUser_Assignment", "ruleType": "RoleManagementPolicyApprovalRule",
+         "setting": ["isApprovalRequired": approval], "target": ["caller": "EndUser", "level": "Assignment"]],
+    ]
+    if let maxDuration {
+        rules.append(["id": "Expiration_EndUser_Assignment", "ruleType": "RoleManagementPolicyExpirationRule",
+                      "isExpirationRequired": true, "maximumDuration": maxDuration,
+                      "target": ["caller": "EndUser", "level": "Assignment"]])
+    }
+    let doc: [String: Any] = ["value": [["properties": [
+        "roleDefinitionId": "/providers/Microsoft.Authorization/roleDefinitions/\(roleGUID)",
+        "policyId": "policy-\(roleGUID)",
+        "effectiveRules": rules,
+    ]]]]
+    return try! JSONSerialization.data(withJSONObject: doc)
+}
+
+/// The role GUID in a policy-assignment URL's `$filter`, lower-cased.
+func filteredRoleGUID(_ request: URLRequest) -> String? {
+    guard let url = request.url, url.path.hasSuffix("roleManagementPolicyAssignments"),
+          let filter = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "$filter" })?.value,
+          let last = filter.split(separator: "/").last else { return nil }
+    return last.trimmingCharacters(in: CharacterSet(charactersIn: "' ")).lowercased()
+}
+
+/// A fresh path for a presets file in the temporary directory.
+func temporaryPresetsURL() -> URL {
+    FileManager.default.temporaryDirectory
+        .appendingPathComponent("pimento-tests-\(UUID().uuidString)", isDirectory: true)
+        .appendingPathComponent("presets.json")
+}
+
 /// Unsigned JWT with the given claims (ARM verifies signatures; we only read claims).
 func fakeToken(_ claims: [String: Any]) -> String {
     func b64(_ d: Data) -> String {
