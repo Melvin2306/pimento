@@ -83,6 +83,10 @@ extension CLIRunner {
             human(style.yellow("skip") + "  \(r.roleName) · \(r.scopeName): its policy requires approval, "
                 + "so after ending it you would wait for an approver. Not renewed.")
         }
+        for r in selection.needsTicket {
+            human(style.yellow("skip") + "  \(r.roleName) · \(r.scopeName): its policy requires a ticket and the ticket of "
+                + "the current activation is unknown. Add --ticket NUMBER --ticket-system NAME. Not renewed.")
+        }
     }
 
     func summaryLine(_ summary: CLIJSON.Summary, missing: Int, style: TerminalStyle) -> String {
@@ -214,11 +218,19 @@ extension CLIRunner {
 
         let active = s.matched.filter(\.isActive)
         let policies = await self.policies(for: active, service: s.service)
-        let selection = RoleLifecycle.select(s.matched, now: now, forRenewal: true) {
-            policies[$0.policyKey]?.policy?.requiresApproval == true
+        // The ticket to send again: --ticket, else the one the activation was requested with.
+        let given = TicketInfo.make(number: o.ticketNumber,
+                                    system: o.ticketSystem ?? (o.ticketNumber != nil ? s.preset?.trimmedTicketSystem : nil))
+        let originals = active.isEmpty ? [:] : ((try? await s.service.loadRequestHistory(now: now))?.activationTickets ?? [:])
+        func ticket(_ role: EligibleRole) -> TicketInfo? {
+            RenewTicket.choose(given: given, original: RequestHistory.ticket(for: role, in: originals))
         }
+        let selection = RoleLifecycle.select(
+            s.matched, now: now, forRenewal: true,
+            needsTicket: { RenewTicket.isMissing($0, ticket: ticket($0), policy: policies[$0.policyKey]) },
+            requiresApproval: { policies[$0.policyKey]?.policy?.requiresApproval == true })
         let plans = try ActivationRequestBuilder.renewPlan(
-            selection.ready, principalId: s.snapshot.identity.objectId, justification: justification, now: now
+            selection.ready, principalId: s.snapshot.identity.objectId, justification: justification, now: now, ticket: ticket
         ) { role in
             EffectiveDuration.resolve(requested, policyMaxMinutes: policies[role.policyKey]?.maxMinutes,
                                       fallbackHours: ActivationRequestBuilder.defaultHours)
@@ -228,10 +240,14 @@ extension CLIRunner {
         for r in selection.needsApproval {
             outcomes[r.id] = .failed(code: "ApprovalRequired", message: "the role's policy requires approval; renewing would leave it off until approved")
         }
+        for r in selection.needsTicket {
+            outcomes[r.id] = .failed(code: "TicketRequired",
+                                     message: "the role's policy requires a ticket and the current activation's is unknown; add --ticket NUMBER --ticket-system NAME")
+        }
 
         func json(_ outcomes: [String: ActivationOutcome]) -> CLIJSON.Lifecycle {
             let byRole = Dictionary(plans.map { ($0.role.id, $0) }, uniquingKeysWith: { a, _ in a })
-            let roles = selection.ready + selection.tooSoon + selection.needsApproval + selection.inactive
+            let roles = selection.ready + selection.tooSoon + selection.needsApproval + selection.needsTicket + selection.inactive
             let results = roles.map { role in
                 CLIJSON.Result(role: role, outcome: outcomes[role.id], plan: byRole[role.id]?.deactivation,
                                followUp: byRole[role.id]?.plannedActivation, skipReason: "not active")
@@ -252,7 +268,7 @@ extension CLIRunner {
         }
         printSkips(selection, now: now, style: style, human: human)
         guard !plans.isEmpty else {
-            let onlyInactive = selection.tooSoon.isEmpty && selection.needsApproval.isEmpty
+            let onlyInactive = selection.tooSoon.isEmpty && selection.needsApproval.isEmpty && selection.needsTicket.isEmpty
             human(onlyInactive ? "Nothing to renew: the matching roles are not active. Use `pimento activate`." : "Nothing to renew.")
             if o.json { out(CLIJSON.encode(json(outcomes))) }
             return onlyInactive ? .success : .failure
@@ -272,6 +288,11 @@ extension CLIRunner {
             human(style.boldRed("Warning:") + " \(CLIFormat.plural(owners, "Owner role")) (!): full control of the resource, including access.")
         }
         human("Justification: \(justification)")
+        if let given { human("Ticket: \(given.label)") }
+        let reused = plans.filter { given == nil && $0.ticket != nil }
+        if !reused.isEmpty {
+            human("Ticket: the one each activation was requested with (\(Set(reused.compactMap { $0.ticket?.label }).sorted().joined(separator: ", ")))")
+        }
         if o.dryRun {
             if !o.json {
                 for p in plans {

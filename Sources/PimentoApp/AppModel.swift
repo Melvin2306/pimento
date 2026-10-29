@@ -67,6 +67,8 @@ final class AppModel {
     var startPickerDraft = Date()
     /// Your pending requests in Azure (scheduled, or awaiting approval).
     var scheduledRequests: [ScheduledRequest] = []
+    /// Tickets of your requests by request name: what Renew sends again.
+    private(set) var activationTickets: [String: TicketInfo] = [:]
     var scheduledLoadState: LoadState = .idle
     var showScheduled = false
     /// Requests being cancelled, and how cancelling went.
@@ -341,11 +343,13 @@ final class AppModel {
         let generation = tenantGeneration
         let service = service
         do {
-            let (identity, requests) = try await service.loadScheduledRequests()
+            let history = try await service.loadRequestHistory()
             guard generation == tenantGeneration else { return }
+            let requests = history.pending
             scheduledRequests = requests
+            activationTickets = history.activationTickets
             scheduledLoadState = .loaded
-            Notifier.syncScheduledStarts(requests, tenantId: identity.tenantId ?? effectiveTenantId, prefs: prefs)
+            Notifier.syncScheduledStarts(requests, tenantId: history.identity.tenantId ?? effectiveTenantId, prefs: prefs)
         } catch {
             guard generation == tenantGeneration else { return }
             scheduledLoadState = .failed(message: error.localizedDescription, needsLogin: (error as? AzureCLIError)?.needsLogin ?? false)
@@ -789,9 +793,20 @@ final class AppModel {
 
     /// The confirmation's targets split by what PIM allows now.
     func lifecycleSelection(forRenewal: Bool) -> RoleLifecycle.Selection {
-        RoleLifecycle.select(lifecycleTargets, now: Date(), forRenewal: forRenewal) {
-            self.policies[$0.policyKey]?.policy?.requiresApproval == true
-        }
+        renewalSelection(lifecycleTargets, forRenewal: forRenewal)
+    }
+
+    /// The ticket a renewal of `role` sends: the ticket fields when filled in,
+    /// else the ticket its current activation was requested with.
+    func renewalTicket(for role: EligibleRole) -> TicketInfo? {
+        RenewTicket.choose(given: currentTicket, original: RequestHistory.ticket(for: role, in: activationTickets))
+    }
+
+    private func renewalSelection(_ targets: [EligibleRole], forRenewal: Bool = true) -> RoleLifecycle.Selection {
+        RoleLifecycle.select(
+            targets, now: Date(), forRenewal: forRenewal,
+            needsTicket: { RenewTicket.isMissing($0, ticket: self.renewalTicket(for: $0), policy: self.policies[$0.policyKey]) },
+            requiresApproval: { self.policies[$0.policyKey]?.policy?.requiresApproval == true })
     }
 
     /// Ends the activations of `roles` (SelfDeactivate).
@@ -861,13 +876,16 @@ final class AppModel {
             return
         }
         await ensurePolicies(for: targets)
+        // The tickets the activations were requested with, read fresh: Renew sends them again.
+        if let history = try? await service.loadRequestHistory() { activationTickets = history.activationTickets }
         let requested = asked ?? duration
-        let selection = RoleLifecycle.select(targets, now: Date(), forRenewal: true) {
-            self.policies[$0.policyKey]?.policy?.requiresApproval == true
-        }
+        let selection = renewalSelection(targets)
         let plans: [RenewPlan]
         do {
-            plans = try ActivationRequestBuilder.renewPlan(selection.ready, principalId: identity.objectId, justification: justification) {
+            plans = try ActivationRequestBuilder.renewPlan(
+                selection.ready, principalId: identity.objectId, justification: justification,
+                ticket: { self.renewalTicket(for: $0) }
+            ) {
                 EffectiveDuration.resolve(requested, policyMaxMinutes: self.policies[$0.policyKey]?.maxMinutes,
                                           fallbackHours: self.prefs.defaultHours)
             }
@@ -885,6 +903,11 @@ final class AppModel {
             progress[role.id] = .done(.failed(code: "ApprovalRequired",
                                               message: "Its policy requires approval: after ending it you would wait for an approver. Not renewed."))
         }
+        for role in selection.needsTicket {
+            progress[role.id] = .done(.failed(code: "TicketRequired",
+                                              message: "Its policy requires a ticket and the current activation's ticket is unknown: fill in ticket number and system, then Renew. Not renewed."))
+        }
+        if !selection.needsTicket.isEmpty { showTicketFields = true }
         for plan in plans { progress[plan.id] = .queued }
         do {
             try await service.renew(
@@ -925,7 +948,7 @@ final class AppModel {
             }
         }
         let outcomes = finishedOutcomes
-        let all = selection.tooSoon + selection.needsApproval + plans.map(\.role)
+        let all = selection.tooSoon + selection.needsApproval + selection.needsTicket + plans.map(\.role)
         let failed = all.filter { outcomes[$0.id]?.isFailure == true }
         var text = lifecycleBanner(done: renewed.count, verb: "renewed", failed: failed, outcomes: outcomes)
         if !lost.isEmpty { text += " \(lost.count) ended but not active again: activate \(lost.count == 1 ? "it" : "them") again." }

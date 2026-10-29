@@ -233,6 +233,10 @@ public enum CLIHelp {
     activate it again. Roles whose policy requires approval are not renewed.
     Roles activated less than 5 minutes ago cannot be ended yet.
 
+    Tickets: the new activation carries the ticket the current one was
+    requested with (read from your requests), or --ticket. A role whose policy
+    requires a ticket is skipped when neither is known.
+
     Selection: as for deactivate (FILTER…, --role, --all, --preset).
 
     Options:
@@ -240,6 +244,10 @@ public enum CLIHelp {
                           Why you need the roles (required unless the preset has one)
           --hours N|max   New duration, 1-\(ActivationRequestBuilder.maxHours) (default \(ActivationRequestBuilder.defaultHours)) or max; capped at
                           each role's policy maximum
+          --ticket NUMBER Ticket for the new activations (default: the original
+                          activation's ticket, when it had one)
+          --ticket-system NAME
+                          Ticket system (default: the preset's)
       -y, --yes           Don't ask. Required when stdin is not a terminal.
           --dry-run       Print both requests per role, send nothing
           --max-parallel N
@@ -413,6 +421,8 @@ public enum CLIHelp {
                 '--all[Every active role]' \
                 '(-j --justification)'{-j,--justification}'[Justification]:justification: ' \
                 '--hours[New duration in hours, or max (renew)]:hours:(max 1 2 4 8 12 24)' \
+                '--ticket[Ticket number (renew)]:ticket: ' \
+                '--ticket-system[Ticket system (renew)]:system: ' \
                 '--preset[Saved preset]:preset: ' \
                 '(-y --yes)'{-y,--yes}'[Do not ask for confirmation]' \
                 '--dry-run[Print the requests, send nothing]' \
@@ -472,7 +482,7 @@ public enum CLIHelp {
         activate) opts="--tenant --json --role --all --preset --justification --hours --at --ticket --ticket-system --yes --dry-run --max-parallel --help" ;;
         cancel) opts="--tenant --json --role --all --yes --dry-run --help" ;;
         deactivate) opts="--tenant --json --role --all --preset --justification --yes --dry-run --max-parallel --help" ;;
-        renew) opts="--tenant --json --role --all --preset --justification --hours --yes --dry-run --max-parallel --help" ;;
+        renew) opts="--tenant --json --role --all --preset --justification --hours --ticket --ticket-system --yes --dry-run --max-parallel --help" ;;
         extend) opts="--tenant --json --role --all --justification --days --yes --dry-run --help" ;;
         status|tenants|scheduled) opts="--tenant --json --help" ;;
         presets)
@@ -513,8 +523,8 @@ public enum CLIHelp {
     complete -c pimento -n '__fish_seen_subcommand_from deactivate renew extend' -l all -d 'Every active role'
     complete -c pimento -n '__fish_seen_subcommand_from cancel' -l all -d 'Every pending activation'
     complete -c pimento -n '__fish_seen_subcommand_from activate' -l at -x -a 'now +1h +2h tomorrow08:00 workday08:00' -d 'Start later'
-    complete -c pimento -n '__fish_seen_subcommand_from activate' -l ticket -r -d 'Ticket number'
-    complete -c pimento -n '__fish_seen_subcommand_from activate presets' -l ticket-system -r -d 'Ticket system'
+    complete -c pimento -n '__fish_seen_subcommand_from activate renew' -l ticket -r -d 'Ticket number'
+    complete -c pimento -n '__fish_seen_subcommand_from activate renew presets' -l ticket-system -r -d 'Ticket system'
     complete -c pimento -n '__fish_seen_subcommand_from extend' -l days -x -a '7 30 90 180 365' -d 'Days to extend by'
     complete -c pimento -n '__fish_seen_subcommand_from activate deactivate renew extend presets' -s j -l justification -r -d 'Justification'
     complete -c pimento -n '__fish_seen_subcommand_from activate renew presets' -l hours -x -a 'max 1 2 4 8 12 24' -d 'Duration in hours, or max'

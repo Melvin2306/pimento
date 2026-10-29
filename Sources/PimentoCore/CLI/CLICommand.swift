@@ -140,6 +140,10 @@ public struct LifecycleOptions: Equatable, Sendable {
     public var justification = ""
     /// Renew only: nil = the preset's duration, else the default (8 hours).
     public var duration: RequestedDuration?
+    /// Renew only: `--ticket` / `--ticket-system`, for roles whose policy
+    /// requires a ticket (default: the original activation's ticket).
+    public var ticketNumber: String?
+    public var ticketSystem: String?
     public var assumeYes = false
     public var dryRun = false
     public var maxParallel = 8
@@ -360,6 +364,8 @@ public enum CLIParser {
 
     private static let renewFlags = deactivateFlags.merging([
         "--hours": Flag(key: "hours", takesValue: true),
+        "--ticket": Flag(key: "ticket", takesValue: true),
+        "--ticket-system": Flag(key: "ticket-system", takesValue: true),
     ]) { a, _ in a }
 
     private static let extendFlags = tenant.merging(json) { a, _ in a }.merging([
@@ -506,6 +512,8 @@ public enum CLIParser {
         if let raw = scan.values["max-parallel"]?.last {
             o.maxParallel = try number(raw, flag: "--max-parallel", range: ActivateOptions.maxParallelRange)
         }
+        o.ticketNumber = scan.values["ticket"]?.last?.trimmingCharacters(in: .whitespaces)
+        o.ticketSystem = scan.values["ticket-system"]?.last?.trimmingCharacters(in: .whitespaces)
         if o.preset != nil {
             if o.criteria.hasSelection || o.all { throw CLIParseError.conflicting("--preset", "filters, --role or --all") }
             return renew ? .renew(o) : .deactivate(o)

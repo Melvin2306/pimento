@@ -42,12 +42,17 @@ public enum RoleLifecycle {
         public var inactive: [EligibleRole] = []
         /// Would need approval to come back (Renew only).
         public var needsApproval: [EligibleRole] = []
+        /// Its policy requires a ticket and none is known (Renew only).
+        public var needsTicket: [EligibleRole] = []
 
-        public var isEmpty: Bool { ready.isEmpty && tooSoon.isEmpty && inactive.isEmpty && needsApproval.isEmpty }
+        public var isEmpty: Bool { ready.isEmpty && tooSoon.isEmpty && inactive.isEmpty && needsApproval.isEmpty && needsTicket.isEmpty }
     }
 
+    /// `needsTicket` (renewal): the role's policy requires a ticket and no
+    /// ticket is available for it, so it cannot be activated again.
     public static func select(
         _ roles: [EligibleRole], now: Date, forRenewal: Bool = false,
+        needsTicket: (EligibleRole) -> Bool = { _ in false },
         requiresApproval: (EligibleRole) -> Bool = { _ in false }
     ) -> Selection {
         var byKey: [RoleMatcher.Key: EligibleRole] = [:]
@@ -67,6 +72,8 @@ public enum RoleLifecycle {
                 result.inactive.append(role)
             } else if forRenewal && requiresApproval(role) {
                 result.needsApproval.append(role)
+            } else if forRenewal && needsTicket(role) {
+                result.needsTicket.append(role)
             } else if isTooSoonToEnd(role, now: now) {
                 result.tooSoon.append(role)
             } else {
@@ -82,6 +89,21 @@ public enum RoleLifecycle {
     }
 }
 
+/// Which ticket a renewal sends: one given now wins; otherwise the ticket
+/// the current activation was requested with, when known.
+public enum RenewTicket {
+    public static func choose(given: TicketInfo?, original: TicketInfo?) -> TicketInfo? {
+        if let given, !given.isEmpty { return given }
+        if let original, !original.isEmpty { return original }
+        return nil
+    }
+
+    /// True when `role`'s policy requires a ticket and `ticket` is not complete.
+    public static func isMissing(_ role: EligibleRole, ticket: TicketInfo?, policy: PolicyLookup?) -> Bool {
+        policy?.policy?.requiresTicket == true && ticket?.isComplete != true
+    }
+}
+
 /// One role to renew: its deactivation and the activation that follows.
 public struct RenewPlan: Identifiable, Sendable, Equatable {
     public var id: String { role.id }
@@ -89,6 +111,9 @@ public struct RenewPlan: Identifiable, Sendable, Equatable {
     public let principalId: String
     public let justification: String
     public let duration: EffectiveDuration
+    /// Sent with the new activation: the one given, or the ticket the
+    /// original activation was requested with.
+    public var ticket: TicketInfo?
     public let deactivation: PlannedRequest
     /// The activation as planned now (for dry runs); the real one is rebuilt
     /// with a fresh request id and start time on every attempt.
@@ -101,7 +126,8 @@ public struct RenewPlan: Identifiable, Sendable, Equatable {
             role: active,
             url: ActivationRequestBuilder.url(for: role, requestId: requestId),
             body: try ActivationRequestBuilder.body(
-                for: active, principalId: principalId, justification: justification, minutes: duration.minutes, now: now),
+                for: active, principalId: principalId, justification: justification, minutes: duration.minutes, now: now,
+                ticket: ticket),
             requestedAt: now,
             duration: duration)
     }
@@ -143,7 +169,7 @@ public struct RenewPlan: Identifiable, Sendable, Equatable {
     }
 
     public static func == (a: RenewPlan, b: RenewPlan) -> Bool {
-        a.role == b.role && a.deactivation == b.deactivation && a.plannedActivation == b.plannedActivation
+        a.role == b.role && a.ticket == b.ticket && a.deactivation == b.deactivation && a.plannedActivation == b.plannedActivation
     }
 }
 
@@ -155,6 +181,7 @@ extension ActivationRequestBuilder {
         justification: String,
         now: Date = Date(),
         makeId: () -> UUID = UUID.init,
+        ticket: (EligibleRole) -> TicketInfo? = { _ in nil },
         duration: (EligibleRole) -> EffectiveDuration
     ) throws -> [RenewPlan] {
         let text = justification.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -162,14 +189,15 @@ extension ActivationRequestBuilder {
         let deactivations = try deactivationPlan(roles, principalId: principalId, justification: text, now: now, makeId: makeId)
         return try deactivations.map { off in
             let d = duration(off.role)
+            let t = ticket(off.role).flatMap { $0.isEmpty ? nil : $0 }
             let eligible = RenewPlan.asEligible(off.role)
             let on = PlannedRequest(
                 role: eligible,
                 url: url(for: off.role, requestId: makeId()),
-                body: try body(for: eligible, principalId: principalId, justification: text, minutes: d.minutes, now: now),
+                body: try body(for: eligible, principalId: principalId, justification: text, minutes: d.minutes, now: now, ticket: t),
                 requestedAt: now,
                 duration: d)
-            return RenewPlan(role: off.role, principalId: principalId, justification: text, duration: d,
+            return RenewPlan(role: off.role, principalId: principalId, justification: text, duration: d, ticket: t,
                              deactivation: off, plannedActivation: on)
         }
     }

@@ -76,7 +76,17 @@ struct ContentView: View {
         if renewal, !selection.needsApproval.isEmpty {
             parts.append("\(selection.needsApproval.count) need\(selection.needsApproval.count == 1 ? "s" : "") approval to activate, so \(selection.needsApproval.count == 1 ? "it is" : "they are") not renewed.")
         }
+        if renewal, !selection.needsTicket.isEmpty {
+            let n = selection.needsTicket.count
+            parts.append("\(n) need\(n == 1 ? "s" : "") a ticket and the current activation's is unknown, so \(n == 1 ? "it is" : "they are") not renewed: fill in ticket number and system first.")
+        }
         return parts.isEmpty ? "" : "\n\n" + parts.joined(separator: "\n")
+    }
+
+    /// The tickets the renewed activations carry (fields, or the original ones).
+    private func renewTicketText(_ selection: RoleLifecycle.Selection) -> String {
+        let labels = Set(selection.ready.compactMap { model.renewalTicket(for: $0)?.label }).sorted()
+        return labels.isEmpty ? "" : "\nTicket: " + labels.joined(separator: ", ")
     }
 
     private var deactivateAlertTitle: String {
@@ -108,6 +118,7 @@ struct ContentView: View {
             + "If activating again fails, the role stays off.\n\n"
             + roleList(selection.ready)
             + "\n\nJustification: \(model.trimmedJustification)"
+            + renewTicketText(selection)
             + notNowText(selection, renewal: true)
     }
 

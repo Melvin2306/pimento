@@ -38,6 +38,12 @@ final class CLIHarness: @unchecked Sendable {
 
     private var policyHandler: @Sendable (URLRequest) throws -> (Data, Int) = CLIHarness.defaultPolicy
     private var postHandler: @Sendable (URLRequest) throws -> (Data, Int) = { _ in (Data(), 200) }
+    private var getHandler: (@Sendable (URLRequest) throws -> (Data, Int)?)?
+    /// Answers GETs before the fixtures when it returns something (nil: fixtures).
+    var get: (@Sendable (URLRequest) throws -> (Data, Int)?)? {
+        get { lock.withLock { getHandler } }
+        set { lock.withLock { getHandler = newValue } }
+    }
     /// How the fake ARM answers POSTs (cancel; default: 200).
     var post: @Sendable (URLRequest) throws -> (Data, Int) {
         get { lock.withLock { postHandler } }
@@ -58,6 +64,7 @@ final class CLIHarness: @unchecked Sendable {
         transport = RecordingTransport { request in
             if request.httpMethod == "PUT" { return try put(request) }
             if request.httpMethod == "POST" { return try weakSelf?.post(request) ?? (Data(), 200) }
+            if let answer = try weakSelf?.get?(request) { return answer }
             if request.url!.path.hasSuffix("roleManagementPolicyAssignments") {
                 return try (weakSelf?.policy ?? CLIHarness.defaultPolicy)(request)
             }
