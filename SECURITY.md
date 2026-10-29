@@ -23,6 +23,10 @@ In scope, for example:
 
 - the access token being written to disk, logged, displayed, or sent to any host other than
   `management.azure.com`;
+- with Pimento sign-in: a refresh token, authorization code or PKCE verifier sent anywhere but
+  `login.microsoftonline.com`, stored outside the Keychain (or the documented token file), or
+  readable by other users; the loopback listener accepting a redirect without the right `state`,
+  listening beyond the loopback interface, or staying open after sign-in;
 - any way to make the read-only CLI mode send a write request;
 - activation requests sent while dry run is on, or Owner roles activated without confirmation;
 - argument injection into the `az` process.
@@ -32,8 +36,13 @@ anything that requires an attacker to already control your user account or `az` 
 
 ## Design notes
 
-- No credentials of its own: the token comes from `az account get-access-token`, is kept in
-  memory only and is sent as a bearer token to `management.azure.com` only (pagination links to
-  other hosts are not followed).
+- No secret of its own: by default the token comes from `az account get-access-token`; with
+  Pimento sign-in, from the user's own public-client app registration (no client secret). Access
+  tokens are kept in memory only and sent as bearer tokens to `management.azure.com` only
+  (pagination links to other hosts are not followed).
+- Pimento sign-in: authorization code with PKCE (S256), `state` and `nonce`, or the device code
+  flow; a transport guard lets sign-in data reach only the HTTPS token and device-code endpoints of
+  `login.microsoftonline.com`. Refresh tokens are kept in the login Keychain (this device only) or,
+  without one, in a mode-600 file; never logged or displayed.
 - `az` is started with an argv array, never through a shell; tenant values are validated.
 - The only write request is the activation `PUT`, sent only from the app after explicit user action.

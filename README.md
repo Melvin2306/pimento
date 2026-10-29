@@ -21,7 +21,8 @@
 If you work with [Privileged Identity Management](https://learn.microsoft.com/entra/id-governance/privileged-identity-management/pim-configure)
 for **Azure resources**, you know the routine: open the portal, find each subscription or
 resource group, click *Activate*, type the same justification again, wait, repeat. Pimento
-does the whole list in one go, as you, using the Azure CLI session you already have.
+does the whole list in one go, as you, using the Azure CLI session you already have, or
+[its own sign-in](#pimento-sign-in-without-the-azure-cli) when there is no Azure CLI.
 
 ## Features
 
@@ -69,12 +70,15 @@ does the whole list in one go, as you, using the Azure CLI session you already h
   one that limits which roles the holder may assign) are carried over automatically.
 - **Any tenant**: a searchable tenant picker in the toolbar shows every tenant by name, or pass
   `--tenant` / `PIMENTO_TENANT`. Hide the tenants you never use.
+- **Sign in without the Azure CLI** (optional): Pimento's own Microsoft sign-in, in the browser or with
+  a device code, with your own app registration. The refresh token is kept in the Keychain; switching
+  tenants needs no new sign-in. See [Pimento sign-in](#pimento-sign-in-without-the-azure-cli).
 - **Settings** (<kbd>⌘</kbd><kbd>,</kbd>) for notifications, activation defaults, refresh and table columns.
 - **Themes**: Native, Azure-style or, for fun, Windows XP-style (see [Themes](#themes)).
 - **A real command-line tool**, `pimento`: `list`, `activate` (also `--at` and `--ticket`), `deactivate`, `renew`,
-  `scheduled`, `cancel`, `pending`, `wait`, `approvals`, `approve`, `deny`, `status`, `tenants`, `history`, with JSON
+  `scheduled`, `cancel`, `pending`, `wait`, `approvals`, `approve`, `deny`, `status`, `tenants`, `history`, `login`, with JSON
   output, exit codes and shell completions. Download it on its own, or get it with the app.
-- **No credentials of its own, no dependencies, no telemetry.**
+- **No client secret or service principal, no dependencies, no telemetry.**
 
 ## Screenshots
 
@@ -86,7 +90,8 @@ _Coming soon._
 ## Requirements
 
 - macOS 14 Sonoma or later
-- [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli-macos) (`brew install azure-cli`), signed in with `az login`
+- [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli-macos) (`brew install azure-cli`), signed in with `az login`,
+  **or** an app registration for [Pimento sign-in](#pimento-sign-in-without-the-azure-cli) (no Azure CLI needed)
 - To build: Swift 6.0 or later (Xcode 16+, or just the Command Line Tools: `xcode-select --install`)
 
 ## Install
@@ -402,9 +407,10 @@ Pimento talks to one Microsoft Entra tenant at a time. It uses the first of:
 2. the `PIMENTO_TENANT` environment variable
 3. the tenant you picked in the app's toolbar (remembered), or the one set under
    **Settings › General › Open with**
-4. the tenant of az's current account (`az account show`)
+4. the tenant of az's current account (`az account show`), or with
+   [Pimento sign-in](#pimento-sign-in-without-the-azure-cli) the tenant you signed in to
 
-The `pimento` CLI uses 1, 2 and 4: it is stateless and does not read the app's settings.
+The `pimento` CLI uses 1, 2 and 4: it does not read the app's tenant settings.
 
 The tenant picker (<kbd>⇧</kbd><kbd>⌘</kbd><kbd>T</kbd>, or click the tenant in the toolbar) lists every
 tenant your login can reach, sorted by name, with the domain and a short ID underneath. Type to
@@ -414,6 +420,104 @@ list (*Show hidden* brings it back). Names come from ARM's `GET /tenants`, fille
 *Unnamed tenant* with the start of its ID. *Enter ID or Domain…* takes any tenant ID or domain.
 With `--tenant` or `PIMENTO_TENANT` the picker is locked and says why.
 
+### Pimento sign-in (without the Azure CLI)
+
+By default Pimento borrows the token of your Azure CLI session. If you do not have (or want) the
+Azure CLI, Pimento can sign you in by itself with the Microsoft identity platform, as a **public
+client**: no client secret, no certificate, no service principal permissions. It acts as you, with
+the delegated *Azure Service Management* permission, exactly like the portal. You need the
+Application (client) ID of an app registration; Pimento ships none and does not borrow Microsoft's
+own client IDs.
+
+#### Register the app (once, in Microsoft Entra ID)
+
+1. Open the [Microsoft Entra admin center](https://entra.microsoft.com) › **Identity › Applications ›
+   App registrations › New registration**. You need a role that may register applications
+   (by default every member may; otherwise *Application Developer*).
+2. **Name**: for example `Pimento`. **Supported account types**: *Accounts in this organizational
+   directory only* for one tenant, or *Accounts in any organizational directory (Multitenant)* if you
+   want to use Pimento in other tenants too (as a guest, for example).
+3. **Redirect URI**: platform **Public client/native (mobile & desktop)**, value `http://localhost`.
+   Press **Register**. (Pimento listens on `http://localhost:<random port>`; Entra ignores the port
+   of a `localhost` redirect URI.)
+4. **Authentication**: check that the platform **Mobile and desktop applications** lists
+   `http://localhost` (if not: *Add a platform* › *Mobile and desktop applications* › custom redirect
+   URI `http://localhost` › *Configure*). Under **Advanced settings**, set **Allow public client
+   flows** to **Yes** (needed for the device code) and **Save**.
+5. **API permissions** › **Add a permission** › **Azure Service Management** › **Delegated
+   permissions** › `user_impersonation` › **Add permissions**. (`openid`, `profile` and
+   `offline_access` are requested at sign-in and need no entry.) If users in your tenant may not
+   consent to apps, an administrator clicks **Grant admin consent**.
+6. **Overview**: copy the **Application (client) ID**. Do not create a client secret or
+   certificate: Pimento does not use one.
+
+For a multi-tenant registration, each other tenant consents on first sign-in there (or its
+administrator grants consent); the app then shows up under *Enterprise applications* in that tenant.
+
+#### Sign in
+
+- **App**: Settings › **Account** › paste the client ID › **Sign In…** (opens your browser) or
+  **Sign In with Code…** (shows a code to enter at `https://microsoft.com/devicelogin` on any
+  device, with *Copy Code* and *Open Page*). Signing in makes *Pimento sign-in* the auth source;
+  the radio buttons switch back to the Azure CLI at any time. The main window offers both when
+  you are signed out.
+- **CLI**:
+
+  ```sh
+  pimento login --client-id 00000000-0000-0000-0000-000000000000   # browser
+  pimento login --device-code                                       # SSH, headless: a code to enter elsewhere
+  pimento whoami                                                    # auth source, account, tenant
+  pimento list --auth az                                            # this once with the Azure CLI
+  pimento logout                                                    # or --all
+  ```
+
+Where tokens come from: `--auth az|pimento` (CLI, any command), else `$PIMENTO_AUTH`, else the
+saved choice (Settings › Account, or `pimento login`), else the Azure CLI. The client ID:
+`--client-id`, else `$PIMENTO_CLIENT_ID`, else the saved one. `pimento logout` of the last account
+switches back to the Azure CLI; *Sign Out* in the app keeps the choice so you can sign in again.
+Both share the settings file `auth.json` next to the presets (source, client ID, chosen account,
+and a pending claims challenge; no secrets).
+
+**Tenants.** You sign in once, to your home tenant (or `--tenant` / the tenant picked in the app).
+Switching tenants in the picker, `--tenant` or `$PIMENTO_TENANT` redeems the refresh token for that
+tenant: no new sign-in, as long as you are a member or guest there and the app is consented there.
+The tenant picker lists the tenants of your account from ARM's `GET /tenants`.
+
+**MFA and Conditional Access.** When Microsoft asks for more (MFA, a compliant device, an
+authentication context for a role), Pimento says so in plain words (*Multi-factor authentication is
+required … (AADSTS50076)*) and asks you to sign in again. A claims challenge that comes with the
+error, or with an activation that needs an authentication context, is kept and sent with the next
+browser sign-in, so the new token carries what was asked for.
+
+**How it works.** Browser: OAuth 2.0 authorization code flow with PKCE (S256), `state` and `nonce`,
+against `https://login.microsoftonline.com/<tenant or organizations>/oauth2/v2.0/`. A one-shot
+HTTP listener on 127.0.0.1 (and ::1) on a random port receives the redirect, checks `state`,
+answers *You can close this tab* and stops; it gives up after 5 minutes. Device code: the
+documented polling, with `authorization_pending`, `slow_down` (5 seconds more each time) and
+expiry. Scopes: `https://management.azure.com/user_impersonation offline_access openid profile`.
+Access tokens (about an hour) stay in memory, per account and tenant, and are renewed five minutes
+before they expire, computed from `expires_in` on this Mac's clock (a skewed clock does not make a
+fresh token look expired). The name and IDs in *Signed in as …* come from the id token
+(`oid`, `tid`, `preferred_username`, `name`).
+
+**Where the refresh token is kept.**
+
+- **macOS**: the login **Keychain**, a generic password per account, service
+  `io.github.melvin2306.pimento`, account `<object id>.<home tenant id>`, accessible after first
+  unlock, this device only (not synced). The account's name is stored in the item's attributes, so
+  listing accounts reads no secret. The app and the CLI share the items. Pimento is signed ad hoc,
+  so macOS ties the item to the exact binary that created it: the first time the other binary (the
+  CLI after signing in in the app, or the reverse), or a new build after an update, reads it, macOS
+  asks for your login password (*Always Allow* stops the question until the next update). To avoid
+  that for the CLI, set `PIMENTO_TOKEN_STORE=file`.
+- **Linux and other systems**, or `PIMENTO_TOKEN_STORE=file`: `~/.config/pimento/tokens.json`
+  (`$XDG_CONFIG_HOME/pimento`, or `$PIMENTO_TOKEN_FILE`), mode 600 in a folder with mode 700.
+  **Less secure** than the Keychain: any program running as you can read it.
+
+`pimento logout` / *Sign Out* delete the item (or the file's entry). Microsoft revokes refresh
+tokens on password changes and when an administrator revokes your sessions; Pimento then asks you
+to sign in again.
+
 ### Settings
 
 <kbd>⌘</kbd><kbd>,</kbd> opens Settings. Changes apply immediately; *Reset All Settings to Defaults*
@@ -422,6 +526,7 @@ is under General.
 | Tab | Options |
 | --- | --- |
 | General | tenant to open with (last used, az's current, or a specific one); load roles on launch; refresh automatically (off, 1, 5 or 15 minutes); menu bar icon (on by default), its remaining time, hide the Dock icon, launch at login (see [Menu bar](#menu-bar)); theme (see below); show or hide the Type, Membership, Condition and Duration columns (also via right-click on a column header); unhide hidden tenants |
+| Account | sign in with the Azure CLI or Pimento sign-in; the client ID of your app registration; signed-in accounts (*Use*, *Sign Out*, *Sign Out All*); *Sign In…* (browser) and *Sign In with Code…* (see [Pimento sign-in](#pimento-sign-in-without-the-azure-cli)) |
 | Activation | default duration; parallel requests (1 to 16, default 8); confirm before activating Owner roles (on by default); remember recent justifications and tickets and offer them from the clock buttons next to the fields; start with the last justification filled in |
 | History | keep a history (on by default); keep records for 30, 90 or 365 days or forever; the file, Show in Finder, Clear History |
 | Notifications | macOS permission state, with a shortcut to System Settings when it is off; send a test notification; notify when activations finish, or only when something fails; expiry reminders and how long before (5, 10, 15 or 30 minutes); notify when a scheduled activation starts; approval decisions on your requests; new approval requests for you; sound |
@@ -471,8 +576,8 @@ affiliated with or endorsed by Microsoft.
 
 <!-- cli-readme:start -->
 `pimento` lists and activates your PIM roles from a terminal or a script. It runs the same
-code as the app, with your `az login` session: the token stays in memory and is only sent to
-`management.azure.com`.
+code as the app, with your `az login` session or, after `pimento login`, its own sign-in (see
+*Signing in* below): access tokens stay in memory and are only sent to `management.azure.com`.
 
 ```sh
 pimento list                                 # eligible roles in az's current tenant, and which are active
@@ -541,12 +646,24 @@ pimento history import-azure --since 30d     # add your requests from the portal
 | `pimento presets [list] \| show NAME \| save NAME FILTER… [--role NAME] [--exact] [-j TEXT] [--hours N\|max] [--ticket-system NAME] [--force] \| delete NAME` | Saved presets (see below) |
 | `pimento history [WORD…] [--since WHEN] [--until WHEN] [--action NAME…] [--outcome NAME…] [--tenant ID\|NAME] [--limit N] [--json \| --csv]` | The history, newest first (50 rows in the table unless `--limit`; all with `--json`/`--csv`) |
 | `pimento history export FILE.csv [filters]`, `history import-azure [--since WHEN]`, `history clear [--yes]` | CSV to a file (`-` for stdout); add your past requests from Azure (read-only); delete it (asks, or `--yes`) |
+| `pimento login [--device-code] [--client-id ID] [--tenant ID]` | Signs in without the Azure CLI (browser, or a code to enter on another device) and makes Pimento sign-in the auth source |
+| `pimento logout [--all]` | Forgets the signed-in account (or all); with none left, the Azure CLI is the auth source again |
+| `pimento whoami` | The auth source and where it was chosen, who its token is for, and Pimento sign-in's accounts (exit 3 when not signed in) |
 | `pimento completions zsh\|bash\|fish` | Prints a shell completion script |
 | `pimento version`, `pimento help [COMMAND]` | Version; help for a command (also `COMMAND --help`) |
 
 `list`, `activate`, `deactivate`, `renew`, `extend`, `scheduled`, `cancel`, `pending`, `wait`, `approvals`, `approve`,
 `deny`, `status` and `tenants` take `-t, --tenant ID` and `--json`. The tenant is
-`--tenant`, else `$PIMENTO_TENANT`, else az's current tenant.
+`--tenant`, else `$PIMENTO_TENANT`, else az's current tenant (with Pimento sign-in: the tenant
+you signed in to).
+
+**Signing in.** Every command takes `--auth az|pimento`: the Azure CLI session (the default) or
+Pimento's own sign-in. Without the flag, `$PIMENTO_AUTH` decides, then the choice saved by
+`pimento login` or the app's Settings › Account. `pimento login` needs the client ID of your app
+registration (`--client-id`, `$PIMENTO_CLIENT_ID`, or saved); see
+[Pimento sign-in](#pimento-sign-in-without-the-azure-cli). On an SSH session or a machine without
+a browser, use `pimento login --device-code`. Sign-in errors print a readable reason (for AADSTS
+codes) and the command that fixes them.
 
 **Selecting roles.** A FILTER matches the resource name (case-insensitive substring); several
 filters are OR-ed. A filter starting with `/` is an ARM scope and matches it and everything below
@@ -680,6 +797,9 @@ exactly one JSON document (the plan and progress of `activate` go to stderr):
 | `wait` | `{tenantId, user, timeout, results: [{target, outcome, status, request, until, reviewer, reviewJustification}], summary: {approved, rejected, timedOut, notFound}}` (`outcome` is `approved`, `denied`, `expired`, `canceled`, `failed`, `timeout` or `notFound`) |
 | `approvals` | `{tenantId, user, available, note, requests: [{id, name, approvalId, stageId, requester: {objectId, name, email}, roleName, roleDefinitionId, scope, scopeName, scopeType, isOwner, status, start, end, duration, justification, ticketNumber, ticketSystem, createdOn, expiresAt}]}` (`available: false` with a `note` when Azure refused the listing) |
 | `approve`, `deny` | `{decision, dryRun, tenantId, user, justification, results: [{outcome, request, code, message, url, body}], notFound, summary: {decided, skipped, failed, planned}}` (`outcome` is `approved`, `denied`, `planned`, `skipped` or `failed`; `url` and `body` only in a dry run) |
+| `login` | `{account: {id, objectId, username, name, tenantId, homeTenantId, clientId, signedInAt, isDefault}, source, store}` |
+| `logout` | `{removed: [accountId], remaining}` |
+| `whoami` | `{source, origin, user, tenantId, error, accounts: [account], clientId, tokenStore}` (`origin` is `commandLine`, `environment`, `saved` or `default`) |
 | `presets list`, `presets show` | `{file, presets: [{id, name, tenantId, roles, match, justification, duration, ticketSystem, createdAt, updatedAt}]}`; `show` prints one preset |
 
 Times are ISO 8601 in UTC. Keys without a value are left out.
@@ -691,7 +811,7 @@ Times are ISO 8601 in UTC. Keys without a value are left out.
 | 0 | Success, including "nothing to do" (everything already active) |
 | 1 | An activation or request failed, no role matched (or none of a preset's roles is eligible), or you answered no |
 | 2 | Usage error: unknown option, no justification or selection, invalid tenant or `--at` time, a required ticket missing, or a command that changes roles without `--yes` when stdin is not a terminal |
-| 3 | az is missing or not signed in, or ARM rejected the token (run the `az login` command it prints) |
+| 3 | az is missing or not signed in, Pimento sign-in has no (valid) account, or ARM rejected the token (run the `az login` or `pimento login` command it prints) |
 | 4 | `pimento wait`: still no decision when `--timeout` ran out |
 
 #### Shell completions
@@ -777,10 +897,19 @@ directly with the PIM APIs (`api-version=2020-10-01`):
 
 ## Security and privacy
 
-- Pimento acts **as you**, with your own `az` session. It has no app registration, service
-  principal, secret or elevated permission of its own, and can do nothing you could not do in the portal.
-- The access token is fetched on demand, **kept in memory only**, and sent **only to
-  `management.azure.com`**. It is never written to disk, logged or displayed.
+- Pimento acts **as you**, with your own `az` session or, with
+  [Pimento sign-in](#pimento-sign-in-without-the-azure-cli), a delegated token of *your* app
+  registration (a public client: no secret, no certificate, no application permissions). It has no
+  service principal or elevated permission of its own, and can do nothing you could not do in the portal.
+- Access tokens are fetched on demand, **kept in memory only**, and sent **only to
+  `management.azure.com`**. They are never written to disk, logged or displayed.
+- Pimento sign-in sends authorization codes, PKCE verifiers, device codes and refresh tokens **only
+  to `login.microsoftonline.com`** (its token and device-code endpoints, over HTTPS; a guard refuses
+  any other host or method). The browser redirect is received on 127.0.0.1/::1 only, checked against
+  a random `state`, and the listener stops after one answer or 5 minutes. The **refresh token** is
+  kept in the macOS **Keychain** (or, on other systems or with `PIMENTO_TOKEN_STORE=file`, in
+  `~/.config/pimento/tokens.json`, mode 600: less secure). `pimento logout` / *Sign Out* delete it.
+  `auth.json` holds the auth source, client ID, chosen account and a pending claims challenge, no secrets.
 - It keeps its settings in `UserDefaults`: the chosen tenant ID, the hidden tenant IDs, table
   columns, the options from the Settings window and, unless you turn it off, your last
   10 justifications (Settings › Activation clears them).
@@ -798,8 +927,9 @@ directly with the PIM APIs (`api-version=2020-10-01`):
   and one that looks like a raw body is not kept. Turn it off or shorten the retention under
   Settings › History; *Clear History…* or `pimento history clear` deletes it. The CSV export is
   written with mode 600 too.
-- The `pimento` CLI keeps no other state: no settings of its own, no token cache. It writes the
-  presets file (`pimento presets save` and `delete`) and the history.
+- The `pimento` CLI keeps no other state: no settings of its own beyond `auth.json`, no access-token
+  cache. It writes the presets file (`pimento presets save` and `delete`), the history, and with
+  `pimento login` / `logout` the refresh token and `auth.json`.
 - No analytics, no update checks, no third-party dependencies (the CLI's argument parser is
   hand-written, so the build needs no package downloads).
 
@@ -834,6 +964,10 @@ See [SECURITY.md](SECURITY.md) for how to report a vulnerability.
   requests, and only as far back as Azure lists them.
 - **Launch at login** may be refused for an ad-hoc signed build; add Pimento under System Settings ›
   General › Login Items instead. Pimento then opens its window at login like any launch.
+- **Pimento sign-in** was built against Microsoft's documentation and tested with a fake token
+  endpoint, not yet against a live tenant (no shared client ID exists; you register your own). The
+  Keychain items are tied to the ad-hoc signed binary: after an update, or when the CLI reads what
+  the app saved, macOS asks for your password once. Sovereign clouds are not supported.
 - Not notarized (yet), so Gatekeeper asks before the first launch of a downloaded build.
 - The CLI is built and tested for macOS only. Its code avoids AppKit and imports
   `FoundationNetworking` where Linux needs it, but there is no Linux build in CI.
@@ -842,6 +976,14 @@ See [SECURITY.md](SECURITY.md) for how to report a vulnerability.
 
 **"Not signed in" / `AADSTS...` errors.** Your az session has no valid token for that tenant.
 Run the command the app shows, usually `az login --tenant <tenant>`, then press Retry.
+
+**Pimento sign-in: `AADSTS…` when signing in.** The message says what to change. The usual ones:
+*client ID was not found* (AADSTS700016: wrong ID, or the registration is single-tenant and you
+signed in to another tenant), *redirect URI does not match* (AADSTS50011: add
+*Mobile and desktop applications* with `http://localhost`), *does not allow public client flows*
+(AADSTS7000218: turn on *Allow public client flows*), *no consent* (AADSTS65001: grant consent for
+*Azure Service Management*), *Conditional Access* (AADSTS53003/53000: sign in from a compliant
+device, or ask your administrator). `pimento whoami` shows which source and account are in use.
 
 **I see no roles, or the wrong ones.** Check the tenant in the toolbar. Pimento shows the
 eligibilities of one tenant at a time; `pimento tenants` lists the ones az knows about.
@@ -886,6 +1028,8 @@ in `~/Applications`.
 ```
 Sources/PimentoCore/     logic and ARM/az plumbing: models, matching, request bodies,
                          error mapping, tenant resolution. Fully unit-tested.
+Sources/PimentoCore/SignIn/ Pimento sign-in: PKCE, loopback listener, device code, token
+                         endpoint requests and errors, Keychain/file token store. Unit-tested.
 Sources/PimentoCore/CLI/ the CLI's commands: parser, selection, confirmation, exit codes,
                          tables, JSON, completions, install paths. Unit-tested.
 Sources/pimento/         the `pimento` executable (Foundation only: terminal + network wiring)

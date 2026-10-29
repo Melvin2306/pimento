@@ -8,6 +8,39 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Pimento sign-in**: sign in without the Azure CLI, with your own public-client app registration
+  in Microsoft Entra ID (README › *Pimento sign-in* has the exact registration steps; Pimento ships
+  no client ID and does not use Microsoft's). No packages: OAuth 2.0 with URLSession and the Security
+  framework.
+  - Flows: authorization code with PKCE (S256), `state` and `nonce`, the redirect received by a
+    one-shot listener on `http://localhost:<random port>` (127.0.0.1 and ::1; answers *You can close
+    this tab*; 5-minute timeout); and the device code flow for SSH and headless use, polling with
+    `authorization_pending`, `slow_down` and expiry handled. Scopes
+    `https://management.azure.com/user_impersonation offline_access openid profile`.
+  - Tokens: the refresh token in the Keychain (generic password, service
+    `io.github.melvin2306.pimento`, one item per account, after first unlock, this device only; the
+    account info in the item's attributes, so listing reads no secret), shared by the app and the
+    CLI; on other systems or with `PIMENTO_TOKEN_STORE=file`, `~/.config/pimento/tokens.json`
+    (mode 600, less secure). Access tokens stay in memory, per account and tenant, renewed five
+    minutes before `expires_in` runs out. Rotated refresh tokens are kept. Other tenants get tokens
+    by redeeming the refresh token there, so the tenant picker works without signing in again.
+  - Errors: `invalid_grant` / `interaction_required` ask you to sign in again; common AADSTS codes
+    (MFA, Conditional Access, unknown client ID, redirect URI, public client flows off, consent,
+    expired or revoked sessions, clock) in plain words; a claims challenge (from the token endpoint,
+    or from an activation that needs an authentication context) is sent with the next browser
+    sign-in.
+  - Only `login.microsoftonline.com`'s token and device-code endpoints receive sign-in data (a
+    transport guard refuses anything else); access tokens still go only to `management.azure.com`.
+- **Settings › Account**: auth source (*Azure CLI*, the default, or *Pimento sign-in*), the client
+  ID (checked as a GUID), signed-in accounts with *Use* and *Sign Out* (*Sign Out All*), *Sign In…*
+  (browser) and *Sign In with Code…* (a sheet with the code, *Copy Code* and *Open Page*). When you
+  are signed out, the main window offers both the `az login` command and Pimento sign-in.
+- **CLI**: `pimento login [--device-code] [--client-id ID] [--tenant ID]`, `pimento logout [--all]`,
+  `pimento whoami [--json]`; every command takes `--auth az|pimento`. The source is `--auth`, then
+  `$PIMENTO_AUTH`, then the setting shared with the app (`auth.json`), then the Azure CLI; the client
+  ID `--client-id`, `$PIMENTO_CLIENT_ID`, then the saved one. Sign-in problems exit 3 with the
+  `pimento login` command that fixes them. Completions and help cover the new commands.
+
 - Menu bar extra (Settings › General › Menu bar › *Show in menu bar*, on by default): a template
   shield-and-arrow glyph drawn by `scripts/make-icon.swift`, followed by the number of active roles and,
   with *Show remaining time in menu bar* (off by default), the soonest end (`1:24`, or `2 · 1:24`).
