@@ -1282,6 +1282,7 @@ final class AppModel {
         }
         var renewed: [EligibleRole] = []
         var lost: [EligibleRole] = []
+        var awaiting: [EligibleRole] = []
         let now = Date()
         for plan in plans {
             guard case .done(let outcome) = progress[plan.id] else { continue }
@@ -1289,6 +1290,12 @@ final class AppModel {
             case .renewed(let until):
                 renewed.append(plan.role)
                 for row in self.roles(sharing: plan.role) { pending[row.id] = .active(until: until, since: now) }
+            case .activated:
+                // Ended, and the new activation was only submitted (waits for
+                // an approver): not active now.
+                awaiting.append(plan.role)
+                checkedActive.remove(plan.id)
+                for row in self.roles(sharing: plan.role) { pending[row.id] = .inactive(since: now) }
             case .failed(let code, _) where code == "ReactivationFailed":
                 lost.append(plan.role)
                 checkedActive.remove(plan.id)
@@ -1301,14 +1308,17 @@ final class AppModel {
         let all = selection.tooSoon + selection.needsApproval + selection.needsTicket + plans.map(\.role)
         let failed = all.filter { outcomes[$0.id]?.isFailure == true }
         var text = lifecycleBanner(done: renewed.count, verb: "renewed", failed: failed, outcomes: outcomes)
+        if !awaiting.isEmpty {
+            text += " \(awaiting.count) ended and awaiting approval (you get a notification when decided)."
+        }
         if !lost.isEmpty { text += " \(lost.count) ended but not active again: activate \(lost.count == 1 ? "it" : "them") again." }
-        banner = Banner(kind: failed.isEmpty ? .success : .error, text: text)
+        banner = Banner(kind: !failed.isEmpty ? .error : awaiting.isEmpty ? .success : .info, text: text)
         isActivating = false
         roles = applyPending(to: roles)
         // The old reminders are for the old expiry; renewed roles get new ones.
-        Notifier.rolesEnded(Set((renewed + lost).map { ReminderRole.key($0.policyKey) }))
+        Notifier.rolesEnded(Set((renewed + lost + awaiting).map { ReminderRole.key($0.policyKey) }))
         Notifier.operationFinished(roles: all, outcomes: outcomes, operation: .renew,
-                                   context: reminderContext(justification: justification), prefs: prefs)
+                                   context: reminderContext(justification: justification, duration: requested), prefs: prefs)
         await refreshAfterChange()
     }
 
