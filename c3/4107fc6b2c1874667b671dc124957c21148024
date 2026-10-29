@@ -1,0 +1,61 @@
+Tests/PimentoCoreTests/PolicyTests.swift
+  s_4884204a812fec::t_d4b6b52dc7fe34 98,100
+Sources/PimentoCore/ActivationOutcome.swift
+  s_4884204a812fec::t_45c8bbfb9eea6a 18-20,115-119
+  s_4884204a812fec::t_dd30523de269ca 14-17,21-23,27,32-41,68-77,80-84,94-114,120-133,135-137,142-146,152-153,159-174
+  s_4884204a812fec::t_e755f029d46fa1 175
+Sources/PimentoCore/RoleLifecycle.swift
+  s_4884204a812fec::t_5aa6db757d8106 1-6,10-12,19-98,100-109,111-137,139-164,166-176
+  s_4884204a812fec::t_45c8bbfb9eea6a 7-9,13-18,138
+  s_4884204a812fec::t_0237cbab1b8d62 99,110,165
+Sources/PimentoCore/ActivationRequest.swift
+  s_4884204a812fec::t_90e84660e7d5c2 3-16,18,21,23-30,42-45,47-48,51-66,70-72,80-81,89-90,103,105-115,156,169,173-225,227-249,270-273,280-283,327-332
+  s_4884204a812fec::t_b54ed17b494426 226,250-269
+Sources/PimentoCore/ReminderActions.swift
+  s_4884204a812fec::t_8ce5d6151547b2 1-150
+Sources/PimentoCore/CLI/CLIOutput.swift
+  s_4884204a812fec::t_10a5c265905ead 258-259,274-277,279-280,282-294,298,315-328,330,345-347,349-351,358-359,366-379
+  s_4884204a812fec::t_45524258b6c648 380-381
+Sources/PimentoCore/PIMService.swift
+  s_4884204a812fec::t_45c8bbfb9eea6a 171-174
+  s_4884204a812fec::t_b53379c5a9b784 53-68,74-82,85-86,95-98,162-164,169-170,175-221
+Tests/PimentoCoreTests/Fixtures/assignments.json
+  s_4884204a812fec::t_057b2ef9e666e0 77-103,106
+Sources/PimentoCore/Models.swift
+  s_4884204a812fec::t_7ca99eb0e39bad 61,64,67-73
+Tests/PimentoCoreTests/ActivationRequestTests.swift
+  s_4884204a812fec::t_d4b6b52dc7fe34 73
+Sources/PimentoCore/ActivationSummary.swift
+  s_4884204a812fec::t_2afca90e4c2fdc 13-28,45-58,64,67-68,70-73,76,88-93,95-97,99-101,105-111,125-126,132,140-142,146-164
+  s_4884204a812fec::t_8f9538f7da135e 165
+Tests/PimentoCoreTests/LifecycleTests.swift
+  s_4884204a812fec::t_fef996a94e1ab8 1-149,151-152,162-224,226-301,303-327,329-339,342-352
+  s_4884204a812fec::t_53fd3788440528 150,153-161,302,328,340-341
+  s_4884204a812fec::t_057b2ef9e666e0 225
+Tests/PimentoCoreTests/ReminderActionTests.swift
+  s_4884204a812fec::t_4a2a0d5853b164 31
+  s_4884204a812fec::t_29a542e6d6be96 1-30,32-112
+Sources/PimentoCore/EligibleRole.swift
+  s_4884204a812fec::t_3eb0bff06ea7a2 34-38,44-45,59-60,115-122,126-132,139,142-143,145,151-174,180,207-209
+Sources/PimentoCore/CLI/CLIRunner.swift
+  s_4884204a812fec::t_dbc2a03824cc2d 95-97,458-467
+Sources/PimentoCore/ActiveAssignment.swift
+  s_4884204a812fec::t_e546be26cb8489 1-45,48,52,55
+  s_4884204a812fec::t_b54ed17b494426 46-47,49-51,53-54
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c34107fc6b2c1874667b671dc124957c21148024",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
