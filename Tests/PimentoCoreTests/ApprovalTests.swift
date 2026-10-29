@@ -187,6 +187,22 @@ struct ApprovalDecisionTests {
         #expect(await transport.requests.allSatisfy { $0.httpMethod == "GET" })
     }
 
+    @Test func aStageLookupErrorIsAFailureNotNotPending() async throws {
+        let transport = RecordingTransport { _ in
+            (Data(#"{"error":{"code":"ExpiredAuthenticationToken","message":"expired"}}"#.utf8), 401)
+        }
+        let service = PIMService(transport: transport, tokens: StaticTokenProvider())
+        let plans = try PlannedDecision.plan(await service.resolvingStages([request(stage: nil)]), decision: .approve, justification: "x")
+        let box = DecisionBox()
+        try await service.decide(plans) { p, o in box.set(p.request.name, o) }
+        guard case .failed(let code, let message)? = box.all.values.first else {
+            Issue.record("expected a failure, got \(String(describing: box.all.values.first))")
+            return
+        }
+        #expect(code == "StageLookupFailed" && message.contains("401"))
+        #expect(await transport.requests.allSatisfy { $0.httpMethod == "GET" })
+    }
+
     @Test func noApproverPermissionsIsAnEmptyInbox() async throws {
         for (status, body) in [(403, #"{"error":{"code":"AuthorizationFailed","message":"no access"}}"#),
                                (400, #"{"Message":"Currently, ?$filter=asApprover() needs to be passed to this endpoint"}"#),

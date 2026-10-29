@@ -167,6 +167,9 @@ public struct ApprovalRequest: Identifiable, Hashable, Sendable {
     /// The stage you can decide, when the approvals listing named it; nil:
     /// read when deciding (`…/stages`).
     public var stage: ApprovalStage?
+    /// Why reading the stages failed (token, permission, network): the
+    /// request is then reported as failed, not as "not pending".
+    public var stageLookupError: String?
     public let scope: String
     public let roleDefinitionId: String
     public let roleName: String
@@ -699,8 +702,10 @@ extension PIMService {
     public func resolvingStages(_ requests: [ApprovalRequest]) async -> [ApprovalRequest] {
         var result: [ApprovalRequest] = []
         for var r in requests {
-            if r.stage == nil, let stages = try? await approvalStages(approvalId: r.approvalId) {
-                r.stage = ApprovalStage.decidable(stages)
+            if r.stage == nil {
+                do { r.stage = ApprovalStage.decidable(try await approvalStages(approvalId: r.approvalId)) } catch {
+                    r.stageLookupError = error.localizedDescription
+                }
             }
             result.append(r)
         }
@@ -739,7 +744,12 @@ extension PIMService {
     }
 
     func decide(_ plan: PlannedDecision, token: String) async -> DecisionOutcome {
-        guard let url = plan.url else { return .notPending(DecisionOutcome.noOpenStageMessage) }
+        guard let url = plan.url else {
+            if let why = plan.request.stageLookupError {
+                return .failed(code: "StageLookupFailed", message: "Could not read the approval's stages: \(why)")
+            }
+            return .notPending(DecisionOutcome.noOpenStageMessage)
+        }
         var request = URLRequest(url: url, timeoutInterval: 60)
         request.httpMethod = "PATCH"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
