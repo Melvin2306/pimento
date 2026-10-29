@@ -1,0 +1,118 @@
+{
+  "value": [
+    {
+      "id": "/subscriptions/aaaaaaaa-0000-0000-0000-00000000000a/providers/Microsoft.Authorization/roleAssignmentScheduleRequests/1a1a1a1a-0000-4000-8000-000000000001",
+      "name": "1a1a1a1a-0000-4000-8000-000000000001",
+      "properties": {
+        "scope": "/subscriptions/aaaaaaaa-0000-0000-0000-00000000000a",
+        "roleDefinitionId": "/subscriptions/aaaaaaaa-0000-0000-0000-00000000000a/providers/Microsoft.Authorization/roleDefinitions/8e3af657-a8ff-443c-a75c-2fe8c4bcb635",
+        "principalId": "11111111-2222-3333-4444-555555555555",
+        "requestType": "SelfActivate",
+        "status": "Provisioned",
+        "scheduleInfo": { "startDateTime": "2026-10-28T09:00:00.12Z", "expiration": { "type": "AfterDuration", "duration": "PT8H" } },
+        "ticketInfo": { "ticketNumber": "CHG-1001", "ticketSystem": "ServiceNow" },
+        "justification": "deploy, release 2.4",
+        "createdOn": "2026-10-28T09:00:00.12Z",
+        "expandedProperties": {
+          "scope": { "displayName": "Contoso Production", "type": "subscription" },
+          "roleDefinition": { "displayName": "Owner" }
+        }
+      }
+    },
+    {
+      "id": "/subscriptions/aaaaaaaa-0000-0000-0000-00000000000a/providers/Microsoft.Authorization/roleAssignmentScheduleRequests/2b2b2b2b-0000-4000-8000-000000000002",
+      "name": "2b2b2b2b-0000-4000-8000-000000000002",
+      "properties": {
+        "scope": "/subscriptions/aaaaaaaa-0000-0000-0000-00000000000a",
+        "roleDefinitionId": "/subscriptions/aaaaaaaa-0000-0000-0000-00000000000a/providers/Microsoft.Authorization/roleDefinitions/8e3af657-a8ff-443c-a75c-2fe8c4bcb635",
+        "principalId": "11111111-2222-3333-4444-555555555555",
+        "requestType": "SelfDeactivate",
+        "status": "Revoked",
+        "justification": "Ended early with Pimento",
+        "createdOn": "2026-10-28T12:30:00Z",
+        "expandedProperties": {
+          "scope": { "displayName": "Contoso Production", "type": "subscription" },
+          "roleDefinition": { "displayName": "Owner" }
+        }
+      }
+    },
+    {
+      "id": "/subscriptions/bbbbbbbb-0000-0000-0000-00000000000b/providers/Microsoft.Authorization/roleAssignmentScheduleRequests/3c3c3c3c-0000-4000-8000-000000000003",
+      "name": "3c3c3c3c-0000-4000-8000-000000000003",
+      "properties": {
+        "scope": "/subscriptions/bbbbbbbb-0000-0000-0000-00000000000b",
+        "roleDefinitionId": "/subscriptions/bbbbbbbb-0000-0000-0000-00000000000b/providers/Microsoft.Authorization/roleDefinitions/b24988ac-6180-42a0-ab88-20f7382dd24c",
+        "principalId": "11111111-2222-3333-4444-555555555555",
+        "requestType": "SelfActivate",
+        "status": "Denied",
+        "scheduleInfo": { "startDateTime": "2026-10-27T15:00:00Z", "expiration": { "type": "AfterDuration", "duration": "PT4H" } },
+        "justification": "=HYPERLINK(\"http://example.invalid\")",
+        "createdOn": "2026-10-27T15:00:00Z",
+        "expandedProperties": {
+          "scope": { "displayName": "Contoso Staging", "type": "subscription" },
+          "roleDefinition": { "displayName": "Contributor" }
+        }
+      }
+    },
+    {
+      "id": "/subscriptions/bbbbbbbb-0000-0000-0000-00000000000b/providers/Microsoft.Authorization/roleAssignmentScheduleRequests/4d4d4d4d-0000-4000-8000-000000000004",
+      "name": "4d4d4d4d-0000-4000-8000-000000000004",
+      "properties": {
+        "scope": "/subscriptions/bbbbbbbb-0000-0000-0000-00000000000b",
+        "roleDefinitionId": "/subscriptions/bbbbbbbb-0000-0000-0000-00000000000b/providers/Microsoft.Authorization/roleDefinitions/acdd72a7-3385-48ef-bd42-f606fba81ae7",
+        "principalId": "11111111-2222-3333-4444-555555555555",
+        "requestType": "SelfActivate",
+        "status": "Canceled",
+        "scheduleInfo": { "startDateTime": "2026-11-02T08:00:00Z", "expiration": { "type": "AfterDateTime", "endDateTime": "2026-11-02T16:00:00Z" } },
+        "justification": "monday report",
+        "createdOn": "2026-10-29T10:00:00Z",
+        "expandedProperties": {
+          "scope": { "displayName": "Contoso Staging", "type": "subscription" },
+          "roleDefinition": { "displayName": "Reader" }
+        }
+      }
+    },
+    {
+      "id": "/subscriptions/cccccccc-0000-0000-0000-00000000000c/providers/Microsoft.Authorization/roleAssignmentScheduleRequests/5e5e5e5e-0000-4000-8000-000000000005",
+      "name": "5e5e5e5e-0000-4000-8000-000000000005",
+      "properties": {
+        "scope": "/subscriptions/cccccccc-0000-0000-0000-00000000000c",
+        "roleDefinitionId": "/subscriptions/cccccccc-0000-0000-0000-00000000000c/providers/Microsoft.Authorization/roleDefinitions/acdd72a7-3385-48ef-bd42-f606fba81ae7",
+        "principalId": "11111111-2222-3333-4444-555555555555",
+        "requestType": "AdminAssign",
+        "status": "Provisioned",
+        "scheduleInfo": { "startDateTime": "2026-10-20T08:00:00Z" },
+        "createdOn": "2026-10-20T08:00:00Z",
+        "expandedProperties": { "scope": { "displayName": "Fabrikam Sandbox", "type": "subscription" }, "roleDefinition": { "displayName": "Reader" } }
+      }
+    },
+    {
+      "id": "/subscriptions/cccccccc-0000-0000-0000-00000000000c/providers/Microsoft.Authorization/roleAssignmentScheduleRequests/6f6f6f6f-0000-4000-8000-000000000006",
+      "name": "6f6f6f6f-0000-4000-8000-000000000006",
+      "properties": {
+        "scope": "/subscriptions/cccccccc-0000-0000-0000-00000000000c",
+        "roleDefinitionId": "/subscriptions/cccccccc-0000-0000-0000-00000000000c/providers/Microsoft.Authorization/roleDefinitions/acdd72a7-3385-48ef-bd42-f606fba81ae7",
+        "principalId": "99999999-0000-4000-8000-000000000009",
+        "requestType": "SelfActivate",
+        "status": "Provisioned",
+        "scheduleInfo": { "startDateTime": "2026-10-26T08:00:00Z", "expiration": { "type": "AfterDuration", "duration": "PT1H" } },
+        "createdOn": "2026-10-26T08:00:00Z",
+        "expandedProperties": { "scope": { "displayName": "Fabrikam Sandbox", "type": "subscription" }, "roleDefinition": { "displayName": "Reader" } }
+      }
+    },
+    {
+      "id": "/subscriptions/cccccccc-0000-0000-0000-00000000000c/providers/Microsoft.Authorization/roleAssignmentScheduleRequests/7a7a7a7a-0000-4000-8000-000000000007",
+      "name": "7a7a7a7a-0000-4000-8000-000000000007",
+      "properties": {
+        "scope": "/subscriptions/cccccccc-0000-0000-0000-00000000000c",
+        "roleDefinitionId": "/subscriptions/cccccccc-0000-0000-0000-00000000000c/providers/Microsoft.Authorization/roleDefinitions/b24988ac-6180-42a0-ab88-20f7382dd24c",
+        "principalId": "11111111-2222-3333-4444-555555555555",
+        "requestType": "SelfActivate",
+        "status": "TimedOut",
+        "scheduleInfo": { "startDateTime": "2026-09-01T08:00:00Z", "expiration": { "type": "AfterDuration", "duration": "PT2H" } },
+        "createdOn": "2026-09-01T08:00:00Z",
+        "expandedProperties": { "scope": { "displayName": "Fabrikam Sandbox", "type": "subscription" }, "roleDefinition": { "displayName": "Contributor" } }
+      }
+    }
+  ]
+}
