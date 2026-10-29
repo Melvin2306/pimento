@@ -92,6 +92,9 @@ public struct CLIRunner: Sendable {
         case .list(let o): return try await list(o)
         case .status(let o): return try await status(o)
         case .activate(let o): return try await activate(o)
+        case .deactivate(let o): return try await deactivate(o)
+        case .renew(let o): return try await renew(o)
+        case .extend(let o): return try await extend(o)
         case .presets(let c): return try await presets(c)
         }
     }
@@ -452,6 +455,16 @@ public struct CLIRunner: Sendable {
             return style.dim("skipped") + "    \(name): already active"
         case .policyViolation, .failed:
             return style.red("failed") + "     \(name): \(outcome.summary)"
+        case .deactivated:
+            return style.green("ended") + "      \(name)"
+        case .notActive:
+            return style.dim("skipped") + "    \(name): not active (already ended)"
+        case .tooSoon(let at):
+            let when = at.map { "can be ended from " + CLIFormat.clock($0, now: now, timeZone: timeZone) } ?? "PIM ends an activation only after 5 minutes"
+            return style.yellow("too soon") + "   \(name): \(when)"
+        case .renewed(let until):
+            let when = until.map { " until " + CLIFormat.clock($0, now: now, timeZone: timeZone) } ?? ""
+            return style.green("renewed") + "    \(name)\(when)"
         }
     }
 }

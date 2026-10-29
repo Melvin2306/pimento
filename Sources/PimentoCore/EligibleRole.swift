@@ -31,12 +31,18 @@ public struct EligibleRole: Identifiable, Hashable, Sendable {
     public let conditionVersion: String?
     public var isActive: Bool
     public var activeUntil: Date?
+    /// When the current activation started (nil: not active, or unknown).
+    /// PIM refuses to end an activation in its first five minutes.
+    public var activeSince: Date?
+    /// The `roleAssignmentSchedules` id of the current activation, if known.
+    public var activeScheduleId: String?
 
     public init(
         id: String, eligibilityScheduleId: String, roleDefinitionId: String, roleName: String,
         scope: String, scopeName: String, scopeType: String, membership: Membership,
         condition: String? = nil, conditionVersion: String? = nil,
-        isActive: Bool = false, activeUntil: Date? = nil
+        isActive: Bool = false, activeUntil: Date? = nil,
+        activeSince: Date? = nil, activeScheduleId: String? = nil
     ) {
         self.id = id
         self.eligibilityScheduleId = eligibilityScheduleId
@@ -50,6 +56,8 @@ public struct EligibleRole: Identifiable, Hashable, Sendable {
         self.conditionVersion = conditionVersion
         self.isActive = isActive
         self.activeUntil = activeUntil
+        self.activeSince = activeSince
+        self.activeScheduleId = activeScheduleId
     }
 
     public static let ownerRoleGUID = "8e3af657-a8ff-443c-a75c-2fe8c4bcb635"
@@ -104,25 +112,64 @@ public enum RoleMatcher {
         id.split(separator: "/").last.map(String.init) ?? id
     }
 
+    /// The current activation of a scope + role.
+    public struct Activation: Equatable, Sendable {
+        /// nil: open-ended.
+        public var end: Date?
+        public var start: Date?
+        public var scheduleId: String?
+    }
+
     /// Active (Activated, not yet expired) assignments → latest end time per key.
     /// The value is `nil` when the instance has no end date.
     public static func activeIndex(_ assignments: [AssignmentScheduleInstance], now: Date = Date()) -> [Key: Date?] {
-        var index: [Key: Date?] = [:]
+        activations(assignments, now: now).mapValues(\.end)
+    }
+
+    /// Active (Activated, not yet expired) assignments per key; of several, the
+    /// one that ends last (an open-ended one wins).
+    public static func activations(_ assignments: [AssignmentScheduleInstance], now: Date = Date()) -> [Key: Activation] {
+        var index: [Key: Activation] = [:]
         for item in assignments {
             let p = item.properties
             guard p.assignmentType?.caseInsensitiveCompare("Activated") == .orderedSame else { continue }
             let end = AzureDate.parse(p.endDateTime)
             if let end, end <= now { continue }
             let k = key(scope: p.scope, roleDefinitionId: p.roleDefinitionId)
+            let activation = Activation(end: end, start: AzureDate.parse(p.startDateTime), scheduleId: p.roleAssignmentScheduleId)
             if let existing = index[k] {
                 // Keep the later expiry; nil (open-ended) wins.
-                guard let current = existing else { continue }
-                if end == nil || end! > current { index[k] = end }
+                guard let current = existing.end else { continue }
+                if end == nil || end! > current { index[k] = activation }
             } else {
-                index[k] = end
+                index[k] = activation
             }
         }
         return index
+    }
+
+    /// Admin-assigned (not activated) assignments of the user with an end
+    /// date, still running: the ones `SelfExtend` is for.
+    public static func timeBoundAssignments(_ assignments: [AssignmentScheduleInstance], now: Date = Date()) -> [ActiveAssignment] {
+        var seen = Set<String>()
+        return assignments.compactMap { item -> ActiveAssignment? in
+            let p = item.properties
+            guard p.assignmentType?.caseInsensitiveCompare("Assigned") == .orderedSame,
+                  p.memberType.map({ $0.caseInsensitiveCompare("Direct") == .orderedSame }) ?? true,
+                  let end = AzureDate.parse(p.endDateTime), end > now,
+                  let scheduleId = p.roleAssignmentScheduleId,
+                  seen.insert(scheduleId.lowercased()).inserted
+            else { return nil }
+            let x = p.expandedProperties
+            return ActiveAssignment(
+                id: item.id ?? scheduleId, scheduleId: scheduleId, roleDefinitionId: p.roleDefinitionId,
+                roleName: x?.roleDefinition?.displayName ?? lastPathComponent(p.roleDefinitionId),
+                scope: p.scope, scopeName: x?.scope?.displayName ?? lastPathComponent(p.scope),
+                scopeType: x?.scope?.type ?? inferScopeType(p.scope),
+                start: AzureDate.parse(p.startDateTime), end: end,
+                condition: (p.condition?.isEmpty == false) ? p.condition : nil, conditionVersion: p.conditionVersion)
+        }
+        .sorted { $0.end < $1.end }
     }
 
     public static func rows(
@@ -130,7 +177,7 @@ public enum RoleMatcher {
         assignments: [AssignmentScheduleInstance],
         now: Date = Date()
     ) -> [EligibleRole] {
-        let active = activeIndex(assignments, now: now)
+        let active = activations(assignments, now: now)
         var seen = Set<String>()
         var rows: [EligibleRole] = []
         for e in eligibilities {
@@ -157,7 +204,9 @@ public enum RoleMatcher {
                 condition: (p.condition?.isEmpty == false) ? p.condition : nil,
                 conditionVersion: p.conditionVersion,
                 isActive: activeEntry != nil,
-                activeUntil: activeEntry ?? nil
+                activeUntil: activeEntry?.end,
+                activeSince: activeEntry?.start,
+                activeScheduleId: activeEntry?.scheduleId
             ))
         }
         return rows.sorted {

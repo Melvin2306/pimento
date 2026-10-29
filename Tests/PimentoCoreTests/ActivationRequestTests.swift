@@ -70,7 +70,7 @@ struct ActivationRequestTests {
     func acceptsOneToTwentyFourHours(hours: Int) throws {
         let role = try Fixture.role("Contoso Production", "Reader")
         let body = try ActivationRequestBuilder.body(for: role, principalId: "me", justification: "x", hours: hours, now: Fixture.now)
-        #expect(body.properties.scheduleInfo.expiration.duration == "PT\(hours)H")
+        #expect(body.duration == "PT\(hours)H")
     }
 
     @Test func rejectsBlankJustificationAndMissingPrincipal() throws {

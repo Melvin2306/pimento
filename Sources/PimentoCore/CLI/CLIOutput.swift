@@ -255,7 +255,8 @@ public enum CLIJSON {
 
     public struct Result: Encodable, Equatable, Sendable {
         /// `activated`, `submitted` (pending approval), `skipped` (already
-        /// active), `failed`, or `planned` (dry run).
+        /// active / not active), `failed`, `planned` (dry run), `deactivated`
+        /// or `renewed`.
         public let outcome: String
         public let role: Role
         public let status: String?
@@ -270,18 +271,31 @@ public enum CLIJSON {
         public let maxDuration: String?
         /// True when the asked duration was capped at the policy maximum.
         public let capped: Bool?
+        /// Renew dry run: the deactivation and the activation that follows.
+        public let requests: [Request]?
+        /// Too soon to end: from when it is possible.
+        public let possibleAt: String?
 
-        public init(role: EligibleRole, outcome: ActivationOutcome?, plan: PlannedRequest?) {
+        public init(role: EligibleRole, outcome: ActivationOutcome?, plan: PlannedRequest?,
+                    followUp: PlannedRequest? = nil, skipReason: String = "already active") {
             self.role = Role(role)
-            duration = plan?.duration.iso
-            maxDuration = plan?.duration.policyMaxMinutes.map { ISODuration.format(minutes: $0) }
-            capped = plan?.duration.isClamped == true ? true : nil
-            request = outcome == nil ? plan.map { Request(method: "PUT", url: $0.url.absoluteString, body: $0.body) } : nil
-            var status: String?, until: String?, code: String?, message: String?, rules: [String]?
+            let timed = plan?.action == .activate ? plan : followUp
+            duration = timed?.duration.iso
+            maxDuration = timed?.duration.policyMaxMinutes.map { ISODuration.format(minutes: $0) }
+            capped = timed?.duration.isClamped == true ? true : nil
+            let planned = outcome == nil ? plan.map { Request(method: "PUT", url: $0.url.absoluteString, body: $0.body) } : nil
+            if let followUp, let planned, outcome == nil {
+                request = nil
+                requests = [planned, Request(method: "PUT", url: followUp.url.absoluteString, body: followUp.body)]
+            } else {
+                request = planned
+                requests = nil
+            }
+            var status: String?, until: String?, code: String?, message: String?, rules: [String]?, possibleAt: String?
             switch outcome {
             case nil:
                 self.outcome = plan == nil ? "skipped" : "planned"
-                if plan == nil { message = "already active"; until = role.activeUntil.map(AzureDate.format) }
+                if plan == nil { message = skipReason; until = role.activeUntil.map(AzureDate.format) }
             case .activated(let s, let u)?:
                 self.outcome = ActivationOutcome.isGranted(status: s) ? "activated" : "submitted"
                 status = s.isEmpty ? nil : s
@@ -298,7 +312,22 @@ public enum CLIJSON {
                 self.outcome = "failed"
                 code = c
                 message = m
+            case .deactivated(let s)?:
+                self.outcome = "deactivated"
+                status = s.isEmpty ? nil : s
+            case .notActive?:
+                self.outcome = "skipped"
+                message = "not active"
+            case .tooSoon(let at)?:
+                self.outcome = "failed"
+                code = "ActiveDurationTooShort"
+                message = "PIM ends an activation only after 5 minutes"
+                possibleAt = at.map(AzureDate.format)
+            case .renewed(let u)?:
+                self.outcome = "renewed"
+                until = u.map(AzureDate.format)
             }
+            self.possibleAt = possibleAt
             self.status = status
             self.until = until
             self.code = code
@@ -313,18 +342,41 @@ public enum CLIJSON {
         public var skipped = 0
         public var failed = 0
         public var planned = 0
+        /// Only in deactivate / renew output.
+        public var deactivated: Int?
+        public var renewed: Int?
 
-        public init(_ results: [Result]) {
+        public init(_ results: [Result], operation: ActivationSummary.Operation = .activate) {
+            if operation == .deactivate { deactivated = 0 }
+            if operation == .renew { renewed = 0 }
             for r in results {
                 switch r.outcome {
                 case "activated": activated += 1
                 case "submitted": submitted += 1
                 case "skipped": skipped += 1
                 case "planned": planned += 1
+                case "deactivated": deactivated = (deactivated ?? 0) + 1
+                case "renewed": renewed = (renewed ?? 0) + 1
                 default: failed += 1
                 }
             }
         }
+    }
+
+    /// `pimento deactivate | renew | extend --json`.
+    public struct Lifecycle: Encodable, Equatable, Sendable {
+        /// `deactivate`, `renew` or `extend`.
+        public let action: String
+        public let dryRun: Bool
+        public let tenantId: String?
+        public let user: User
+        public let preset: String?
+        public let justification: String?
+        /// Renew: the asked duration (`max` or ISO 8601). Extend: `P30D`.
+        public let duration: String?
+        public let results: [Result]
+        public let missing: [MissingRole]?
+        public let summary: Summary
     }
 
     public struct MissingRole: Encodable, Equatable, Sendable {

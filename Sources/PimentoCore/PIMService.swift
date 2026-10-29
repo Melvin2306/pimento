@@ -50,15 +50,40 @@ public enum PIMServiceError: Error, LocalizedError {
 public struct RoleSnapshot: Sendable {
     public let identity: Identity
     public let roles: [EligibleRole]
+    /// Admin-assigned active assignments with an end date (for `extend`).
+    public var timeBoundAssignments: [ActiveAssignment] = []
+
+    public init(identity: Identity, roles: [EligibleRole], timeBoundAssignments: [ActiveAssignment] = []) {
+        self.identity = identity
+        self.roles = roles
+        self.timeBoundAssignments = timeBoundAssignments
+    }
+}
+
+/// Where a renewal of one role is.
+public enum RenewPhase: Equatable, Sendable {
+    case deactivating
+    /// Activating again; `attempt` counts from 1 (PIM needs a moment to
+    /// remove the old assignment, so the first tries may be refused).
+    case reactivating(attempt: Int)
 }
 
 public final class PIMService: Sendable {
     let transport: HTTPTransport
     let tokens: TokenProvider
+    let sleep: @Sendable (TimeInterval) async -> Void
+    let clock: @Sendable () -> Date
 
-    public init(transport: HTTPTransport = URLSessionTransport(), tokens: TokenProvider = AzureCLITokenProvider()) {
+    public init(
+        transport: HTTPTransport = URLSessionTransport(),
+        tokens: TokenProvider = AzureCLITokenProvider(),
+        sleep: @escaping @Sendable (TimeInterval) async -> Void = { try? await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000)) },
+        clock: @escaping @Sendable () -> Date = { Date() }
+    ) {
         self.transport = transport
         self.tokens = tokens
+        self.sleep = sleep
+        self.clock = clock
     }
 
     /// GETs eligibilities + active instances and joins them. Read-only.
@@ -67,8 +92,10 @@ public final class PIMService: Sendable {
         guard let identity = JWT.identity(fromToken: token) else { throw PIMServiceError.noIdentity }
         async let eligibilities: [EligibilityScheduleInstance] = listAll(ARM.eligibilityInstancesURL, token: token)
         async let assignments: [AssignmentScheduleInstance] = listAll(ARM.assignmentInstancesURL, token: token)
-        let rows = try await RoleMatcher.rows(eligibilities: eligibilities, assignments: assignments, now: now)
-        return RoleSnapshot(identity: identity, roles: rows)
+        let active = try await assignments
+        let rows = try await RoleMatcher.rows(eligibilities: eligibilities, assignments: active, now: now)
+        return RoleSnapshot(identity: identity, roles: rows,
+                            timeBoundAssignments: RoleMatcher.timeBoundAssignments(active, now: now))
     }
 
     func listAll<Item: Decodable>(_ first: URL, token: String) async throws -> [Item] {
@@ -132,9 +159,64 @@ public final class PIMService: Sendable {
         request.httpBody = plan.bodyJSON
         do {
             let (data, status) = try await transport.send(request)
-            return ActivationResponseMapper.outcome(statusCode: status, data: data, requestedAt: plan.requestedAt, minutes: plan.minutes)
+            return ActivationResponseMapper.outcome(
+                for: plan.action, statusCode: status, data: data, requestedAt: plan.requestedAt,
+                minutes: plan.minutes, activeSince: plan.role.activeSince)
         } catch {
             return .failed(code: "NetworkError", message: error.localizedDescription)
         }
+    }
+
+    /// Waits before each re-activation attempt of a renewal, in seconds: about
+    /// five minutes in all. After a `SelfDeactivate`, PIM answers
+    /// `RoleAssignmentExists` to a new activation until it has removed the old
+    /// assignment, which took about three minutes in tests.
+    public static let reactivationDelays: [TimeInterval] = [0, 5, 5, 10, 10, 15, 15, 20, 20, 30, 30, 30, 30, 30, 30, 30]
+
+    /// Renews each role: ends its activation (`SelfDeactivate`), then activates
+    /// it again (`SelfActivate`, a fresh request each attempt). A role whose
+    /// deactivation fails keeps its activation; one deactivated but not
+    /// activated again ends as `.failed(code: "ReactivationFailed")`.
+    public func renew(
+        _ plans: [RenewPlan],
+        maxConcurrent: Int = 4,
+        onPhase: @escaping @Sendable (RenewPlan, RenewPhase) async -> Void = { _, _ in },
+        onResult: @escaping @Sendable (RenewPlan, ActivationOutcome) async -> Void
+    ) async throws {
+        guard !plans.isEmpty else { return }
+        let token = try await tokens.accessToken()
+        let limit = max(1, maxConcurrent)
+        await withTaskGroup(of: (RenewPlan, ActivationOutcome).self) { group in
+            var pending = plans.makeIterator()
+            func enqueue(_ plan: RenewPlan) {
+                group.addTask { (plan, await self.renew(plan, token: token, onPhase: onPhase)) }
+            }
+            for _ in 0..<limit {
+                guard let plan = pending.next() else { break }
+                enqueue(plan)
+            }
+            while let (plan, outcome) = await group.next() {
+                await onResult(plan, outcome)
+                if let plan = pending.next() { enqueue(plan) }
+            }
+        }
+    }
+
+    func renew(_ plan: RenewPlan, token: String, onPhase: @Sendable (RenewPlan, RenewPhase) async -> Void) async -> ActivationOutcome {
+        await onPhase(plan, .deactivating)
+        let ended = await send(plan.deactivation, token: token)
+        switch ended {
+        case .deactivated, .notActive: break
+        default: return ended
+        }
+        var last: ActivationOutcome = .failed(code: "ReactivationFailed", message: "not attempted")
+        for (i, delay) in Self.reactivationDelays.enumerated() {
+            if delay > 0 { await sleep(delay) }
+            await onPhase(plan, .reactivating(attempt: i + 1))
+            guard let request = try? plan.activation(now: clock()) else { break }
+            last = await send(request, token: token)
+            if !RenewPlan.shouldRetry(last) { break }
+        }
+        return RenewPlan.result(of: last)
     }
 }

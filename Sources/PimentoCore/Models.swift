@@ -58,10 +58,19 @@ public struct AssignmentScheduleInstance: Decodable, Sendable {
     public struct Properties: Decodable, Sendable {
         public let scope: String
         public let roleDefinitionId: String
+        /// `Activated` (a PIM activation) or `Assigned` (an admin assignment).
         public let assignmentType: String?
         public let memberType: String?
+        public let startDateTime: String?
         public let endDateTime: String?
         public let linkedRoleEligibilityScheduleId: String?
+        /// The schedule behind this instance: `targetRoleAssignmentScheduleId`
+        /// of an extension request.
+        public let roleAssignmentScheduleId: String?
+        public let principalId: String?
+        public let condition: String?
+        public let conditionVersion: String?
+        public let expandedProperties: ExpandedProperties?
     }
 
     public let id: String?

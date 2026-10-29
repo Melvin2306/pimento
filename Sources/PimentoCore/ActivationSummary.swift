@@ -10,6 +10,22 @@ public struct ActivationSummary: Equatable, Sendable {
         public let fireAt: Date
         public let title: String
         public let body: String
+        /// The roles it is about (`ReminderRole.key`), for its actions and for
+        /// taking a role out when it is ended or renewed.
+        public var roles: [ReminderRole] = []
+
+        public init(id: String, fireAt: Date, title: String, body: String, roles: [ReminderRole] = []) {
+            self.id = id
+            self.fireAt = fireAt
+            self.title = title
+            self.body = body
+            self.roles = roles
+        }
+    }
+
+    /// What was done to the roles.
+    public enum Operation: Sendable {
+        case activate, deactivate, renew, extend
     }
 
     public let title: String
@@ -26,22 +42,38 @@ public struct ActivationSummary: Equatable, Sendable {
     public init?(
         planned: [PlannedRequest],
         outcomes: [String: ActivationOutcome],
+        operation: Operation = .activate,
+        reminderLead: TimeInterval = ActivationSummary.defaultReminderLead,
+        now: Date = Date(),
+        timeZone: TimeZone = .current
+    ) {
+        self.init(roles: planned.map(\.role), outcomes: outcomes, operation: operation,
+                  reminderLead: reminderLead, now: now, timeZone: timeZone)
+    }
+
+    /// `roles` with their outcomes by role id; roles without one are left out.
+    public init?(
+        roles: [EligibleRole],
+        outcomes: [String: ActivationOutcome],
+        operation: Operation = .activate,
         reminderLead: TimeInterval = ActivationSummary.defaultReminderLead,
         now: Date = Date(),
         timeZone: TimeZone = .current
     ) {
         var activated: [(role: EligibleRole, until: Date?)] = []
+        var ended: [EligibleRole] = []
         var skipped = 0
         var failed: [(role: EligibleRole, outcome: ActivationOutcome)] = []
-        for plan in planned {
-            guard let outcome = outcomes[plan.id] else { continue }
+        for role in roles {
+            guard let outcome = outcomes[role.id] else { continue }
             switch outcome {
-            case .activated(_, let until): activated.append((plan.role, until))
-            case .alreadyActive: skipped += 1
-            case .policyViolation, .failed: failed.append((plan.role, outcome))
+            case .activated(_, let until), .renewed(let until): activated.append((role, until))
+            case .alreadyActive, .notActive: skipped += 1
+            case .deactivated: ended.append(role)
+            case .policyViolation, .failed, .tooSoon: failed.append((role, outcome))
             }
         }
-        guard !activated.isEmpty || skipped > 0 || !failed.isEmpty else { return nil }
+        guard !activated.isEmpty || !ended.isEmpty || skipped > 0 || !failed.isEmpty else { return nil }
 
         let time = Date.FormatStyle(date: .omitted, time: .shortened, timeZone: timeZone)
         func line(_ role: EligibleRole) -> String { "\(role.roleName) · \(role.scopeName)" }
@@ -53,18 +85,30 @@ public struct ActivationSummary: Equatable, Sendable {
         func plural(_ n: Int, _ noun: String) -> String { "\(n) \(noun)\(n == 1 ? "" : "s")" }
 
         isFailure = !failed.isEmpty
+        let (done, verb, noun, skippedText): (Int, String, String, String) = switch operation {
+        case .activate: (activated.count, "activated", "Activation", "already active")
+        case .renew: (activated.count, "renewed", "Renewal", "not active")
+        case .extend: (activated.count, "requested", "Extension request", "not active")
+        case .deactivate: (ended.count, "deactivated", "Deactivation", "not active")
+        }
         if failed.isEmpty {
-            title = activated.isEmpty
-                ? "\(plural(skipped, "role")) already active"
-                : "\(plural(activated.count, "role")) activated"
+            title = done == 0
+                ? "\(plural(skipped, "role")) \(skippedText)"
+                : operation == .extend ? "Extension requested for \(plural(done, "role"))" : "\(plural(done, "role")) \(verb)"
         } else {
-            title = activated.isEmpty
-                ? "Activation failed for \(plural(failed.count, "role"))"
-                : "\(activated.count) activated, \(failed.count) failed"
+            title = done == 0
+                ? "\(noun) failed for \(plural(failed.count, "role"))"
+                : "\(done) \(verb), \(failed.count) failed"
         }
 
         var parts: [String] = []
-        if !activated.isEmpty {
+        if !ended.isEmpty {
+            parts.append(list(ended))
+        }
+        if !activated.isEmpty, operation == .extend {
+            parts.append("Waiting for an administrator to approve")
+            parts.append(list(activated.map(\.role)))
+        } else if !activated.isEmpty {
             let untils = activated.compactMap(\.until)
             if let first = untils.min() {
                 let last = untils.max()!
@@ -78,14 +122,14 @@ public struct ActivationSummary: Equatable, Sendable {
         if !failed.isEmpty {
             parts.append("Failed:\n" + list(failed.map(\.role)))
         }
-        if skipped > 0 && !activated.isEmpty || skipped > 0 && !failed.isEmpty {
-            parts.append("\(skipped) already active")
+        if skipped > 0 && (done > 0 || !failed.isEmpty) {
+            parts.append("\(skipped) \(skippedText)")
         }
         body = parts.joined(separator: "\n")
 
         // One reminder per expiry minute, listing the roles that expire then.
         var byMinute: [Date: [EligibleRole]] = [:]
-        for item in activated {
+        for item in activated where operation != .extend {
             guard let until = item.until else { continue }
             let minute = Date(timeIntervalSince1970: (until.timeIntervalSince1970 / 60).rounded(.down) * 60)
             byMinute[minute, default: []].append(item.role)
@@ -93,14 +137,30 @@ public struct ActivationSummary: Equatable, Sendable {
         reminders = byMinute.keys.sorted().compactMap { minute in
             let fireAt = minute.addingTimeInterval(-reminderLead)
             guard fireAt > now else { return nil }
-            let roles = byMinute[minute]!
-            return Reminder(
-                id: Self.reminderPrefix + String(Int(minute.timeIntervalSince1970)),
-                fireAt: fireAt,
-                title: "\(plural(roles.count, "PIM role")) expire\(roles.count == 1 ? "s" : "") at \(minute.formatted(time))",
-                body: list(roles)
-            )
+            var seen = Set<String>()
+            let roles = byMinute[minute]!.map(ReminderRole.init).filter { seen.insert($0.key).inserted }
+            return Self.reminder(expiringAt: minute, roles: roles, fireAt: fireAt, timeZone: timeZone)
         }
+    }
+
+    /// The reminder for `roles` expiring at `minute`.
+    public static func reminder(expiringAt minute: Date, roles: [ReminderRole], fireAt: Date, timeZone: TimeZone = .current) -> Reminder {
+        let time = Date.FormatStyle(date: .omitted, time: .shortened, timeZone: timeZone)
+        let shown = roles.prefix(listed).map(\.line)
+        let more = roles.count - shown.count
+        let n = roles.count
+        return Reminder(
+            id: reminderPrefix + String(Int(minute.timeIntervalSince1970)),
+            fireAt: fireAt,
+            title: "\(n) PIM role\(n == 1 ? "" : "s") expire\(n == 1 ? "s" : "") at \(minute.formatted(time))",
+            body: (shown + (more > 0 ? ["and \(more) more"] : [])).joined(separator: "\n"),
+            roles: roles)
+    }
+
+    /// The expiry minute a reminder identifier stands for.
+    public static func expiry(ofReminder identifier: String) -> Date? {
+        guard isReminder(identifier), let epoch = Int(identifier.dropFirst(reminderPrefix.count)) else { return nil }
+        return Date(timeIntervalSince1970: TimeInterval(epoch))
     }
 
     /// Whether the completion notification is wanted: `enabled`, and with

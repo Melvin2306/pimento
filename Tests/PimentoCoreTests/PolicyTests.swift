@@ -95,9 +95,9 @@ struct EffectiveDurationTests {
             EffectiveDuration.resolve(.hours(8), policyMaxMinutes: role.roleName == "Reader" ? 90 : nil, fallbackHours: 8)
         }
         let byName = Dictionary(uniqueKeysWithValues: plans.map { ($0.role.roleName, $0) })
-        #expect(byName["Reader"]?.body.properties.scheduleInfo.expiration.duration == "PT1H30M")
+        #expect(byName["Reader"]?.body.duration == "PT1H30M")
         #expect(byName["Reader"]?.duration.isClamped == true)
-        #expect(byName["Contributor"]?.body.properties.scheduleInfo.expiration.duration == "PT8H")
+        #expect(byName["Contributor"]?.body.duration == "PT8H")
         #expect(throws: ActivationRequestError.invalidMinutes(0)) {
             try ActivationRequestBuilder.body(for: rows[0], principalId: "me", justification: "x", minutes: 0, now: Fixture.now)
         }

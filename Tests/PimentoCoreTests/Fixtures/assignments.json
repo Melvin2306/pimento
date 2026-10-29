@@ -74,6 +74,33 @@
     "memberType": "Direct"
    },
    "id": "/subscriptions/cccccccc-0000-0000-0000-00000000000c/resourceGroups/rg-app-dev/providers/Microsoft.Authorization/roleAssignmentScheduleInstances/a5"
+  },
+  {
+   "properties": {
+    "roleAssignmentScheduleId": "/subscriptions/dddddddd-0000-0000-0000-00000000000d/providers/Microsoft.Authorization/roleAssignmentSchedules/tb1",
+    "assignmentType": "Assigned",
+    "scope": "/subscriptions/dddddddd-0000-0000-0000-00000000000d",
+    "roleDefinitionId": "/subscriptions/dddddddd-0000-0000-0000-00000000000d/providers/Microsoft.Authorization/roleDefinitions/acdd72a7-3385-48ef-bd42-f606fba81ae7",
+    "principalId": "11111111-2222-3333-4444-555555555555",
+    "principalType": "User",
+    "status": "Provisioned",
+    "startDateTime": "2026-10-01T08:00:00Z",
+    "endDateTime": "2026-11-05T12:00:00Z",
+    "memberType": "Direct",
+    "expandedProperties": {
+     "roleDefinition": {
+      "id": "/subscriptions/dddddddd-0000-0000-0000-00000000000d/providers/Microsoft.Authorization/roleDefinitions/acdd72a7-3385-48ef-bd42-f606fba81ae7",
+      "displayName": "Reader",
+      "type": "BuiltInRole"
+     },
+     "scope": {
+      "id": "/subscriptions/dddddddd-0000-0000-0000-00000000000d",
+      "displayName": "Fabrikam Sandbox",
+      "type": "subscription"
+     }
+    }
+   },
+   "id": "/subscriptions/dddddddd-0000-0000-0000-00000000000d/providers/Microsoft.Authorization/roleAssignmentScheduleInstances/tb1"
   }
  ]
 }
