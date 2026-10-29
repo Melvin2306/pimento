@@ -1,0 +1,25 @@
+Tests/PimentoCoreTests/CLIHistoryTests.swift
+  s_4884204a812fec::t_23899dd6d53b69 180-187
+Sources/PimentoCore/CLI/CLIHistory.swift
+  s_4884204a812fec::t_23899dd6d53b69 26
+Tests/PimentoCoreTests/HistoryTests.swift
+  s_4884204a812fec::t_6bca1fd7d751b8 311-316
+Sources/PimentoCore/History.swift
+  s_4884204a812fec::t_23899dd6d53b69 583-585,590-593,595-596,614-616
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9f49a2524aa02d246787516af0cc6897f9ed7455",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
