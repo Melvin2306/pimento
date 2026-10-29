@@ -8,6 +8,34 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Scheduled activation: a `SelfActivate` with a later `scheduleInfo.startDateTime`. PIM answers
+  `Granted` and activates the role at the start; it accepts a start up to a month ahead
+  (`ScheduleStartTimeTooFarAhead` beyond), also while the role is still active.
+  - App: a **Start** menu in the bottom bar (Now, In 1 hour, Tomorrow 08:00, Next working day 08:00,
+    Pick Date and Time…, local time, up to 30 days); the button reads *Schedule N roles* and results
+    *Scheduled for Fri 08:00*. A **Scheduled** view (toolbar, ⇧⌘L) lists your scheduled activations
+    and requests awaiting approval from Azure (`roleAssignmentScheduleRequests`, `asTarget()`), with
+    Cancel and Cancel All (`POST …/cancel`; `RequestCannotBeCancelled` is reported). Rows with a
+    pending request show a *Scheduled* / *Awaiting approval* badge. Optional local notification when
+    a scheduled activation starts (Settings › Notifications, on by default), rebuilt whenever the list
+    is read.
+  - CLI: `pimento activate … --at WHEN` (`now`, `+1h30m`, `08:00`, `today 17:00`, `tomorrow 08:00`,
+    `mon 08:00`, `workday 08:00`, `2026-11-02 08:00`, ISO 8601 with a zone); a bad, past or too
+    distant start is a usage error (exit 2) before anything is sent. Active roles that end by the
+    start are scheduled, ones still active then are skipped. `--json` adds `start` and a `scheduled`
+    outcome and count. `pimento scheduled [--json]` lists pending activations;
+    `pimento cancel (REQUEST-ID… | FILTER… | --role | --all) [--yes] [--dry-run] [--json]` cancels them.
+- Ticket information (`ticketInfo {ticketNumber, ticketSystem}`).
+  - Roles whose policy requires a ticket (`Ticketing` in `Enablement_EndUser_Assignment`) are marked
+    *needs ticket*; checking one shows ticket number and system fields, and activating waits until
+    both are filled in. Any activation can carry a ticket (ticket button). The last ticket system is
+    remembered and recent tickets are offered like recent justifications.
+  - CLI: `pimento activate --ticket NUMBER [--ticket-system NAME]`; a role that needs a ticket
+    without number and system stops `activate` with exit 2, naming the roles.
+  - Presets can store a default ticket system (Manage Presets, `presets save --ticket-system`).
+  - A `TicketingRule` policy failure now reads "a ticket is required: give a ticket number and
+    ticket system".
+
 - End activations early and renew them.
   - **Deactivate** (`SelfDeactivate`): check active rows (they can be checked now) or right-click a
     row, then *Deactivate* / *End Now…* (⇧⌘E), with a confirmation. Roles activated less than 5 minutes

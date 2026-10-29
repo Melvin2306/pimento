@@ -41,6 +41,14 @@ does the whole list in one go, as you, using the Azure CLI session you already h
 - **End early or renew**: check active rows (or right-click one) and press *Deactivate* to end them
   now, or *Renew* to end and activate them again for a fresh duration. Expiry reminders offer
   **Renew** and **End Now** right in the notification. See [Ending and renewing](#ending-and-renewing-activations).
+- **Schedule for later**: set *Start* to *Tomorrow 08:00*, *Next working day 08:00* or any time up to
+  30 days ahead and press *Schedule*; PIM activates the roles then. The **Scheduled** view lists your
+  pending activations straight from Azure (also ones made elsewhere) with *Cancel*, rows show a
+  *Scheduled Fri 08:00* badge, and an optional notification says when they start.
+  See [Scheduled activations and tickets](#scheduled-activations-and-tickets).
+- **Ticket information**: when a role's policy requires a ticket, ticket number and system fields
+  appear (the row says *needs ticket*); any activation can carry one. Recent tickets are offered
+  like recent justifications.
 - **Preview (dry run)**: shows the exact `PUT` URLs and JSON bodies without sending anything (<kbd>⌥</kbd><kbd>⌘</kbd><kbd>↩</kbd>).
 - **Notifications**: a macOS notification when a batch finishes, and a reminder before activated roles
   expire (10 minutes by default; adjustable in Settings).
@@ -51,7 +59,8 @@ does the whole list in one go, as you, using the Azure CLI session you already h
   `--tenant` / `PIMENTO_TENANT`. Hide the tenants you never use.
 - **Settings** (<kbd>⌘</kbd><kbd>,</kbd>) for notifications, activation defaults, refresh and table columns.
 - **Themes**: Native, Azure-style or, for fun, Windows XP-style (see [Themes](#themes)).
-- **A real command-line tool**, `pimento`: `list`, `activate`, `deactivate`, `renew`, `status`, `tenants`, with JSON
+- **A real command-line tool**, `pimento`: `list`, `activate` (also `--at` and `--ticket`), `deactivate`, `renew`,
+  `scheduled`, `cancel`, `status`, `tenants`, with JSON
   output, exit codes and shell completions. Download it on its own, or get it with the app.
 - **No credentials of its own, no dependencies, no telemetry.**
 
@@ -143,6 +152,9 @@ open build/Pimento.app
 4. Enter a **justification** and a **duration**: 1 to 24 hours (default 8), or *Maximum allowed*.
    Each role is requested for at most its PIM policy's maximum; the **Duration** column shows the
    maximum of every role and, for checked rows, the duration it will get.
+   **Start** is *Now*, or a later time: the button then reads **Schedule N roles** (see
+   [Scheduled activations and tickets](#scheduled-activations-and-tickets)). When a checked role's
+   policy requires a ticket, fill in the ticket number and system that appear under the justification.
 5. Press **Activate** (<kbd>⌘</kbd><kbd>↩</kbd>) to send the requests; Owner roles ask for confirmation
    first (a setting, on by default). **Preview** (<kbd>⌥</kbd><kbd>⌘</kbd><kbd>↩</kbd>) shows the request bodies instead, with
    *Copy All*, and sends nothing. The list refreshes afterwards.
@@ -159,6 +171,7 @@ open build/Pimento.app
 | <kbd>⌘</kbd><kbd>↩</kbd> | Preview / activate |
 | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>R</kbd> | Renew the checked active roles |
 | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>E</kbd> | End the checked active roles now |
+| <kbd>⇧</kbd><kbd>⌘</kbd><kbd>L</kbd> | Scheduled activations |
 | <kbd>⌘</kbd><kbd>F</kbd> | Filter |
 
 ### Ending and renewing activations
@@ -193,6 +206,44 @@ notification sums it up. Reminders for ended roles are withdrawn; renewed roles 
 
 Both act in the tenant the reminder is for; if the app shows another tenant, it says so instead.
 
+### Scheduled activations and tickets
+
+**Scheduling.** The **Start** menu in the bottom bar offers *Now*, *In 1 hour*, *Tomorrow 08:00*,
+*Next working day 08:00* (Monday to Friday) and *Pick Date and Time…* (your local time zone). With a
+later start the button reads **Schedule N roles** and Pimento sends a normal `SelfActivate` whose
+`scheduleInfo.startDateTime` is that time. What PIM does with it, as tested:
+
+- It accepts the request with status `Granted` and activates the role at the start, for the
+  chosen duration (capped at the policy maximum as usual). Roles that need approval wait for it.
+- It accepts a start up to **a month** ahead; later ones fail with `ScheduleStartTimeTooFarAhead`.
+  Pimento offers up to 30 days.
+- It also accepts a schedule for a role that is **active now**, for a start after the current
+  activation ends (the CLI schedules such roles; one still active at the start is skipped).
+
+The result column says *Scheduled for Fri 08:00*, and the start goes back to *Now* once a batch
+was scheduled. **Scheduled** in the toolbar (<kbd>⇧</kbd><kbd>⌘</kbd><kbd>L</kbd>) lists your activations that
+have not started and requests waiting for approval, read from Azure
+(`roleAssignmentScheduleRequests`, `$filter=asTarget()`), so it includes requests made in the
+portal or with the CLI. **Cancel** sends `POST …/roleAssignmentScheduleRequests/{id}/cancel`; a
+request that started or was decided meanwhile cannot be cancelled (`RequestCannotBeCancelled`):
+end an active role with *Deactivate*. Eligible rows with a pending request show *Scheduled Fri 08:00*
+or *Awaiting approval*; active ones a calendar icon.
+
+With **Notify when a scheduled activation starts** (Settings › Notifications, on by default)
+Pimento schedules a local notification for each start time. It is rebuilt whenever the list is
+read, so a request cancelled anywhere loses its notification at the next refresh. It is
+best-effort: macOS shows it at the start time without checking that PIM activated the role.
+
+**Tickets.** When a role's PIM policy has *Require ticket information on activation*
+(`Ticketing` in the end-user enablement rule), its row says **needs ticket** and, once it is checked,
+**ticket number** and **ticket system** fields appear under the justification; the button stays
+disabled until both are filled in. Any activation can carry a ticket: the ticket button next to
+the justification shows the fields. Pimento sends `ticketInfo: {ticketNumber, ticketSystem}` with
+every request of the batch, remembers the last ticket system, and offers recent tickets from the
+clock button (with *Remember recent justifications and tickets*). A preset can store a default
+ticket system. If PIM still answers with a `TicketingRule` failure, the result says
+*a ticket is required: give a ticket number and ticket system*.
+
 ### Presets
 
 A preset is a named set of eligibilities, with an optional justification and duration. Use the
@@ -204,7 +255,7 @@ A preset is a named set of eligibilities, with an optional justification and dur
   justification and duration. A banner says which of its roles are already active and which you are
   no longer eligible for. **Activate Preset** does the same and activates right away; Owner roles
   still ask first when that setting is on.
-- **Manage Presets…** renames, edits and deletes presets: tick roles in the list of your current
+- **Manage Presets…** renames, edits and deletes presets (including a default ticket system): tick roles in the list of your current
   eligibilities (active ones too), remove roles that no longer exist, or replace the roles with
   the checked ones.
 
@@ -240,8 +291,8 @@ is under General.
 | Tab | Options |
 | --- | --- |
 | General | tenant to open with (last used, az's current, or a specific one); load roles on launch; refresh automatically (off, 1, 5 or 15 minutes); theme (see below); show or hide the Type, Membership, Condition and Duration columns (also via right-click on a column header); unhide hidden tenants |
-| Activation | default duration; parallel requests (1 to 16, default 8); confirm before activating Owner roles (on by default); remember recent justifications and offer them from the clock button next to the field; start with the last one filled in |
-| Notifications | macOS permission state, with a shortcut to System Settings when it is off; send a test notification; notify when activations finish, or only when something fails; expiry reminders and how long before (5, 10, 15 or 30 minutes); sound |
+| Activation | default duration; parallel requests (1 to 16, default 8); confirm before activating Owner roles (on by default); remember recent justifications and tickets and offer them from the clock buttons next to the fields; start with the last justification filled in |
+| Notifications | macOS permission state, with a shortcut to System Settings when it is off; send a test notification; notify when activations finish, or only when something fails; expiry reminders and how long before (5, 10, 15 or 30 minutes); notify when a scheduled activation starts; sound |
 
 ### Themes
 
@@ -290,6 +341,13 @@ pimento activate contoso-dev --role Contributor -j "deploy" --yes --json | jq .s
 # The longest each role's PIM policy allows
 pimento activate prod --role Owner -j "INC-1234" --hours max
 
+# Schedule for later, list what is pending, cancel it
+pimento activate contoso-dev --role Contributor -j "release" --at "tomorrow 08:00"
+pimento scheduled
+pimento cancel 5f0c1d2e
+# A role whose policy requires a ticket
+pimento activate prod --role Owner -j "change" --ticket CHG-1001 --ticket-system ServiceNow
+
 # End roles early, or renew them for a fresh duration (asks first)
 pimento deactivate contoso-dev --role Contributor
 pimento renew contoso-dev --role Contributor -j "INC-1234 still on it" --hours 2
@@ -305,17 +363,19 @@ pimento presets list
 | Command | What it does |
 | --- | --- |
 | `pimento list [FILTER…] [--role NAME] [--active \| --eligible]` | Table of your eligible roles, with status and expiry |
-| `pimento activate (FILTER… \| --role NAME \| --all \| --preset NAME) -j TEXT [--hours N\|max] [--yes] [--dry-run] [--max-parallel N]` | Activates the matching roles that are not active yet, in parallel (8 at a time by default) |
+| `pimento activate (FILTER… \| --role NAME \| --all \| --preset NAME) -j TEXT [--hours N\|max] [--at WHEN] [--ticket NUMBER [--ticket-system NAME]] [--yes] [--dry-run] [--max-parallel N]` | Activates the matching roles that are not active yet, in parallel (8 at a time by default), or schedules them with `--at` |
 | `pimento deactivate (FILTER… \| --role NAME \| --all \| --preset NAME) [-j TEXT] [--yes] [--dry-run]` | Ends the matching activations now (`SelfDeactivate`) |
 | `pimento renew (FILTER… \| --role NAME \| --all \| --preset NAME) -j TEXT [--hours N\|max] [--yes] [--dry-run]` | Ends and activates the matching roles again, for a fresh duration (the role is off for a few minutes in between) |
 | `pimento extend (FILTER… \| --role NAME \| --all) -j TEXT [--days N] [--yes] [--dry-run]` | Asks an administrator to extend admin-assigned, time-bound assignments (`SelfExtend`) |
+| `pimento scheduled` | Your scheduled activations and requests awaiting approval, from Azure |
+| `pimento cancel (REQUEST-ID… \| FILTER… \| --role NAME \| --all) [--yes] [--dry-run]` | Cancels them (`POST …/cancel`) |
 | `pimento status` | Active roles with the time left, soonest-expiring first |
 | `pimento tenants` | Tenants by ID, name and domain |
-| `pimento presets [list] \| show NAME \| save NAME FILTER… [--role NAME] [--exact] [-j TEXT] [--hours N\|max] [--force] \| delete NAME` | Saved presets (see below) |
+| `pimento presets [list] \| show NAME \| save NAME FILTER… [--role NAME] [--exact] [-j TEXT] [--hours N\|max] [--ticket-system NAME] [--force] \| delete NAME` | Saved presets (see below) |
 | `pimento completions zsh\|bash\|fish` | Prints a shell completion script |
 | `pimento version`, `pimento help [COMMAND]` | Version; help for a command (also `COMMAND --help`) |
 
-`list`, `activate`, `deactivate`, `renew`, `extend`, `status` and `tenants` take `-t, --tenant ID` and `--json`. The tenant is
+`list`, `activate`, `deactivate`, `renew`, `extend`, `scheduled`, `cancel`, `status` and `tenants` take `-t, --tenant ID` and `--json`. The tenant is
 `--tenant`, else `$PIMENTO_TENANT`, else az's current tenant.
 
 **Selecting roles.** A FILTER matches the resource name (case-insensitive substring); several
@@ -328,6 +388,32 @@ it. `--role` matches the whole role name, case-insensitively, with `*` as a wild
 each role's PIM policy (`roleManagementPolicyAssignments`) and requests at most its maximum: the
 plan has a DURATION column and a note when a role was capped. When a policy cannot be read, the
 asked duration is used (8 hours for `max`). `pimento list` shows the maximum in a MAX column.
+
+**Scheduling.** `--at WHEN` schedules the activations instead of starting them now (see
+[Scheduled activations](#scheduled-activations-and-tickets) for what PIM does). WHEN is read in your
+local time zone unless it carries one:
+
+| WHEN | Meaning |
+| --- | --- |
+| `now` | right away (the default) |
+| `+90m`, `+1h`, `+1h30m`, `+2d` | from now (units `d`, `h`, `m`/`min`) |
+| `08:00`, `8:30`, `8` | the next time it is that time: today if still ahead, else tomorrow |
+| `today 17:00`, `tomorrow 08:00` (also `tomorrow08:00`) | that day |
+| `mon 08:00` … `sunday 9:15` | the next such weekday (today if the time is still ahead) |
+| `workday 08:00` | the next working day (Monday to Friday) after today |
+| `2026-11-02 08:00`, `2026-11-02T08:00` | a local date and time |
+| `2026-11-02T08:00:00Z`, `…+01:00`, `…-0500` | ISO 8601 with a zone |
+
+A time in the past, more than 30 days ahead, or unreadable stops with exit code 2 before anything
+is sent. A role that is active now is scheduled when its activation ends by the start, and skipped
+when it is still active then. `pimento scheduled` lists pending activations (ID is the start of the
+request id); `pimento cancel` takes request ids (the first 4 or more characters), resource filters,
+`--role` or `--all`, shows what it will cancel and asks, like `activate`.
+
+**Tickets.** `--ticket NUMBER --ticket-system NAME` sends `ticketInfo` with every request; any role
+accepts it. When a role's policy requires a ticket and the number or the system is missing,
+`activate` names the roles and stops with exit code 2 (checked against the policies it reads, also
+in a dry run). A preset's ticket system (`presets save --ticket-system`) completes `--ticket`.
 
 **Ending and renewing.** `deactivate`, `renew` and `extend` follow the same safety rules as
 `activate`: an explicit selection, the plan first, a `[y/N]` prompt on a terminal, `--yes` required
@@ -384,7 +470,7 @@ written atomically, readable only by you, and contains no secrets:
 
 `roles` are matched by scope and role definition GUID, case-insensitively; the names are only for
 display. `match` holds rules (`filters` and `roles` as on the command line). `duration` is `max` or
-whole hours (`PT4H`); `tenantId` may be left out for a preset that applies to every tenant. Unknown
+whole hours (`PT4H`); an optional `ticketSystem` completes `activate --ticket`; `tenantId` may be left out for a preset that applies to every tenant. Unknown
 keys are ignored. A file with a higher `version` is refused rather than overwritten.
 
 **Safety.** `activate` lists what it will send, marks Owner roles, and asks for confirmation on a
@@ -400,8 +486,10 @@ exactly one JSON document (the plan and progress of `activate` go to stderr):
 | --- | --- |
 | `list`, `status` | `{tenantId, user: {objectId, name, upn}, roles: [{id, roleName, roleDefinitionId, scope, scopeName, scopeType, membership, group, isOwner, hasCondition, isActive, activeUntil, eligibilityScheduleId, secondsLeft, maxDuration, policy}]}` (`membership` is `direct` or `group`; `secondsLeft` only in `status`; `maxDuration` (ISO 8601, e.g. `PT8H`) and `policy: {status, maxDuration, requiresJustification, requiresTicket, requiresMfa, requiresApproval, authenticationContext, error}` only in `list`) |
 | `tenants` | `{tenants: [{id, displayName, defaultDomain, category}]}` |
-| `activate` | `{dryRun, tenantId, user, hours, duration, preset, justification, results: [{outcome, role, status, until, code, message, rules, request, duration, maxDuration, capped}], missing: [{scope, roleDefinitionId, roleName, scopeName}], summary: {activated, submitted, skipped, failed, planned}}` (`outcome` is `activated`, `submitted` (pending approval), `skipped`, `failed` or `planned`; `request` only in a dry run; `duration` at the top is `max` or the asked ISO duration, `hours` only for a number; per result, `duration` is what was requested for that role) |
-| `presets list`, `presets show` | `{file, presets: [{id, name, tenantId, roles, match, justification, duration, createdAt, updatedAt}]}`; `show` prints one preset |
+| `activate` | `{dryRun, tenantId, user, hours, duration, preset, justification, start, ticket: {ticketNumber, ticketSystem}, results: [{outcome, role, status, start, until, code, message, rules, request, duration, maxDuration, capped}], missing: [{scope, roleDefinitionId, roleName, scopeName}], summary: {activated, submitted, scheduled, skipped, failed, planned}}` (`outcome` is `activated`, `submitted` (pending approval), `scheduled` (`--at`), `skipped`, `failed` or `planned`; `start` and `summary.scheduled` only with `--at`; `request` only in a dry run; `duration` at the top is `max` or the asked ISO duration, `hours` only for a number; per result, `duration` is what was requested for that role) |
+| `scheduled` | `{tenantId, user, requests: [{id, name, kind, status, start, end, duration, roleName, roleDefinitionId, scope, scopeName, scopeType, justification, ticketNumber, ticketSystem, createdOn}]}` (`kind` is `scheduled` or `awaitingApproval`; `name` is the request id) |
+| `cancel` | `{dryRun, tenantId, user, results: [{outcome, request, code, message, url}], notFound, summary: {cancelled, failed, planned}}` (`outcome` is `cancelled`, `failed` or `planned`; `url` only in a dry run) |
+| `presets list`, `presets show` | `{file, presets: [{id, name, tenantId, roles, match, justification, duration, ticketSystem, createdAt, updatedAt}]}`; `show` prints one preset |
 
 Times are ISO 8601 in UTC. Keys without a value are left out.
 
@@ -411,7 +499,7 @@ Times are ISO 8601 in UTC. Keys without a value are left out.
 | --- | --- |
 | 0 | Success, including "nothing to do" (everything already active) |
 | 1 | An activation or request failed, no role matched (or none of a preset's roles is eligible), or you answered no |
-| 2 | Usage error: unknown option, no justification or selection, invalid tenant, or `activate` without `--yes` when stdin is not a terminal |
+| 2 | Usage error: unknown option, no justification or selection, invalid tenant or `--at` time, a required ticket missing, or a command that changes roles without `--yes` when stdin is not a terminal |
 | 3 | az is missing or not signed in, or ARM rejected the token (run the `az login` command it prints) |
 
 #### Shell completions
