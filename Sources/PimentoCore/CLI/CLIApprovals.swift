@@ -261,7 +261,7 @@ extension CLIRunner {
 
     func wait(_ o: WaitOptions) async throws -> CLIExit {
         let tenant = try resolveTenant(o.tenant)
-        let service = env.makeService(tenant.tenantId, true)
+        let service = makeService(tenant.tenantId, true)
         var history: RequestHistory
         do { history = try await service.loadRequestHistory(now: env.now()) } catch { return report(error, tenant: tenant.tenantId) }
         let tenantId = history.identity.tenantId ?? tenant.tenantId
@@ -425,7 +425,7 @@ extension CLIRunner {
 
     func approvals(_ o: ApprovalsOptions) async throws -> CLIExit {
         let tenant = try resolveTenant(o.tenant)
-        let service = env.makeService(tenant.tenantId, true)
+        let service = makeService(tenant.tenantId, true)
         let identity: Identity, inbox: ApprovalInbox
         do { (identity, inbox) = try await service.loadApprovalInbox() } catch { return report(error, tenant: tenant.tenantId) }
         let tenantId = identity.tenantId ?? tenant.tenantId
@@ -456,7 +456,7 @@ extension CLIRunner {
         if confirm == .refuse { throw ConfirmationRequired(command: verb) }
         let tenant = try resolveTenant(o.tenant)
         // A dry run gets a GET-only transport: it cannot send the PATCH.
-        let service = env.makeService(tenant.tenantId, o.dryRun)
+        let service = makeService(tenant.tenantId, o.dryRun)
         let identity: Identity, inbox: ApprovalInbox
         do { (identity, inbox) = try await service.loadApprovalInbox() } catch { return report(error, tenant: tenant.tenantId) }
         let tenantId = identity.tenantId ?? tenant.tenantId

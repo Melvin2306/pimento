@@ -731,6 +731,7 @@ extension PIMService {
                 enqueue(next)
             }
             while let (p, outcome) = await group.next() {
+                record(token: token) { HistoryRecord(decision: p, outcome: outcome, context: $0) }
                 await onResult(p, outcome)
                 if let next = pending.next() { enqueue(next) }
             }

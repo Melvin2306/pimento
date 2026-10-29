@@ -155,7 +155,7 @@ extension CLIJSON {
 /// `pimento scheduled` and `pimento cancel`.
 extension CLIRunner {
     func loadPending(_ tenant: TenantSelection, readOnly: Bool) async throws -> (PIMService, Identity, [ScheduledRequest]) {
-        let service = env.makeService(tenant.tenantId, readOnly)
+        let service = makeService(tenant.tenantId, readOnly)
         let (identity, requests) = try await service.loadScheduledRequests(now: env.now())
         return (service, identity, requests)
     }

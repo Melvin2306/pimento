@@ -36,7 +36,9 @@ let environment = CLIEnvironment(
     },
     loadTenants: { preferred in
         try await TenantDirectory.load(preferredTenant: preferred, transport: ReadOnlyTransport(URLSessionTransport()))
-    }
+    },
+    // Shared with the app; $PIMENTO_HISTORY points elsewhere.
+    history: HistoryStore(environment: ProcessInfo.processInfo.environment)
 )
 
 // A closed pipe (`pimento list | head`) should end quietly, not crash.

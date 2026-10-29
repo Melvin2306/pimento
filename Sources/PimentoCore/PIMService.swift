@@ -73,17 +73,32 @@ public final class PIMService: Sendable {
     let tokens: TokenProvider
     let sleep: @Sendable (TimeInterval) async -> Void
     let clock: @Sendable () -> Date
+    /// Where every write and its outcome is recorded (nil: nowhere).
+    public let history: HistoryRecorder?
 
     public init(
         transport: HTTPTransport = URLSessionTransport(),
         tokens: TokenProvider = AzureCLITokenProvider(),
         sleep: @escaping @Sendable (TimeInterval) async -> Void = { try? await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000)) },
-        clock: @escaping @Sendable () -> Date = { Date() }
+        clock: @escaping @Sendable () -> Date = { Date() },
+        history: HistoryRecorder? = nil
     ) {
         self.transport = transport
         self.tokens = tokens
         self.sleep = sleep
         self.clock = clock
+        self.history = history
+    }
+
+    /// The same service, recording its writes to `recorder`.
+    public func recording(to recorder: HistoryRecorder?) -> PIMService {
+        PIMService(transport: transport, tokens: tokens, sleep: sleep, clock: clock, history: recorder)
+    }
+
+    /// Records one history entry per result of a write sent with `token`.
+    func record(token: String, _ make: (HistoryContext) -> HistoryRecord) {
+        guard let history else { return }
+        history.record([make(history.context(tenantId: JWT.identity(fromToken: token)?.tenantId))])
     }
 
     /// GETs eligibilities + active instances and joins them. Read-only.
@@ -143,6 +158,7 @@ public final class PIMService: Sendable {
                 enqueue(plan)
             }
             while let (plan, outcome) = await group.next() {
+                record(token: token) { HistoryRecord(plan: plan, outcome: outcome, context: $0) }
                 await onResult(plan, outcome)
                 if let plan = pending.next() { enqueue(plan) }
             }
@@ -184,37 +200,45 @@ public final class PIMService: Sendable {
         guard !plans.isEmpty else { return }
         let token = try await tokens.accessToken()
         let limit = max(1, maxConcurrent)
-        await withTaskGroup(of: (RenewPlan, ActivationOutcome).self) { group in
+        await withTaskGroup(of: (RenewPlan, ActivationOutcome, String?).self) { group in
             var pending = plans.makeIterator()
             func enqueue(_ plan: RenewPlan) {
-                group.addTask { (plan, await self.renew(plan, token: token, onPhase: onPhase)) }
+                group.addTask {
+                    let (outcome, requestId) = await self.renew(plan, token: token, onPhase: onPhase)
+                    return (plan, outcome, requestId)
+                }
             }
             for _ in 0..<limit {
                 guard let plan = pending.next() else { break }
                 enqueue(plan)
             }
-            while let (plan, outcome) = await group.next() {
+            while let (plan, outcome, requestId) = await group.next() {
+                record(token: token) { HistoryRecord(renewal: plan, outcome: outcome, requestId: requestId, context: $0) }
                 await onResult(plan, outcome)
                 if let plan = pending.next() { enqueue(plan) }
             }
         }
     }
 
-    func renew(_ plan: RenewPlan, token: String, onPhase: @Sendable (RenewPlan, RenewPhase) async -> Void) async -> ActivationOutcome {
+    /// The outcome, and the id of the last activation request sent (nil when
+    /// the deactivation already failed).
+    func renew(_ plan: RenewPlan, token: String, onPhase: @Sendable (RenewPlan, RenewPhase) async -> Void) async -> (ActivationOutcome, String?) {
         await onPhase(plan, .deactivating)
         let ended = await send(plan.deactivation, token: token)
         switch ended {
         case .deactivated, .notActive: break
-        default: return ended
+        default: return (ended, nil)
         }
         var last: ActivationOutcome = .failed(code: "ReactivationFailed", message: "not attempted")
+        var lastId: String?
         for (i, delay) in Self.reactivationDelays.enumerated() {
             if delay > 0 { await sleep(delay) }
             await onPhase(plan, .reactivating(attempt: i + 1))
             guard let request = try? plan.activation(now: clock()) else { break }
+            lastId = request.requestId
             last = await send(request, token: token)
             if !RenewPlan.shouldRetry(last) { break }
         }
-        return RenewPlan.result(of: last)
+        return (RenewPlan.result(of: last), lastId)
     }
 }

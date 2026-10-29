@@ -22,6 +22,9 @@ public struct CLIEnvironment: Sendable {
     public var loadTenants: @Sendable (_ preferredTenant: String?) async throws -> [TenantInfo]
     /// Waits between polls (`pimento wait`); tests advance a fake clock.
     public var sleep: @Sendable (TimeInterval) async -> Void
+    /// The history file: every write is recorded there, and `pimento history`
+    /// reads it. nil: no history (nothing recorded, `history` refuses).
+    public var history: HistoryStore?
 
     public init(
         write: @escaping @Sendable (String, Stream) -> Void,
@@ -33,7 +36,8 @@ public struct CLIEnvironment: Sendable {
         timeZone: TimeZone = .current,
         makeService: @escaping @Sendable (String?, Bool) -> PIMService,
         loadTenants: @escaping @Sendable (String?) async throws -> [TenantInfo],
-        sleep: @escaping @Sendable (TimeInterval) async -> Void = { try? await Task.sleep(nanoseconds: UInt64(max(0, $0) * 1_000_000_000)) }
+        sleep: @escaping @Sendable (TimeInterval) async -> Void = { try? await Task.sleep(nanoseconds: UInt64(max(0, $0) * 1_000_000_000)) },
+        history: HistoryStore? = nil
     ) {
         self.write = write
         self.readLine = readLine
@@ -47,6 +51,7 @@ public struct CLIEnvironment: Sendable {
         self.makeService = makeService
         self.loadTenants = loadTenants
         self.sleep = sleep
+        self.history = history
     }
 }
 
@@ -55,11 +60,19 @@ public struct CLIRunner: Sendable {
     let env: CLIEnvironment
     let outStyle: TerminalStyle
     let errStyle: TerminalStyle
+    /// Records every write this command sends (source `cli`).
+    let recorder: HistoryRecorder?
 
     public init(environment: CLIEnvironment) {
         env = environment
         outStyle = TerminalStyle.detect(isTTY: environment.stdoutIsTTY, environment: environment.variables)
         errStyle = TerminalStyle.detect(isTTY: environment.stderrIsTTY, environment: environment.variables)
+        recorder = environment.history.map { [now = environment.now] in HistoryRecorder(store: $0, source: .cli, clock: now) }
+    }
+
+    /// The service for a tenant, recording its writes in the history.
+    func makeService(_ tenantId: String?, _ readOnly: Bool) -> PIMService {
+        env.makeService(tenantId, readOnly).recording(to: recorder)
     }
 
     func out(_ s: String = "") { env.write(s + "\n", .out) }
@@ -124,7 +137,7 @@ public struct CLIRunner: Sendable {
     }
 
     func load(_ tenant: TenantSelection, readOnly: Bool = true) async throws -> (PIMService, RoleSnapshot) {
-        let service = env.makeService(tenant.tenantId, readOnly)
+        let service = makeService(tenant.tenantId, readOnly)
         return (service, try await service.loadRoles(now: env.now()))
     }
 

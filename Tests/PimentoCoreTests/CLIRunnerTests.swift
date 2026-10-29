@@ -43,6 +43,8 @@ final class CLIHarness: @unchecked Sendable {
 
     /// Each harness gets its own presets file, so no test touches the real one.
     let presetsURL = temporaryPresetsURL()
+    /// … and its own history file.
+    let historyStore = HistoryStore(url: temporaryHistoryURL())
 
     private var policyHandler: @Sendable (URLRequest) throws -> (Data, Int) = CLIHarness.defaultPolicy
     private var postHandler: @Sendable (URLRequest) throws -> (Data, Int) = { _ in (Data(), 200) }
@@ -121,7 +123,8 @@ final class CLIHarness: @unchecked Sendable {
                     sleepLog.append(seconds)
                     clockValue = clockValue.addingTimeInterval(seconds)
                 }
-            })
+            },
+            history: historyStore)
     }
 
     @discardableResult
