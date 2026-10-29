@@ -191,6 +191,15 @@ final class AppModel {
     var showTenantSheet = false
     var tenantDraft = ""
 
+    // Menu bar extra
+    /// The inline confirmation or question the menu bar popover shows (its
+    /// panel cannot host the main window's alerts).
+    var menuBarPrompt: MenuBarPrompt?
+    /// Launch at login (`SMAppService.mainApp`): the system's state, read
+    /// when Settings opens; `loginItemError`: why the last change failed.
+    var loginItemState: LoginItemState = .disabled
+    var loginItemError: String?
+
     struct Banner: Equatable {
         enum Kind { case info, success, error }
         let kind: Kind
@@ -1608,6 +1617,7 @@ final class AppModel {
         guard prefs != old else { return }
         prefs.save(to: UserDefaults.standard)
         updateAppearance()
+        if AppPresence.activationPolicy(prefs) != AppPresence.activationPolicy(old) { DockIcon.apply(prefs, reactivate: true) }
         if prefs.defaultHours != old.defaultHours, !isActivating { duration = .hours(prefs.defaultHours) }
         if prefs.autoRefreshMinutes != old.autoRefreshMinutes {
             restartAutoRefresh()

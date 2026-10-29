@@ -15,14 +15,23 @@ PimentoApp.main()
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Needed when launched as a bare executable (`swift run`) rather than a .app.
-        NSApp.setActivationPolicy(.regular)
-        NSApp.activate(ignoringOtherApps: true)
-        MainActor.assumeIsolated { AppAppearance.apply(AppModel.shared.appearance) }
+        MainActor.assumeIsolated {
+            // A Dock icon, or the menu bar only (Settings › General › Menu bar).
+            // Also needed when launched as a bare executable (`swift run`)
+            // rather than a .app, which starts without any.
+            DockIcon.apply(AppModel.shared.prefs, reactivate: false, atLaunch: true)
+            NSApp.activate(ignoringOtherApps: true)
+            AppAppearance.apply(AppModel.shared.appearance)
+            // Starts the menu bar countdown's timer.
+            _ = MenuBarClock.shared
+        }
         Task { @MainActor in Notifier.setUp() }
     }
 
-    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+    /// With the menu bar extra, closing the window keeps Pimento running there.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        MainActor.assumeIsolated { AppPresence.terminatesAfterLastWindowClosed(AppModel.shared.prefs) }
+    }
 }
 
 struct PimentoApp: App {
@@ -31,6 +40,9 @@ struct PimentoApp: App {
     // macro whose plugin ships only with full Xcode, and the app builds with the
     // Command Line Tools alone.)
     private var model: AppModel { AppModel.shared }
+    /// Whether the menu bar extra is shown: read from the stored setting,
+    /// which `AppModel` saves on every change, so the scene follows it live.
+    @AppStorage(Preferences.showInMenuBarKey) private var showInMenuBar = Preferences().showInMenuBar
 
     var body: some Scene {
         Window(AppInfo.name, id: "main") {
@@ -100,6 +112,20 @@ struct PimentoApp: App {
             AppThemed { SettingsView() }
                 .environment(model)
         }
+
+        // Active roles with their countdown, presets and quick actions.
+        MenuBarExtra(isInserted: menuBarInserted) {
+            MenuBarContent(model: model, clock: MenuBarClock.shared)
+                .environment(model)
+        } label: {
+            MenuBarLabel(model: model, clock: MenuBarClock.shared)
+        }
+        .menuBarExtraStyle(.window)
+    }
+
+    /// Removing the item from the menu bar (⌘-drag) turns the setting off.
+    private var menuBarInserted: Binding<Bool> {
+        Binding(get: { showInMenuBar }, set: { shown in MainActor.assumeIsolated { model.prefs.showInMenuBar = shown } })
     }
 
     private func showAboutPanel() {

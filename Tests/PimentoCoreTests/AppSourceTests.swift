@@ -70,4 +70,27 @@ import Testing
         }
         #expect(tables >= 2, "RoleTable and HistoryTable")
     }
+
+    /// The menu bar extra's window is not one of the app's windows and updates
+    /// on its own schedule: its views get the model as a value (like table
+    /// cells), and the scene still injects it for anything below.
+    @Test func menuBarViewsGetTheModelAsAValue() throws {
+        let sources = try Self.sources()
+        let readers = Self.environmentReaders(in: sources)
+        let menuBar = try #require(sources.first { $0.name == "MenuBarViews.swift" }).text
+        var views: [String] = []
+        for line in menuBar.components(separatedBy: "\n") {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if let range = trimmed.range(of: #"^(private |fileprivate )?struct (\w+)"#, options: .regularExpression) {
+                views.append(trimmed[range].components(separatedBy: " ").last ?? "")
+            }
+        }
+        #expect(views.contains("MenuBarContent") && views.contains("MenuBarLabel"), "the scan finds the menu bar views")
+        for view in views {
+            #expect(!readers.contains(view), "\(view) reads AppModel from the environment")
+        }
+        let main = try #require(sources.first { $0.name == "main.swift" }).text
+        let scene = try #require(main.range(of: "MenuBarExtra(")).lowerBound
+        #expect(main[scene...].contains(".environment(model)"), "the menu bar extra's content gets the model in its environment")
+    }
 }

@@ -66,6 +66,32 @@ private struct GeneralSettings: View {
             }
 
             Section {
+                Toggle("Show in menu bar", isOn: $model.prefs.showInMenuBar)
+                    .help("A menu bar icon with your active roles, their countdown, Renew, End Now and presets")
+                Toggle("Show remaining time in menu bar", isOn: $model.prefs.menuBarShowsRemainingTime)
+                    .disabled(!model.prefs.showInMenuBar)
+                    .help("The soonest end next to the icon, like 2 · 1:24, not only the number of active roles")
+                Toggle("Hide Dock icon (menu bar only)", isOn: $model.prefs.hideDockIcon)
+                    .disabled(!model.prefs.showInMenuBar)
+                    .help("No Dock icon and no app menu; open windows from the menu bar icon")
+                Toggle("Launch at login", isOn: Binding(
+                    get: { model.loginItemState.isOn },
+                    set: { model.setLaunchAtLogin($0) }))
+                    .help("Open Pimento when you log in (System Settings › General › Login Items)")
+                if let error = model.loginItemError {
+                    Text(error).font(.caption).foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else if let caption = model.loginItemState.caption {
+                    Text(caption).font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } header: {
+                Text("Menu bar")
+            } footer: {
+                Text(menuBarFooter).font(.caption).foregroundStyle(.secondary)
+            }
+
+            Section {
                 Picker("Theme", selection: $model.prefs.theme) {
                     ForEach(AppTheme.allCases, id: \.self) { theme in
                         Text(theme.title).tag(theme)
@@ -115,13 +141,21 @@ private struct GeneralSettings: View {
         .formStyle(.grouped)
         .themedForm()
         .fixedSize(horizontal: false, vertical: true)
+        .onAppear { model.updateLoginItemState() }
         .confirmationDialog("Reset all settings?", isPresented: $model.showResetConfirmation) {
             Button("Reset", role: .destructive) { model.resetPreferences() }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Notifications, activation defaults, refresh, appearance and columns go back to their defaults. "
+            Text("Notifications, activation defaults, refresh, menu bar, appearance and columns go back to their defaults. "
                 + "Hidden tenants and recent justifications are kept.")
         }
+    }
+
+    private var menuBarFooter: String {
+        guard model.prefs.showInMenuBar else { return "Without the menu bar icon, closing the window quits \(AppInfo.name)." }
+        return model.prefs.hideDockIcon
+            ? "\(AppInfo.name) runs in the menu bar only. Quit it from the menu bar icon."
+            : "Closing the window keeps \(AppInfo.name) running in the menu bar. ⌘-drag the icon out of the menu bar to hide it."
     }
 
     /// Shows Light while a light-only theme is selected; the stored choice
