@@ -1,0 +1,46 @@
+Sources/PimentoApp/ContentView.swift
+  s_4884204a812fec::t_43ccf89f8ebf75 433,442,461,477,561,567,633,647,662-663,665-667,868,880
+Sources/PimentoApp/ApprovalViews.swift
+  s_4884204a812fec::t_43ccf89f8ebf75 132,158
+Sources/PimentoApp/main.swift
+  s_4884204a812fec::t_92f99bc9532451 21
+Sources/PimentoApp/AppModel.swift
+  s_4884204a812fec::t_92f99bc9532451 158-160,232,1604,1624-1629
+  s_4884204a812fec::t_7632d7e44b318e 1630-1631
+Sources/PimentoApp/TenantViews.swift
+  s_4884204a812fec::t_08c83b07ee66a4 9,39
+  s_4884204a812fec::t_43ccf89f8ebf75 274,287,299
+Sources/PimentoApp/SettingsView.swift
+  s_4884204a812fec::t_69936326f9eb31 19,81,83,131-134
+  s_4884204a812fec::t_5c6b9a250cbfda 135-136
+Sources/PimentoApp/Theme.swift
+  s_4884204a812fec::t_d5121a141730fd 7-8,21-24,30-36,52-54,58-59,61,65,68-72,75-77,79-83,85-86,99,102,104,106-108,110-111,147,150,160-162,166-170,181,187,211,214-215,217-255,267-268,271-272,275,294,298-302,306,308,438-439,491,494,496-499,505,525,528,530-531,596,599-601,605-621
+  s_4884204a812fec::t_43ccf89f8ebf75 194,200,402,406,448,463,478,546,553,570,577,674,678
+Sources/PimentoApp/ScheduleViews.swift
+  s_4884204a812fec::t_43ccf89f8ebf75 252,278
+Sources/PimentoApp/HistoryViews.swift
+  s_4884204a812fec::t_43ccf89f8ebf75 369,389
+Sources/PimentoApp/PresetViews.swift
+  s_4884204a812fec::t_43ccf89f8ebf75 183,187,204,237,297,304
+Tests/PimentoCoreTests/PreferencesTests.swift
+  s_4884204a812fec::t_bd81388476b559 136-163
+Sources/PimentoCore/Preferences.swift
+  s_4884204a812fec::t_572951aaa0eb74 46-47,54,64-82,140-141,146-154
+  s_4884204a812fec::t_8052f5c7ecd079 155
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "10ef6f1d61f9ebad5ec5061ff4a0bd3f38fb2a53",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
