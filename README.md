@@ -395,9 +395,26 @@ control, shortcut and accessibility label works the same in each theme.
 | Azure-style | Flat and blue: the title bar and toolbar form one near-black portal-style top bar, with a "My roles" page title below it, the table on a white card with light-blue checked rows, portal-style status badges, square blue buttons. Light and dark. Uses Segoe UI if the Mac has it, otherwise the system font. |
 | Windows XP-style | Beige window under a glossy blue title bar (the toolbar itself), a white list box with blue checked rows, light rounded buttons and a green **Activate** button (orange with Owner roles). Light only. Uses Tahoma if the Mac has it (macOS ships it), otherwise the system font. |
 
-**Mode** next to the theme picks *System* (default, follows macOS), *Light* or *Dark* for every
-Pimento window at once. Windows XP-style is light-only: while it is selected the mode shows
-*Light* and is disabled, and your choice applies again when you switch to another theme.
+**Mode** next to the theme applies to every Pimento window at once:
+
+| Mode | What applies |
+| --- | --- |
+| System (default) | Light or dark, following macOS. |
+| Light, Dark | Always that. |
+| Ultra dark | Dark with pure black (`#000000`) window, page, table and Settings backgrounds, for OLED screens and dark rooms: near-black surfaces and bottom bar (`#0A0A0A`), thin `#1F1F1F` borders, a black title bar and toolbar, accent-coloured selection; text stays at WCAG AA contrast or better. Native and Azure-style. |
+| By time of day | *Light from* (07:00), *Dark from* (19:00) and, if ticked, *Ultra dark from* (23:00, off by default). Switches live at those times, also after sleep or a clock or time-zone change. Settings shows what applies now, e.g. *Now: Dark until 23:00*. |
+
+The time-of-day rules, in local time: light lasts from its time until dark starts, dark until light
+starts, either way round midnight (light from 20:00 and dark from 06:00 works). Ultra dark is a
+later stage of the dark period, from its time until light starts. An ultra dark time inside the
+light period (say 18:00 with dark from 19:00, or equal to the light time) starts ultra dark
+together with dark; one equal to the dark time replaces dark. Equal light and dark times mean dark
+all day. Settings notes when one of these rules moves a time. Pimento uses no location, sunrise
+or sunset.
+
+Windows XP-style is light-only, also by time of day: while it is selected the mode shows *Light*
+and is disabled, and your choice (ultra dark or the schedule included) applies again when you
+switch to another theme.
 
 In the themed looks the window's title bar and toolbar are coloured as one bar, with white title,
 icons and toolbar controls; the controls themselves (tenant, Refresh, Settings, Select All

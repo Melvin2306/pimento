@@ -8,6 +8,18 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Appearance mode **Ultra dark** (Settings › General › Appearance): the dark appearance with pure black
+  window, page, table, sheet and Settings backgrounds for the Native and Azure-style themes (OLED).
+  Near-black surfaces and bottom bar (`#0A0A0A`), `#1F1F1F` borders, accent-coloured checked rows, a
+  black title bar and toolbar; text contrast stays at WCAG AA or better. Windows XP-style stays light.
+- Appearance mode **By time of day**: *Light from* (07:00), *Dark from* (19:00) and an optional
+  *Ultra dark from* (23:00, off by default), applied live at those times and re-checked after sleep and
+  clock or time-zone changes. Settings shows *Now: Dark until 23:00*. Rules: periods wrap across
+  midnight; ultra dark runs from its time until light; an ultra dark time inside the light period
+  starts with dark; equal light and dark times mean dark all day. Stored as a versioned dictionary
+  (`general.appearanceSchedule`), read leniently (bad fields fall back to their defaults). No location
+  access. Windows XP-style resolves to light.
+
 - Activation history: a local log of every request Pimento sends, from the app and the CLI
   (activate, schedule, cancel, deactivate, renew, extend, approve, deny): time, tenant (ID and name
   when known), scope and resource, role, outcome (succeeded/pending/skipped/failed with Azure's
@@ -203,6 +215,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- The app could stop with "No Observable object of type AppModel found" when the search filter removed
+  rows from the role table: the Duration cell read the model from the environment, which SwiftUI does
+  not always provide to a cell that is leaving the table. It now gets the model directly.
 - Renew sends ticket information again: the ticket the current activation was requested with
   (found through your requests), or the ticket fields / `pimento renew --ticket NUMBER
   [--ticket-system NAME]`. A role whose policy requires a ticket is skipped with a reason when no
