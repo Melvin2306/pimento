@@ -1,0 +1,21 @@
+Sources/PimentoCore/Approvals.swift
+  s_4884204a812fec::t_88bddc433ccaa7 170-172,705-708,747-752
+Tests/PimentoCoreTests/ApprovalTests.swift
+  s_4884204a812fec::t_88bddc433ccaa7 190-205
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b30db557a0a945b5599d0e63e395e4de0c88f8d0",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
