@@ -119,6 +119,7 @@ public struct CLIRunner: Sendable {
         case .approvals(let o): return try await approvals(o)
         case .approve(let o), .deny(let o): return try await decide(o)
         case .presets(let c): return try await presets(c)
+        case .history(let c): return try await history(c)
         }
     }
 

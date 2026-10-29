@@ -246,6 +246,43 @@ public struct PresetSaveOptions: Equatable, Sendable {
     public init() {}
 }
 
+/// `pimento history …`: the local log of what Pimento sent.
+public enum HistoryCommand: Equatable, Sendable {
+    case list(HistoryListOptions)
+    /// `history export FILE.csv` (FILE `-`: stdout).
+    case export(file: String, HistoryListOptions)
+    case importAzure(HistoryImportOptions)
+    case clear(assumeYes: Bool)
+
+    public static let names = ["export", "import-azure", "clear"]
+}
+
+/// Which records `pimento history` shows (and `history export` writes).
+public struct HistoryListOptions: Equatable, Sendable {
+    /// `7d`, `24h`, `2026-10-01`, … (see `HistoryDate`); read when the command runs.
+    public var since: String?
+    public var until: String?
+    public var actions: [HistoryAction] = []
+    public var results: [HistoryResult] = []
+    /// A tenant GUID or part of its name (a filter here, not the tenant to sign in to).
+    public var tenant: String?
+    /// Words that must all appear in the record.
+    public var text: [String] = []
+    public var limit: Int?
+    public var json = false
+    public var csv = false
+    public init() {}
+}
+
+/// `pimento history import-azure`.
+public struct HistoryImportOptions: Equatable, Sendable {
+    /// The tenant to read from (as everywhere else).
+    public var tenant: String?
+    public var since: String?
+    public var json = false
+    public init() {}
+}
+
 public struct StatusOptions: Equatable, Sendable {
     public var tenant: String?
     public var json = false
@@ -281,11 +318,12 @@ public enum CLICommand: Equatable, Sendable {
     case status(StatusOptions)
     case tenants(TenantsOptions)
     case presets(PresetsCommand)
+    case history(HistoryCommand)
     case completions(CompletionShell)
 
     public static let names = [
         "list", "activate", "deactivate", "renew", "extend", "scheduled", "cancel", "pending", "wait", "approvals", "approve",
-        "deny", "status", "tenants", "presets", "completions", "version", "help",
+        "deny", "status", "tenants", "presets", "history", "completions", "version", "help",
     ]
 }
 
@@ -327,6 +365,11 @@ public enum CLIParseError: Error, Equatable, LocalizedError {
     case invalidTimeout(String)
     case noDecisionSelection(String)
     case notARequestId(String)
+    case invalidDate(flag: String, value: String)
+    case unknownAction(String)
+    case unknownOutcome(String)
+    case missingExportFile
+    case clearNeedsConfirmation
 
     public var errorDescription: String? {
         switch self {
@@ -364,6 +407,16 @@ public enum CLIParseError: Error, Equatable, LocalizedError {
             "--timeout takes a duration up to 24h such as 30m, 2h, 1h30m or 90s (a plain number is minutes), got “\(v)”."
         case .noDecisionSelection(let c): "Say which requests to \(c): request ids from `pimento approvals`."
         case .notARequestId(let v): "“\(v)” is not a request id (at least 4 characters of hex digits and dashes)."
+        case .invalidDate(let flag, let v):
+            "\(flag) takes 7d, 24h, 30m, 2w, today, yesterday, a date (2026-10-01), a date and time (2026-10-01 08:00) "
+                + "or ISO 8601, got “\(v)”."
+        case .unknownAction(let v):
+            "Unknown action “\(v)”. Use \(HistoryAction.known.map(\.rawValue).joined(separator: ", "))."
+        case .unknownOutcome(let v):
+            "Unknown outcome “\(v)”. Use \(HistoryResult.known.map(\.rawValue).joined(separator: ", "))."
+        case .missingExportFile: "`pimento history export` needs a file name (FILE.csv, or - for stdout)."
+        case .clearNeedsConfirmation:
+            "Refusing to clear the history without confirmation: stdin is not a terminal. Add --yes."
         }
     }
 }
@@ -486,6 +539,25 @@ public enum CLIParser {
 
     private static let plainFlags = tenant.merging(json) { a, _ in a }
 
+    private static let historyFlags = tenant.merging(json) { a, _ in a }.merging([
+        "--since": Flag(key: "since", takesValue: true),
+        "--until": Flag(key: "until", takesValue: true),
+        "--action": Flag(key: "action", takesValue: true),
+        "--outcome": Flag(key: "outcome", takesValue: true),
+        "--limit": Flag(key: "limit", takesValue: true),
+        "-n": Flag(key: "limit", takesValue: true),
+        "--csv": Flag(key: "csv", takesValue: false),
+    ]) { a, _ in a }
+
+    private static let historyImportFlags = tenant.merging(json) { a, _ in a }.merging([
+        "--since": Flag(key: "since", takesValue: true),
+    ]) { a, _ in a }
+
+    private static let historyClearFlags = [
+        "--yes": Flag(key: "yes", takesValue: false),
+        "-y": Flag(key: "yes", takesValue: false),
+    ]
+
     private static let waitFlags = tenant.merging(json) { a, _ in a }.merging([
         "--all": Flag(key: "all", takesValue: false),
         "--timeout": Flag(key: "timeout", takesValue: true),
@@ -557,6 +629,7 @@ public enum CLIParser {
             o.json = scan.values["json"] != nil
             return CLIInvocation(.tenants(o))
         case "presets": return try CLIInvocation(parsePresets(rest))
+        case "history": return try CLIInvocation(parseHistory(rest))
         case "completions":
             if rest.contains("--help") || rest.contains("-h") { return CLIInvocation(.help(topic: first)) }
             guard let name = rest.first else { throw CLIParseError.missingShell }
@@ -715,6 +788,57 @@ public enum CLIParser {
         guard o.criteria.hasSelection || o.all else { throw CLIParseError.noActiveSelection("extend") }
         guard !o.justification.isEmpty else { throw CLIParseError.missingJustificationFor("extend") }
         return .extend(o)
+    }
+
+    /// `history [list options]`, `history export FILE`, `history import-azure`, `history clear`.
+    static func parseHistory(_ args: [String]) throws -> CLICommand {
+        let sub = args.first.flatMap { HistoryCommand.names.contains($0) ? $0 : nil }
+        let rest = sub == nil ? args : Array(args.dropFirst())
+        switch sub {
+        case "import-azure":
+            let scan = try scan(rest, command: "history import-azure", flags: historyImportFlags, positionals: false)
+            if scan.help { return .help(topic: "history") }
+            var o = HistoryImportOptions()
+            o.tenant = scan.values["tenant"]?.last
+            o.json = scan.values["json"] != nil
+            o.since = scan.values["since"]?.last?.trimmingCharacters(in: .whitespaces)
+            return .history(.importAzure(o))
+        case "clear":
+            let scan = try scan(rest, command: "history clear", flags: historyClearFlags, positionals: false)
+            if scan.help { return .help(topic: "history") }
+            return .history(.clear(assumeYes: scan.values["yes"] != nil))
+        default:
+            let command = sub == "export" ? "history export" : "history"
+            let scan = try scan(rest, command: command, flags: historyFlags, positionals: true)
+            if scan.help { return .help(topic: "history") }
+            var o = HistoryListOptions()
+            o.tenant = scan.values["tenant"]?.last?.trimmingCharacters(in: .whitespaces)
+            o.json = scan.values["json"] != nil
+            o.csv = scan.values["csv"] != nil
+            o.since = scan.values["since"]?.last?.trimmingCharacters(in: .whitespaces)
+            o.until = scan.values["until"]?.last?.trimmingCharacters(in: .whitespaces)
+            // Repeatable, and comma-separated: --action activate,renew.
+            for raw in (scan.values["action"] ?? []).flatMap({ $0.split(separator: ",").map(String.init) }) {
+                guard let a = HistoryAction(argument: raw) else { throw CLIParseError.unknownAction(raw) }
+                if !o.actions.contains(a) { o.actions.append(a) }
+            }
+            for raw in (scan.values["outcome"] ?? []).flatMap({ $0.split(separator: ",").map(String.init) }) {
+                guard let r = HistoryResult(argument: raw) else { throw CLIParseError.unknownOutcome(raw) }
+                if !o.results.contains(r) { o.results.append(r) }
+            }
+            if let raw = scan.values["limit"]?.last { o.limit = try number(raw, flag: "--limit", range: 1...1_000_000) }
+            if o.json && o.csv { throw CLIParseError.conflicting("--json", "--csv") }
+            guard sub == "export" else {
+                o.text = scan.positionals
+                return .history(.list(o))
+            }
+            if o.json || o.csv { throw CLIParseError.conflicting("export", o.json ? "--json" : "--csv") }
+            guard let file = scan.positionals.first?.trimmingCharacters(in: .whitespaces), !file.isEmpty else {
+                throw CLIParseError.missingExportFile
+            }
+            if scan.positionals.count > 1 { throw CLIParseError.unexpectedArgument(scan.positionals[1], command: "history export") }
+            return .history(.export(file: file, o))
+        }
     }
 
     /// `--hours N` (1-24) or `--hours max`.

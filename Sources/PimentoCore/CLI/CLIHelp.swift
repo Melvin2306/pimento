@@ -24,6 +24,7 @@ public enum CLIHelp {
         case "status": status
         case "tenants": tenants
         case "presets": presets
+        case "history": history
         case "completions": completions
         case "version": "Usage: pimento version\n\nPrints the version."
         case "help": "Usage: pimento help [COMMAND]\n\nShows help for a command."
@@ -52,6 +53,7 @@ public enum CLIHelp {
       status       Show your active roles, soonest-expiring first
       tenants      List the tenants your az login can reach
       presets      List, show, save or delete saved role presets
+      history      What Pimento sent, and how it went; export as CSV
       completions  Print a completion script for zsh, bash or fish
       version      Print the version
       help         Show help for a command
@@ -442,6 +444,52 @@ public enum CLIHelp {
       pimento activate --preset On-call --yes
     """
 
+    static let history = """
+    Usage: pimento history [WORD…] [--since WHEN] [--until WHEN] [--action NAME…] [--outcome NAME…]
+                           [--tenant ID|NAME] [--limit N] [--json | --csv]
+           pimento history export FILE.csv [same filters]
+           pimento history import-azure [--since WHEN] [--tenant ID] [--json]
+           pimento history clear [--yes]
+
+    Pimento records every request it sends, from the app and from the CLI: activate,
+    schedule, cancel, deactivate, renew, extend, approve and deny, with the time,
+    tenant, role, resource, outcome (Azure's status or error code and a short message),
+    duration, start, justification, ticket and request id. Never tokens or request bodies.
+    The file is ~/Library/Application Support/Pimento/history.jsonl (JSON Lines, mode 600,
+    shared with the app; $\(HistoryStore.environmentVariable) points elsewhere). Recording and how long
+    records are kept (30, 90, 365 days or forever) are set in the app (Settings › History).
+
+    history lists the newest \(CLIRunner.historyTableLimit) records (all with --json or --csv), newest first.
+    WORDs must all appear in the role, resource, justification, ticket, request id or message.
+
+    export writes CSV (RFC 4180, UTF-8, CRLF, a header row; UTC and local times; fields
+    starting with = + - @ get a leading ' so spreadsheets do not run them). FILE - is stdout.
+
+    import-azure reads your own past requests from Azure (roleAssignmentScheduleRequests,
+    asTarget(), read-only) and adds the ones the history does not have yet, as source
+    azure: activity from the portal or other tools shows up too.
+
+    Options:
+          --since WHEN    7d, 24h, 30m, 2w, today, yesterday, 2026-10-01, "2026-10-01 08:00", ISO 8601
+          --until WHEN    Same forms
+          --action NAME   activate, schedule, cancel, deactivate, renew, extend, approve, deny.
+                          Repeatable or comma-separated.
+          --outcome NAME  succeeded, pending, skipped, failed, denied, canceled, expired
+      -t, --tenant ID|NAME
+                          Only this tenant (GUID or part of its name). For import-azure:
+                          the tenant to read from, as for every other command.
+      -n, --limit N       At most N records
+          --json          JSON: {records: […], total, file}
+          --csv           CSV on stdout
+      -y, --yes           clear: do not ask
+
+    Examples:
+      pimento history --since 7d
+      pimento history --action approve,deny --since 30d
+      pimento history export ~/Desktop/pim-history.csv --since 2026-10-01
+      pimento history import-azure --since 30d
+    """
+
     static let completions = """
     Usage: pimento completions zsh|bash|fish
 
@@ -484,6 +532,7 @@ public enum CLIHelp {
         'status:Show your active roles, soonest-expiring first'
         'tenants:List the tenants your az login can reach'
         'presets:List, show, save or delete role presets'
+        'history:What Pimento sent, and how it went; export as CSV'
         'completions:Print a completion script'
         'version:Print the version'
         'help:Show help for a command'
@@ -569,8 +618,19 @@ public enum CLIHelp {
                 '--ticket-system[Default ticket system]:system: ' \
                 '(-f --force)'{-f,--force}'[Replace a preset with the same name]' \
                 '*:name or filter: ' ;;
+            history)
+              _arguments -s $common \
+                '1:history command:(export import-azure clear)' \
+                '--since[Since]:when:(today yesterday 24h 7d 30d)' \
+                '--until[Until]:when:(today yesterday)' \
+                '*--action[Action]:action:(activate schedule cancel deactivate renew extend approve deny)' \
+                '*--outcome[Outcome]:outcome:(succeeded pending skipped failed denied canceled expired)' \
+                '(-n --limit)'{-n,--limit}'[At most N records]:count: ' \
+                '--csv[CSV on stdout]' \
+                '(-y --yes)'{-y,--yes}'[Do not ask (clear)]' \
+                '*:word or file:_files' ;;
             completions) _arguments '1:shell:(zsh bash fish)' ;;
-            help) _arguments '1:command:(list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets completions version)' ;;
+            help) _arguments '1:command:(list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets history completions version)' ;;
           esac ;;
       esac
     }
@@ -590,7 +650,7 @@ public enum CLIHelp {
       prev="${COMP_WORDS[COMP_CWORD-1]}"
       cmd="${COMP_WORDS[1]}"
       if [[ $COMP_CWORD -eq 1 ]]; then
-        COMPREPLY=($(compgen -W "list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets completions version help" -- "$cur"))
+        COMPREPLY=($(compgen -W "list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets history completions version help" -- "$cur"))
         return
       fi
       case "$prev" in
@@ -598,6 +658,10 @@ public enum CLIHelp {
         --at) COMPREPLY=($(compgen -W "now +1h +2h tomorrow08:00 workday08:00" -- "$cur")); return ;;
         --hours) COMPREPLY=($(compgen -W "max 1 2 4 8 12 24" -- "$cur")); return ;;
         --timeout) COMPREPLY=($(compgen -W "10m 30m 1h 2h" -- "$cur")); return ;;
+        --since|--until) COMPREPLY=($(compgen -W "today yesterday 24h 7d 30d" -- "$cur")); return ;;
+        --action) COMPREPLY=($(compgen -W "activate schedule cancel deactivate renew extend approve deny" -- "$cur")); return ;;
+        --outcome) COMPREPLY=($(compgen -W "succeeded pending skipped failed denied canceled expired" -- "$cur")); return ;;
+        -n|--limit) return ;;
       esac
       case "$cmd" in
         list) opts="--tenant --json --role --active --eligible --help" ;;
@@ -612,8 +676,11 @@ public enum CLIHelp {
         presets)
           if [[ $COMP_CWORD -eq 2 ]]; then opts="list show save delete"
           else opts="--tenant --json --role --exact --justification --hours --ticket-system --force --help"; fi ;;
+        history)
+          if [[ $COMP_CWORD -eq 2 ]]; then opts="export import-azure clear --since --until --action --outcome --tenant --limit --json --csv --help"
+          else opts="--since --until --action --outcome --tenant --limit --json --csv --yes --help"; fi ;;
         completions) opts="zsh bash fish" ;;
-        help) opts="list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets completions version" ;;
+        help) opts="list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets history completions version" ;;
         *) opts="" ;;
       esac
       COMPREPLY=($(compgen -W "$opts" -- "$cur"))
@@ -639,12 +706,13 @@ public enum CLIHelp {
     complete -c pimento -n __fish_use_subcommand -a status -d 'Show your active roles'
     complete -c pimento -n __fish_use_subcommand -a tenants -d 'List the tenants your az login can reach'
     complete -c pimento -n __fish_use_subcommand -a presets -d 'List, show, save or delete role presets'
+    complete -c pimento -n __fish_use_subcommand -a history -d 'What Pimento sent, and how it went; export as CSV'
     complete -c pimento -n __fish_use_subcommand -a completions -d 'Print a completion script'
     complete -c pimento -n __fish_use_subcommand -a version -d 'Print the version'
     complete -c pimento -n __fish_use_subcommand -a help -d 'Show help for a command'
-    complete -c pimento -n '__fish_seen_subcommand_from list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets' -s t -l tenant -r -d 'Tenant GUID or domain'
-    complete -c pimento -n '__fish_seen_subcommand_from list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets' -l json -d 'Machine-readable output'
-    complete -c pimento -n '__fish_seen_subcommand_from list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets' -s h -l help -d 'Show help'
+    complete -c pimento -n '__fish_seen_subcommand_from list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets history' -s t -l tenant -r -d 'Tenant GUID or domain'
+    complete -c pimento -n '__fish_seen_subcommand_from list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets history' -l json -d 'Machine-readable output'
+    complete -c pimento -n '__fish_seen_subcommand_from list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets history' -s h -l help -d 'Show help'
     complete -c pimento -n '__fish_seen_subcommand_from list activate deactivate renew extend cancel presets' -l role -r -d 'Role name, * as wildcard'
     complete -c pimento -n '__fish_seen_subcommand_from list' -l active -d 'Only active roles'
     complete -c pimento -n '__fish_seen_subcommand_from list' -l eligible -d 'Only roles that are not active'
@@ -666,7 +734,15 @@ public enum CLIHelp {
     complete -c pimento -n '__fish_seen_subcommand_from wait' -l all -d 'Every request waiting for approval'
     complete -c pimento -n '__fish_seen_subcommand_from wait' -l timeout -x -a '10m 30m 1h 2h' -d 'Give up after'
     complete -c pimento -n '__fish_seen_subcommand_from activate deactivate renew' -l max-parallel -x -d 'Requests in flight at once'
+    complete -c pimento -n '__fish_seen_subcommand_from history; and not __fish_seen_subcommand_from export import-azure clear' -a 'export import-azure clear'
+    complete -c pimento -n '__fish_seen_subcommand_from history' -l since -x -a 'today yesterday 24h 7d 30d' -d 'Since'
+    complete -c pimento -n '__fish_seen_subcommand_from history' -l until -x -a 'today yesterday' -d 'Until'
+    complete -c pimento -n '__fish_seen_subcommand_from history' -l action -x -a 'activate schedule cancel deactivate renew extend approve deny' -d 'Action'
+    complete -c pimento -n '__fish_seen_subcommand_from history' -l outcome -x -a 'succeeded pending skipped failed denied canceled expired' -d 'Outcome'
+    complete -c pimento -n '__fish_seen_subcommand_from history' -s n -l limit -x -d 'At most N records'
+    complete -c pimento -n '__fish_seen_subcommand_from history' -l csv -d 'CSV on stdout'
+    complete -c pimento -n '__fish_seen_subcommand_from history' -s y -l yes -d 'Do not ask (clear)'
     complete -c pimento -n '__fish_seen_subcommand_from completions' -a 'zsh bash fish'
-    complete -c pimento -n '__fish_seen_subcommand_from help' -a 'list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets completions version'
+    complete -c pimento -n '__fish_seen_subcommand_from help' -a 'list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets history completions version'
     """#
 }
