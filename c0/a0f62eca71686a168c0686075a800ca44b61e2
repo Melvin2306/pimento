@@ -1,0 +1,25 @@
+Tests/PimentoCoreTests/MenuBarTests.swift
+  s_4884204a812fec::t_6d1141f22f79c7 1-241
+Sources/PimentoCore/MenuBar.swift
+  s_4884204a812fec::t_81516cb8a42905 189-191
+  s_4884204a812fec::t_3f9aacd7dfef1e 1-188,192-196
+Sources/PimentoCore/Preferences.swift
+  s_4884204a812fec::t_48f317b99e8495 135-143,234-236,243,275-277,307-309
+  s_4884204a812fec::t_0424eee1e0a3ab 210-213
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c0a0f62eca71686a168c0686075a800ca44b61e2",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
