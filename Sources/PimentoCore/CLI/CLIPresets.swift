@@ -57,6 +57,7 @@ extension CLIRunner {
         var lines = [outStyle.bold(p.name) + outStyle.dim("  tenant \(p.tenantId ?? "any")")]
         lines.append("Duration: \(p.duration?.label ?? "not set (\(ActivationRequestBuilder.defaultHours) h unless --hours)")")
         lines.append("Justification: \(p.trimmedJustification ?? "not set (-j required)")")
+        if let system = p.trimmedTicketSystem { lines.append("Ticket system: \(system) (used with --ticket)") }
         if !p.roles.isEmpty {
             lines.append("Roles:")
             var table = TextTable(headers: ["ROLE", "RESOURCE", "SCOPE"], flexible: [1, 2])
@@ -101,7 +102,7 @@ extension CLIRunner {
         let matches = o.criteria.apply(snapshot.roles)
         var preset = Preset(
             name: o.name, tenantId: snapshot.identity.tenantId ?? tenant.tenantId,
-            justification: o.justification?.nonEmpty, duration: o.duration)
+            justification: o.justification?.nonEmpty, duration: o.duration, ticketSystem: o.ticketSystem?.nonEmpty)
         if o.exact {
             guard !matches.isEmpty else {
                 err("No role matches, so there is nothing to save. `pimento list` shows what there is.")

@@ -48,7 +48,7 @@ public enum CLIExit: Int32, Sendable {
 /// Thrown when a command that changes roles would have to ask, but stdin is
 /// not a terminal.
 public struct ConfirmationRequired: Error, LocalizedError, Equatable {
-    /// `activate`, `deactivate`, `renew` or `extend`.
+    /// `activate`, `deactivate`, `renew`, `extend` or `cancel`.
     public var command = "activate"
 
     public init(command: String = "activate") { self.command = command }

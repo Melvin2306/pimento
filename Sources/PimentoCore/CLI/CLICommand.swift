@@ -96,7 +96,36 @@ public struct ActivateOptions: Equatable, Sendable {
     public var assumeYes = false
     public var dryRun = false
     public var maxParallel = 8
+    /// `--at`: when the activations start (see `ScheduleTime`); nil = now.
+    /// Read when the command runs, against its clock and time zone.
+    public var at: String?
+    /// `--ticket` / `--ticket-system`.
+    public var ticketNumber: String?
+    /// nil: the preset's ticket system, if any.
+    public var ticketSystem: String?
     public init() {}
+}
+
+/// `pimento scheduled`: your pending activation requests.
+public struct ScheduledOptions: Equatable, Sendable {
+    public var tenant: String?
+    public var json = false
+    public init() {}
+}
+
+/// `pimento cancel`: cancel pending activation requests.
+public struct CancelOptions: Equatable, Sendable {
+    public var tenant: String?
+    public var json = false
+    /// Request ids (or their first characters) and resource filters.
+    public var targets: [String] = []
+    public var roles: [String] = []
+    public var all = false
+    public var assumeYes = false
+    public var dryRun = false
+    public init() {}
+
+    public var hasSelection: Bool { !targets.isEmpty || !roles.isEmpty || all }
 }
 
 /// `pimento deactivate` and `pimento renew`: act on active roles.
@@ -163,6 +192,7 @@ public struct PresetSaveOptions: Equatable, Sendable {
     public var exact = false
     public var justification: String?
     public var duration: RequestedDuration?
+    public var ticketSystem: String?
     /// Replace a preset of the same name.
     public var force = false
     public init() {}
@@ -193,12 +223,17 @@ public enum CLICommand: Equatable, Sendable {
     case deactivate(LifecycleOptions)
     case renew(LifecycleOptions)
     case extend(ExtendOptions)
+    case scheduled(ScheduledOptions)
+    case cancel(CancelOptions)
     case status(StatusOptions)
     case tenants(TenantsOptions)
     case presets(PresetsCommand)
     case completions(CompletionShell)
 
-    public static let names = ["list", "activate", "deactivate", "renew", "extend", "status", "tenants", "presets", "completions", "version", "help"]
+    public static let names = [
+        "list", "activate", "deactivate", "renew", "extend", "scheduled", "cancel", "status", "tenants", "presets",
+        "completions", "version", "help",
+    ]
 }
 
 /// A parsed command line, plus a note when it used a deprecated spelling.
@@ -231,6 +266,10 @@ public enum CLIParseError: Error, Equatable, LocalizedError {
     case noActiveSelection(String)
     case missingShell
     case unknownShell(String)
+    case invalidStart(String)
+    case missingTicket(roles: [String])
+    case noCancelSelection
+    case ambiguousRequestId(String, matches: Int)
 
     public var errorDescription: String? {
         switch self {
@@ -256,6 +295,13 @@ public enum CLIParseError: Error, Equatable, LocalizedError {
             "Say which roles to activate: resource filters, --role NAME, --preset NAME, or --all for every eligible role."
         case .missingShell: "Name a shell: pimento completions zsh|bash|fish."
         case .unknownShell(let s): "No completions for “\(s)”. Use zsh, bash or fish."
+        case .invalidStart(let message): "--at: \(message)"
+        case .missingTicket(let roles):
+            "\(roles.count == 1 ? "This role needs" : "These roles need") a ticket (its PIM policy requires one): "
+                + roles.joined(separator: "; ") + ". Add --ticket NUMBER --ticket-system NAME."
+        case .noCancelSelection:
+            "Say which requests to cancel: request ids (see `pimento scheduled`), resource filters, --role NAME, or --all."
+        case .ambiguousRequestId(let id, let n): "“\(id)” matches \(n) requests; give more of the id."
         }
     }
 }
@@ -287,6 +333,17 @@ public enum CLIParser {
         "--dry-run": Flag(key: "dry-run", takesValue: false),
         "--max-parallel": Flag(key: "max-parallel", takesValue: true),
         "--preset": Flag(key: "preset", takesValue: true),
+        "--at": Flag(key: "at", takesValue: true),
+        "--ticket": Flag(key: "ticket", takesValue: true),
+        "--ticket-system": Flag(key: "ticket-system", takesValue: true),
+    ]) { a, _ in a }
+
+    private static let cancelFlags = tenant.merging(json) { a, _ in a }.merging([
+        "--role": Flag(key: "role", takesValue: true),
+        "--all": Flag(key: "all", takesValue: false),
+        "--yes": Flag(key: "yes", takesValue: false),
+        "-y": Flag(key: "yes", takesValue: false),
+        "--dry-run": Flag(key: "dry-run", takesValue: false),
     ]) { a, _ in a }
 
     private static let deactivateFlags = tenant.merging(json) { a, _ in a }.merging([
@@ -322,6 +379,7 @@ public enum CLIParser {
         "--justification": Flag(key: "justification", takesValue: true),
         "-j": Flag(key: "justification", takesValue: true),
         "--hours": Flag(key: "hours", takesValue: true),
+        "--ticket-system": Flag(key: "ticket-system", takesValue: true),
         "--force": Flag(key: "force", takesValue: false),
         "-f": Flag(key: "force", takesValue: false),
     ]) { a, _ in a }
@@ -347,6 +405,14 @@ public enum CLIParser {
         case "activate": return try CLIInvocation(parseActivate(rest))
         case "deactivate", "renew": return try CLIInvocation(parseLifecycle(rest, command: first))
         case "extend": return try CLIInvocation(parseExtend(rest))
+        case "scheduled":
+            let scan = try scan(rest, command: first, flags: plainFlags, positionals: false)
+            if scan.help { return CLIInvocation(.help(topic: first)) }
+            var o = ScheduledOptions()
+            o.tenant = scan.values["tenant"]?.last
+            o.json = scan.values["json"] != nil
+            return CLIInvocation(.scheduled(o))
+        case "cancel": return try CLIInvocation(parseCancel(rest))
         case "status":
             let scan = try scan(rest, command: first, flags: plainFlags, positionals: false)
             if scan.help { return CLIInvocation(.help(topic: first)) }
@@ -408,6 +474,9 @@ public enum CLIParser {
         if let raw = scan.values["max-parallel"]?.last {
             o.maxParallel = try number(raw, flag: "--max-parallel", range: ActivateOptions.maxParallelRange)
         }
+        o.at = scan.values["at"]?.last?.trimmingCharacters(in: .whitespaces)
+        o.ticketNumber = scan.values["ticket"]?.last?.trimmingCharacters(in: .whitespaces)
+        o.ticketSystem = scan.values["ticket-system"]?.last?.trimmingCharacters(in: .whitespaces)
         if o.preset != nil {
             if o.criteria.hasSelection || o.all { throw CLIParseError.conflicting("--preset", "filters, --role or --all") }
             // The justification may come from the preset: checked once it is loaded.
@@ -447,6 +516,21 @@ public enum CLIParser {
             return .renew(o)
         }
         return .deactivate(o)
+    }
+
+    static func parseCancel(_ args: [String]) throws -> CLICommand {
+        let scan = try scan(args, command: "cancel", flags: cancelFlags, positionals: true)
+        if scan.help { return .help(topic: "cancel") }
+        var o = CancelOptions()
+        o.tenant = scan.values["tenant"]?.last
+        o.json = scan.values["json"] != nil
+        o.targets = scan.positionals
+        o.roles = scan.values["role"] ?? []
+        o.all = scan.values["all"] != nil
+        o.assumeYes = scan.values["yes"] != nil
+        o.dryRun = scan.values["dry-run"] != nil
+        guard o.hasSelection else { throw CLIParseError.noCancelSelection }
+        return .cancel(o)
     }
 
     static func parseExtend(_ args: [String]) throws -> CLICommand {
@@ -519,6 +603,7 @@ public enum CLIParser {
             o.force = scan.values["force"] != nil
             o.justification = scan.values["justification"]?.last?.trimmingCharacters(in: .whitespacesAndNewlines)
             if let raw = scan.values["hours"]?.last { o.duration = try hours(raw) }
+            o.ticketSystem = scan.values["ticket-system"]?.last?.trimmingCharacters(in: .whitespaces)
             guard o.criteria.hasSelection else { throw CLIParseError.noSelection }
             return .presets(.save(o))
         default:

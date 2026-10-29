@@ -415,6 +415,9 @@ public enum CLIJSON {
         public let duration: String
         public let preset: String?
         public let justification: String
+        /// `--at`: when the activations start (ISO 8601, UTC); absent for now.
+        public let start: String?
+        public let ticket: TicketInfo?
         public let results: [Result]
         /// Preset roles that are no longer eligible.
         public let missing: [MissingRole]?
@@ -422,11 +425,12 @@ public enum CLIJSON {
 
         static func empty(
             _ o: ActivateOptions, preset: Preset?, tenantId: String?, user: Identity, justification: String,
-            requested: RequestedDuration, missing: [PresetRole]
+            requested: RequestedDuration, missing: [PresetRole], start: Date?, ticket: TicketInfo?
         ) -> Activation {
             Activation(
                 dryRun: o.dryRun, tenantId: tenantId, user: .init(user), hours: requested.hours,
-                duration: requested.stringValue, preset: preset?.name, justification: justification, results: [],
+                duration: requested.stringValue, preset: preset?.name, justification: justification,
+                start: start.map(AzureDate.format), ticket: ticket, results: [],
                 missing: missing.isEmpty ? nil : missing.map(MissingRole.init), summary: .init([]))
         }
     }

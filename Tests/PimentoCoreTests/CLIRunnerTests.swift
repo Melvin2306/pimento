@@ -37,6 +37,12 @@ final class CLIHarness: @unchecked Sendable {
     let presetsURL = temporaryPresetsURL()
 
     private var policyHandler: @Sendable (URLRequest) throws -> (Data, Int) = CLIHarness.defaultPolicy
+    private var postHandler: @Sendable (URLRequest) throws -> (Data, Int) = { _ in (Data(), 200) }
+    /// How the fake ARM answers POSTs (cancel; default: 200).
+    var post: @Sendable (URLRequest) throws -> (Data, Int) {
+        get { lock.withLock { postHandler } }
+        set { lock.withLock { postHandler = newValue } }
+    }
     /// How the fake ARM answers policy GETs (default: `defaultPolicy`).
     var policy: @Sendable (URLRequest) throws -> (Data, Int) {
         get { lock.withLock { policyHandler } }
@@ -51,12 +57,14 @@ final class CLIHarness: @unchecked Sendable {
         weak var weakSelf: CLIHarness?
         transport = RecordingTransport { request in
             if request.httpMethod == "PUT" { return try put(request) }
+            if request.httpMethod == "POST" { return try weakSelf?.post(request) ?? (Data(), 200) }
             if request.url!.path.hasSuffix("roleManagementPolicyAssignments") {
                 return try (weakSelf?.policy ?? CLIHarness.defaultPolicy)(request)
             }
             let url = request.url!.absoluteString
             if url.contains("roleEligibilityScheduleInstances") { return (try Fixture.data("eligibilities"), 200) }
             if url.contains("roleAssignmentScheduleInstances") { return (try Fixture.data("assignments"), 200) }
+            if url.contains("roleAssignmentScheduleRequests?") { return (try Fixture.data("schedule-requests"), 200) }
             return (Data(), 404)
         }
         weakSelf = self
@@ -66,6 +74,7 @@ final class CLIHarness: @unchecked Sendable {
     var err: String { lock.withLock { errText } }
 
     var puts: [URLRequest] { get async { await transport.requests.filter { $0.httpMethod == "PUT" } } }
+    var posts: [URLRequest] { get async { await transport.requests.filter { $0.httpMethod == "POST" } } }
 
     func environment() -> CLIEnvironment {
         let transport = transport, tokens = tokens, now = now, tenants = tenants

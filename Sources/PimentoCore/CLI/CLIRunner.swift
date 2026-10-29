@@ -95,6 +95,8 @@ public struct CLIRunner: Sendable {
         case .deactivate(let o): return try await deactivate(o)
         case .renew(let o): return try await renew(o)
         case .extend(let o): return try await extend(o)
+        case .scheduled(let o): return try await scheduled(o)
+        case .cancel(let o): return try await cancel(o)
         case .presets(let c): return try await presets(c)
         }
     }
@@ -269,6 +271,13 @@ public struct CLIRunner: Sendable {
         // Decide before touching Azure: a script without --yes stops here.
         let policy = ConfirmationPolicy.decide(dryRun: o.dryRun, assumeYes: o.assumeYes, interactive: env.stdinIsTTY)
         if policy == .refuse { throw ConfirmationRequired() }
+        // A start time that cannot work stops here too.
+        var start: Date?
+        if let at = o.at {
+            do { start = try ScheduleTime.resolve(at, now: env.now(), timeZone: env.timeZone) } catch {
+                throw CLIParseError.invalidStart(error.localizedDescription)
+            }
+        }
 
         // A preset saved for one tenant is used there unless a tenant is given.
         let store = PresetStore(environment: env.variables)
@@ -304,6 +313,9 @@ public struct CLIRunner: Sendable {
         let justification = o.justification.isEmpty ? (preset?.trimmedJustification ?? "") : o.justification
         guard !justification.isEmpty else { throw CLIParseError.missingJustification }
         let requested = o.duration ?? preset?.duration ?? .hours(ActivationRequestBuilder.defaultHours)
+        // The preset's ticket system completes a --ticket number.
+        let ticket = TicketInfo.make(number: o.ticketNumber,
+                                     system: o.ticketSystem ?? (o.ticketNumber != nil ? preset?.trimmedTicketSystem : nil))
 
         // Human-readable progress goes to stdout, or to stderr when stdout is JSON.
         let toStderr = o.json, runner = self
@@ -322,14 +334,26 @@ public struct CLIRunner: Sendable {
                     ? "You have no eligible Azure-resource roles in this tenant."
                     : "No eligible role matches. `pimento list` shows what there is.")
             }
-            if o.json { out(CLIJSON.encode(CLIJSON.Activation.empty(o, preset: preset, tenantId: tenantId, user: snapshot.identity, justification: justification, requested: requested, missing: missing))) }
+            if o.json { out(CLIJSON.encode(CLIJSON.Activation.empty(o, preset: preset, tenantId: tenantId, user: snapshot.identity, justification: justification, requested: requested, missing: missing, start: start, ticket: ticket))) }
             return .failure
         }
-        let skipped = matched.filter(\.isActive)
-        let toActivate = matched.filter { !$0.isActive }
+        // Scheduled: a role whose activation has ended by the start can be
+        // scheduled (PIM accepts that while it is active); one still active then is skipped.
+        func activeAtStart(_ r: EligibleRole) -> Bool {
+            guard r.isActive else { return false }
+            guard let start, let until = r.activeUntil else { return true }
+            return until > start
+        }
+        let skipped = matched.filter(activeAtStart)
+        let toActivate = matched.filter { !activeAtStart($0) }
         let policies = await self.policies(for: toActivate, service: service)
+        let needTicket = TicketRequirement.missing(toActivate, ticket: ticket) { policies[$0.policyKey] }
+        if !needTicket.isEmpty {
+            throw CLIParseError.missingTicket(roles: needTicket.map { "\($0.roleName) · \($0.scopeName)" })
+        }
         let plans = try ActivationRequestBuilder.plan(
-            toActivate, principalId: snapshot.identity.objectId, justification: justification, now: now
+            toActivate, principalId: snapshot.identity.objectId, justification: justification, now: now,
+            start: start, ticket: ticket
         ) { role in
             EffectiveDuration.resolve(requested, policyMaxMinutes: policies[role.policyKey]?.maxMinutes,
                                       fallbackHours: ActivationRequestBuilder.defaultHours)
@@ -343,24 +367,29 @@ public struct CLIRunner: Sendable {
             return CLIJSON.Activation(
                 dryRun: o.dryRun, tenantId: tenantId, user: .init(snapshot.identity),
                 hours: requested.hours, duration: requested.stringValue, preset: preset?.name,
-                justification: justification, results: results,
+                justification: justification, start: start.map(AzureDate.format), ticket: ticket, results: results,
                 missing: missing.isEmpty ? nil : missing.map(CLIJSON.MissingRole.init), summary: .init(results))
         }
 
         for r in skipped {
             let until = r.activeUntil.map { " until " + CLIFormat.clock($0, now: now, timeZone: env.timeZone) } ?? ""
-            human(style.dim("skip  \(r.roleName) · \(r.scopeName): already active\(until)"))
+            human(style.dim("skip  \(r.roleName) · \(r.scopeName): \(start == nil ? "already active" : "still active at the start")\(until)"))
         }
         guard !plans.isEmpty else {
-            human("Nothing to activate: \(skipped.count == 1 ? "the matching role is" : "all \(skipped.count) matching roles are") already active.")
+            human("Nothing to \(start == nil ? "activate" : "schedule"): \(skipped.count == 1 ? "the matching role is" : "all \(skipped.count) matching roles are") "
+                + (start == nil ? "already active." : "still active at that time."))
             if o.json { out(CLIJSON.encode(json([:]))) }
             return .success
         }
 
         let owners = plans.filter(\.role.isOwner).count
         let forWhat = requested == .maximum ? "for the longest each role allows" : "for up to \(CLIFormat.plural(requested.hours ?? 0, "hour"))"
-        human((o.dryRun ? "Would activate " : "Activate ")
-            + "\(CLIFormat.plural(plans.count, "role")) \(forWhat)\(preset.map { " (preset \($0.name))" } ?? "") in tenant \(tenantLabel):")
+        let verb = start == nil ? "activate" : "schedule"
+        let when = start.map {
+            ", starting \(ScheduleTime.label($0, now: now, timeZone: env.timeZone)) (in \(CLIFormat.timeLeft(until: $0, now: now)))"
+        } ?? ""
+        human((o.dryRun ? "Would \(verb) " : verb.prefix(1).uppercased() + verb.dropFirst() + " ")
+            + "\(CLIFormat.plural(plans.count, "role")) \(forWhat)\(when)\(preset.map { " (preset \($0.name))" } ?? "") in tenant \(tenantLabel):")
         var table = TextTable(headers: ["ROLE", "RESOURCE", "TYPE", "MEMBERSHIP", "DURATION"], flexible: [0, 1, 3])
         for p in plans {
             table.append([
@@ -385,6 +414,10 @@ public struct CLIRunner: Sendable {
             human(style.boldRed("Warning:") + " \(CLIFormat.plural(owners, "Owner role")) (!): full control of the resource, including access.")
         }
         human("Justification: \(justification)")
+        if let ticket { human("Ticket: \(ticket.label)") }
+        if start != nil {
+            human(style.dim("PIM activates the roles at the start. `pimento scheduled` lists them, `pimento cancel` cancels."))
+        }
 
         if o.dryRun {
             if !o.json {
@@ -402,7 +435,7 @@ public struct CLIRunner: Sendable {
         }
 
         if policy == .ask {
-            env.write("Activate \(CLIFormat.plural(plans.count, "role"))\(owners > 0 ? ", including \(owners) Owner" : "")? [y/N] ", .err)
+            env.write("\(start == nil ? "Activate" : "Schedule") \(CLIFormat.plural(plans.count, "role"))\(owners > 0 ? ", including \(owners) Owner" : "")? [y/N] ", .err)
             guard ConfirmationPolicy.isYes(env.readLine()) else {
                 err("Cancelled. Nothing was sent.")
                 return .failure
@@ -421,7 +454,9 @@ public struct CLIRunner: Sendable {
         }
         let outcomes = collected.all
         let summary = CLIJSON.Summary(json(outcomes).results)
-        var parts = ["\(summary.activated) activated"]
+        var parts: [String] = []
+        if let n = summary.scheduled { parts.append("\(n) scheduled") }
+        if summary.activated > 0 || summary.scheduled == nil { parts.append("\(summary.activated) activated") }
         if summary.submitted > 0 { parts.append("\(summary.submitted) submitted for approval") }
         if summary.skipped > 0 { parts.append("\(summary.skipped) already active") }
         if summary.failed > 0 { parts.append(style.red("\(summary.failed) failed")) }
