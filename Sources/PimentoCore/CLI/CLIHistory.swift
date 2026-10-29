@@ -23,7 +23,7 @@ extension CLIRunner {
     func historyFilter(_ o: HistoryListOptions) throws -> HistoryFilter {
         func date(_ raw: String?, flag: String) throws -> Date? {
             guard let raw else { return nil }
-            guard let d = HistoryDate.parse(raw, now: env.now(), timeZone: env.timeZone) else {
+            guard let d = HistoryDate.parse(raw, now: env.now(), timeZone: env.timeZone, endOfDay: flag == "--until") else {
                 throw CLIParseError.invalidDate(flag: flag, value: raw)
             }
             return d

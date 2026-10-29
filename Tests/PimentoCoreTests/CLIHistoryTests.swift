@@ -177,6 +177,14 @@ struct CLIHistoryCommandTests {
         #expect(await empty.run("history") == 0)
         #expect(empty.err.contains("No history yet"))
 
+        // A day as --until includes that day (record 1 is from today, 11:00 UTC).
+        let today = try seeded()
+        #expect(await today.run("history", "--since", "2026-10-29", "--until", "2026-10-29") == 0)
+        #expect(today.out.split(separator: "\n").count == 2 && today.out.contains("activate"))
+        let untilToday = try seeded()
+        #expect(await untilToday.run("history", "--until", "today") == 0)
+        #expect(untilToday.out.split(separator: "\n").count == 4)
+
         let bad = try seeded()
         #expect(await bad.run("history", "--since", "last tuesday") == 2)
         #expect(bad.err.contains("--since takes 7d"))

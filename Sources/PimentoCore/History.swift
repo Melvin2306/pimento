@@ -580,14 +580,20 @@ public enum HistoryLog {
 /// `--since` / `--until`: `7d`, `24h`, `30m`, `2w`, `today`, `yesterday`,
 /// `2026-10-01`, `2026-10-01 08:00`, or ISO 8601 with a zone.
 public enum HistoryDate {
-    public static func parse(_ raw: String, now: Date, timeZone: TimeZone = .current) -> Date? {
+    /// `endOfDay` (for `--until`): a whole day (`today`, `yesterday`,
+    /// `2026-10-01`) stands for its last moment, so that day is included.
+    public static func parse(_ raw: String, now: Date, timeZone: TimeZone = .current, endOfDay: Bool = false) -> Date? {
         let s = raw.trimmingCharacters(in: .whitespaces).lowercased()
         guard !s.isEmpty else { return nil }
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
+        func day(_ start: Date?) -> Date? {
+            guard endOfDay, let start else { return start }
+            return calendar.date(byAdding: .day, value: 1, to: start)?.addingTimeInterval(-0.001)
+        }
         switch s {
-        case "today": return calendar.startOfDay(for: now)
-        case "yesterday": return calendar.date(byAdding: .day, value: -1, to: calendar.startOfDay(for: now))
+        case "today": return day(calendar.startOfDay(for: now))
+        case "yesterday": return day(calendar.date(byAdding: .day, value: -1, to: calendar.startOfDay(for: now)))
         default: break
         }
         if let last = s.last, "mhdw".contains(last), let n = Int(s.dropLast()), n > 0, n <= 100_000 {
@@ -605,7 +611,9 @@ public enum HistoryDate {
         formatter.timeZone = timeZone
         for format in ["yyyy-MM-dd HH:mm", "yyyy-MM-dd'T'HH:mm", "yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd"] {
             formatter.dateFormat = format
-            if let date = formatter.date(from: raw.trimmingCharacters(in: .whitespaces)) { return date }
+            if let date = formatter.date(from: raw.trimmingCharacters(in: .whitespaces)) {
+                return format == "yyyy-MM-dd" ? day(date) : date
+            }
         }
         return nil
     }

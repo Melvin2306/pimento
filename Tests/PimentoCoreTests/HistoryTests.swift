@@ -308,6 +308,12 @@ struct HistoryFilterTests {
         #expect(HistoryDate.parse("yesterday", now: now, timeZone: utc) == AzureDate.parse("2026-10-28T00:00:00Z"))
         #expect(HistoryDate.parse("2026-10-01", now: now, timeZone: utc) == AzureDate.parse("2026-10-01T00:00:00Z"))
         #expect(HistoryDate.parse("2026-10-01 08:30", now: now, timeZone: utc) == AzureDate.parse("2026-10-01T08:30:00Z"))
+        // As an upper bound, a whole day includes that day.
+        let endOfOct1 = AzureDate.parse("2026-10-02T00:00:00Z")!.addingTimeInterval(-0.001)
+        #expect(HistoryDate.parse("2026-10-01", now: now, timeZone: utc, endOfDay: true) == endOfOct1)
+        #expect(HistoryDate.parse("today", now: now, timeZone: utc, endOfDay: true) == AzureDate.parse("2026-10-30T00:00:00Z")!.addingTimeInterval(-0.001))
+        #expect(HistoryDate.parse("2026-10-01 08:30", now: now, timeZone: utc, endOfDay: true) == AzureDate.parse("2026-10-01T08:30:00Z"))
+        #expect(HistoryDate.parse("7d", now: now, timeZone: utc, endOfDay: true) == now.addingTimeInterval(-7 * 86400))
         #expect(HistoryDate.parse("2026-10-01T08:30:00+02:00", now: now, timeZone: utc) == AzureDate.parse("2026-10-01T06:30:00Z"))
         for bad in ["", "soon", "7x", "-3d", "0d", "2026-13-45"] {
             #expect(HistoryDate.parse(bad, now: now, timeZone: utc) == nil, "\(bad)")
