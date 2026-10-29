@@ -459,7 +459,8 @@ public enum WaitTimeout {
     public static func parse(_ raw: String) -> TimeInterval? {
         let s = raw.trimmingCharacters(in: .whitespaces).lowercased()
         guard !s.isEmpty else { return nil }
-        if let minutes = Int(s) { return minutes > 0 ? TimeInterval(minutes * 60) : nil }
+        // In floating point: a huge number must be refused, not trap on overflow.
+        if let minutes = Int(s) { return minutes > 0 ? TimeInterval(minutes) * 60 : nil }
         var total: TimeInterval = 0
         var number = ""
         var sawUnit = false
@@ -467,9 +468,9 @@ public enum WaitTimeout {
             if ch.isNumber { number.append(ch); continue }
             guard let n = Int(number), n >= 0 else { return nil }
             switch ch {
-            case "d": total += TimeInterval(n * 86400)
-            case "h": total += TimeInterval(n * 3600)
-            case "m": total += TimeInterval(n * 60)
+            case "d": total += TimeInterval(n) * 86400
+            case "h": total += TimeInterval(n) * 3600
+            case "m": total += TimeInterval(n) * 60
             case "s": total += TimeInterval(n)
             default: return nil
             }

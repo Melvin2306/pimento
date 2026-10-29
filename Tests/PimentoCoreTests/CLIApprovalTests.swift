@@ -68,6 +68,10 @@ struct CLIApprovalParserTests {
         #expect(WaitTimeout.parse("45") == 2700)
         #expect(WaitTimeout.parse("1d") == 86400)
         for bad in ["", "0", "m", "10x", "1h3", "-5"] { #expect(WaitTimeout.parse(bad) == nil, "\(bad)") }
+        // Huge values are refused (out of range), not an overflow trap.
+        #expect(WaitTimeout.parse("1000000000000000000") != nil)
+        #expect(throws: CLIParseError.invalidTimeout("1000000000000000000")) { try command("wait", "--all", "--timeout", "1000000000000000000") }
+        #expect(throws: CLIParseError.invalidTimeout("1000000000000000000d")) { try command("wait", "--all", "--timeout", "1000000000000000000d") }
         #expect(WaitTimeout.label(1800) == "30m")
         #expect(WaitTimeout.label(5400) == "1h 30m")
         #expect(WaitTimeout.label(7200) == "2h")
