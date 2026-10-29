@@ -269,3 +269,36 @@ final class CancelBox: @unchecked Sendable {
     func set(_ key: String, _ value: CancelOutcome) { lock.withLock { stored[key] = value } }
     var values: [String: CancelOutcome] { lock.withLock { stored } }
 }
+
+@Suite("Scheduled start notifications")
+struct ScheduledStartNoticeTests {
+    @Test func oneNoticePerTenantAndStartMinute() throws {
+        let items = try Fixture.decode("schedule-requests", as: ARMList<AssignmentScheduleRequestItem>.self).value
+        let pending = ScheduledRequestParser.pending(items, now: Fixture.now)
+        let notices = ScheduledStartNotice.notices(for: pending, tenantId: "AAAA-Tenant", now: Fixture.now, timeZone: berlin)
+        // The request awaiting approval gets none.
+        #expect(notices.count == 2)
+        #expect(notices[0].id == "scheduled-aaaa-tenant-" + String(Int(utc("2026-10-30T07:00:00Z").timeIntervalSince1970)))
+        #expect(notices[0].fireAt == utc("2026-10-30T07:00:00Z"))
+        #expect(notices[0].title == "Scheduled activation started")
+        #expect(notices[0].body == "Owner · rg-app-dev, until 10:00")
+        #expect(notices.allSatisfy { $0.id.hasPrefix(ScheduledStartNotice.idPrefix(tenantId: "aaaa-tenant")) })
+        #expect(notices.allSatisfy { ScheduledStartNotice.isNotice($0.id) })
+        #expect(ScheduledStartNotice.idPrefix(tenantId: nil) == "scheduled-default-")
+        // Started ones are dropped.
+        #expect(ScheduledStartNotice.notices(for: pending, tenantId: nil, now: utc("2026-10-31T00:00:00Z")).count == 1)
+    }
+
+    @Test func severalRolesAtOneMinuteShareANotice() {
+        let start = utc("2026-10-30T07:00:20Z")
+        let requests = (1...5).map { i in
+            ScheduledRequest(id: "\(i)", name: "\(i)", scope: "/subscriptions/s\(i)", roleDefinitionId: "r", roleName: "Reader",
+                             scopeName: "Sub \(i)", scopeType: "subscription", status: "Granted", start: start, end: nil)
+        }
+        let notices = ScheduledStartNotice.notices(for: requests, tenantId: nil, now: Fixture.now, timeZone: berlin)
+        #expect(notices.count == 1)
+        #expect(notices[0].title == "Scheduled activations started (5 roles)")
+        #expect(notices[0].body.hasSuffix("and 2 more"))
+        #expect(notices[0].fireAt == utc("2026-10-30T07:00:00Z"))
+    }
+}

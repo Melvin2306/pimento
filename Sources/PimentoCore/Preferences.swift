@@ -77,6 +77,8 @@ public struct Preferences: Equatable, Sendable {
     public var playSound = true
     public var expiryReminders = true
     public var reminderLeadMinutes = 10
+    /// A notification when a scheduled activation starts (local, best-effort).
+    public var notifyScheduledStart = true
 
     // Activation
     public var defaultHours = ActivationRequestBuilder.defaultHours
@@ -153,6 +155,7 @@ public struct Preferences: Equatable, Sendable {
         static let playSound = "notifications.sound"
         static let expiryReminders = "notifications.expiryReminders"
         static let reminderLeadMinutes = "notifications.reminderLeadMinutes"
+        static let notifyScheduledStart = "notifications.scheduledStart"
         static let defaultHours = "activation.defaultHours"
         static let rememberJustifications = "activation.rememberJustifications"
         static let prefillLastJustification = "activation.prefillLastJustification"
@@ -165,7 +168,7 @@ public struct Preferences: Equatable, Sendable {
         static let appearanceMode = "general.appearanceMode"
 
         static let all = [
-            notifyOnCompletion, notifyOnlyOnFailure, playSound, expiryReminders, reminderLeadMinutes,
+            notifyOnCompletion, notifyOnlyOnFailure, playSound, expiryReminders, reminderLeadMinutes, notifyScheduledStart,
             defaultHours, rememberJustifications, prefillLastJustification, confirmOwnerRoles, maxParallelRequests,
             launchTenant, refreshOnLaunch, autoRefreshMinutes, theme, appearanceMode,
         ]
@@ -181,6 +184,7 @@ public struct Preferences: Equatable, Sendable {
         bool(Key.playSound, &p.playSound)
         bool(Key.expiryReminders, &p.expiryReminders)
         int(Key.reminderLeadMinutes, &p.reminderLeadMinutes)
+        bool(Key.notifyScheduledStart, &p.notifyScheduledStart)
         int(Key.defaultHours, &p.defaultHours)
         bool(Key.rememberJustifications, &p.rememberJustifications)
         bool(Key.prefillLastJustification, &p.prefillLastJustification)
@@ -205,6 +209,7 @@ public struct Preferences: Equatable, Sendable {
         store.set(p.playSound, forKey: Key.playSound)
         store.set(p.expiryReminders, forKey: Key.expiryReminders)
         store.set(p.reminderLeadMinutes, forKey: Key.reminderLeadMinutes)
+        store.set(p.notifyScheduledStart, forKey: Key.notifyScheduledStart)
         store.set(p.defaultHours, forKey: Key.defaultHours)
         store.set(p.rememberJustifications, forKey: Key.rememberJustifications)
         store.set(p.prefillLastJustification, forKey: Key.prefillLastJustification)

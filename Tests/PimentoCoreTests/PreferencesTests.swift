@@ -17,6 +17,7 @@ struct PreferencesTests {
         #expect(p.notifyOnCompletion && !p.notifyOnlyOnFailure && p.playSound && p.expiryReminders)
         #expect(p.reminderLeadMinutes == 10)
         #expect(p.reminderLead == 600)
+        #expect(p.notifyScheduledStart)
         #expect(p.defaultHours == ActivationRequestBuilder.defaultHours)
         #expect(p.confirmOwnerRoles, "the Owner confirmation is a safety net and must default to on")
         #expect(p.maxParallelRequests == 8)
@@ -33,6 +34,7 @@ struct PreferencesTests {
         p.notifyOnlyOnFailure = true
         p.playSound = false
         p.reminderLeadMinutes = 30
+        p.notifyScheduledStart = false
         p.defaultHours = 2
         p.confirmOwnerRoles = false
         p.maxParallelRequests = 3

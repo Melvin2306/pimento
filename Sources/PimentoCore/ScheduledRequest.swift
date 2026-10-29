@@ -283,3 +283,48 @@ extension PIMService {
         }
     }
 }
+
+/// The local notification that a scheduled activation has started: one per
+/// tenant and start minute, at the start. Best-effort (macOS shows it whether
+/// or not PIM activated the role); rebuilt from the pending requests whenever
+/// they are read, so cancelled requests lose theirs.
+public struct ScheduledStartNotice: Equatable, Sendable {
+    public let id: String
+    public let fireAt: Date
+    public let title: String
+    public let body: String
+
+    public static let prefix = "scheduled-"
+    static let listed = 3
+
+    /// What every notice of `tenantId` starts with (to replace them all).
+    public static func idPrefix(tenantId: String?) -> String {
+        prefix + (tenantId?.lowercased().nonEmpty ?? "default") + "-"
+    }
+
+    public static func isNotice(_ identifier: String) -> Bool { identifier.hasPrefix(prefix) }
+
+    /// One notice per start minute of the scheduled (not awaiting approval)
+    /// requests that start after `now`.
+    public static func notices(for requests: [ScheduledRequest], tenantId: String?, now: Date,
+                               timeZone: TimeZone = .current) -> [ScheduledStartNotice] {
+        var byMinute: [Date: [ScheduledRequest]] = [:]
+        for r in requests where r.kind == .scheduled && r.start > now {
+            let minute = Date(timeIntervalSince1970: (r.start.timeIntervalSince1970 / 60).rounded(.down) * 60)
+            byMinute[minute, default: []].append(r)
+        }
+        let time = Date.FormatStyle(date: .omitted, time: .shortened, timeZone: timeZone)
+        return byMinute.keys.sorted().map { minute in
+            let items = byMinute[minute]!
+            let lines = items.prefix(listed).map { r in
+                "\(r.roleName) · \(r.scopeName)" + (r.end.map { ", until \($0.formatted(time))" } ?? "")
+            }
+            let more = items.count - lines.count
+            return ScheduledStartNotice(
+                id: idPrefix(tenantId: tenantId) + String(Int(minute.timeIntervalSince1970)),
+                fireAt: minute,
+                title: items.count == 1 ? "Scheduled activation started" : "Scheduled activations started (\(items.count) roles)",
+                body: (lines + (more > 0 ? ["and \(more) more"] : [])).joined(separator: "\n"))
+        }
+    }
+}
