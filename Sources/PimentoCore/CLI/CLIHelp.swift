@@ -13,6 +13,7 @@ public enum CLIHelp {
         case "activate": activate
         case "status": status
         case "tenants": tenants
+        case "presets": presets
         case "completions": completions
         case "version": "Usage: pimento version\n\nPrints the version."
         case "help": "Usage: pimento help [COMMAND]\n\nShows help for a command."
@@ -30,6 +31,7 @@ public enum CLIHelp {
       activate     Activate eligible roles (asks first; --dry-run sends nothing)
       status       Show your active roles, soonest-expiring first
       tenants      List the tenants your az login can reach
+      presets      List, show, save or delete saved role presets
       completions  Print a completion script for zsh, bash or fish
       version      Print the version
       help         Show help for a command
@@ -62,14 +64,16 @@ public enum CLIHelp {
           --active        Only roles that are active now
           --eligible      Only roles that are not active
     \(tenantOption)
-          --json          JSON: {tenantId, user, roles: [...]}
+          --json          JSON: {tenantId, user, roles: [... maxDuration, policy]}
 
-    On a terminal the table is fitted to the window, with colour unless NO_COLOR is
-    set. Piped, it prints plain aligned columns without the sign-in line.
+    MAX is the longest activation each role's PIM policy allows (? when it could
+    not be read). On a terminal the table is fitted to the window, with colour
+    unless NO_COLOR is set. Piped, it prints plain aligned columns without the
+    sign-in line.
     """
 
     static let activate = """
-    Usage: pimento activate (FILTER… | --role NAME | --all) -j TEXT [options]
+    Usage: pimento activate (FILTER… | --role NAME | --all | --preset NAME) -j TEXT [options]
 
     Activates the matching eligible roles that are not active yet, in parallel.
 
@@ -79,11 +83,17 @@ public enum CLIHelp {
     Selection (at least one is required):
           --role NAME     Role name, whole name, * as wildcard. Repeatable.
           --all           Every eligible role (filters and --role still narrow it)
+          --preset NAME   The roles of a saved preset (`pimento presets list`).
+                          Its justification and duration apply unless -j / --hours
+                          are given. Roles that are no longer eligible are reported
+                          as missing; the rest is activated.
 
     Options:
       -j, --justification TEXT
-                          Why you need the roles (required)
-          --hours N       Duration, 1-\(ActivationRequestBuilder.maxHours) (default \(ActivationRequestBuilder.defaultHours)). The role's PIM policy may allow less.
+                          Why you need the roles (required unless the preset has one)
+          --hours N|max   Duration, 1-\(ActivationRequestBuilder.maxHours) (default \(ActivationRequestBuilder.defaultHours)), or max: the longest each
+                          role's PIM policy allows. Each role gets at most its
+                          policy maximum; the plan notes when a role was capped.
       -y, --yes           Don't ask. Required when stdin is not a terminal.
           --dry-run       Print the requests (PUT URL and body), send nothing
           --max-parallel N
@@ -99,6 +109,7 @@ public enum CLIHelp {
       pimento activate prod --role Reader -j "INC-1234 look at logs" --hours 2
       pimento activate --all -j "on-call" --dry-run
       pimento activate --role owner contoso-dev -j "deploy" --yes --json
+      pimento activate --preset On-call --hours max
     """
 
     static let status = """
@@ -120,6 +131,37 @@ public enum CLIHelp {
     Options:
       -t, --tenant ID     Ask ARM with a token for this tenant (default: az's current one)
           --json          JSON: {tenants: [{id, displayName, defaultDomain, category}]}
+    """
+
+    static let presets = """
+    Usage: pimento presets [list] [--tenant ID] [--json]
+           pimento presets show NAME [--tenant ID] [--json]
+           pimento presets save NAME (FILTER… | --role NAME…) [--exact] [-j TEXT] [--hours N|max] [--force]
+           pimento presets delete NAME [--tenant ID]
+
+    A preset is a named set of roles with an optional justification and duration,
+    for `pimento activate --preset NAME`. The app and the CLI share the file
+    ~/Library/Application Support/Pimento/presets.json ($\(PresetStore.environmentVariable) overrides it).
+    Presets belong to a tenant; with one preset of a name, activate uses its tenant.
+
+    save stores the filters as a rule that is resolved at activation time, so new
+    eligibilities that match are included. --exact stores the roles that match now
+    instead. save reads your roles (read-only) to find the tenant and show matches.
+
+    Options:
+          --role NAME     Role name, whole name, * as wildcard. Repeatable.
+          --exact         Store the matching roles, not the filters
+      -j, --justification TEXT
+                          Default justification for the preset
+          --hours N|max   Default duration
+      -f, --force         Replace a preset with the same name
+    \(tenantOption)
+          --json          JSON output
+
+    Examples:
+      pimento presets save On-call prod --role Owner -j "on-call" --hours max
+      pimento presets save Deploy contoso-dev --role Contributor --exact
+      pimento activate --preset On-call --yes
     """
 
     static let completions = """
@@ -153,6 +195,7 @@ public enum CLIHelp {
         'activate:Activate eligible roles'
         'status:Show your active roles, soonest-expiring first'
         'tenants:List the tenants your az login can reach'
+        'presets:List, show, save or delete role presets'
         'completions:Print a completion script'
         'version:Print the version'
         'help:Show help for a command'
@@ -178,14 +221,24 @@ public enum CLIHelp {
                 '*--role[Role name, * as wildcard]:role: ' \
                 '--all[Every eligible role]' \
                 '(-j --justification)'{-j,--justification}'[Justification]:justification: ' \
-                '--hours[Duration in hours]:hours:(1 2 4 8 12 24)' \
+                '--hours[Duration in hours, or max]:hours:(max 1 2 4 8 12 24)' \
+                '--preset[Saved preset]:preset: ' \
                 '(-y --yes)'{-y,--yes}'[Do not ask for confirmation]' \
                 '--dry-run[Print the requests, send nothing]' \
                 '--max-parallel[Requests in flight at once]:count: ' \
                 '*:resource filter: ' ;;
             status|tenants) _arguments -s $common ;;
+            presets)
+              _arguments -s $common \
+                '1:presets command:(list show save delete)' \
+                '*--role[Role name, * as wildcard]:role: ' \
+                '--exact[Store the matching roles, not the filters]' \
+                '(-j --justification)'{-j,--justification}'[Default justification]:justification: ' \
+                '--hours[Default duration]:hours:(max 1 2 4 8 12 24)' \
+                '(-f --force)'{-f,--force}'[Replace a preset with the same name]' \
+                '*:name or filter: ' ;;
             completions) _arguments '1:shell:(zsh bash fish)' ;;
-            help) _arguments '1:command:(list activate status tenants completions version)' ;;
+            help) _arguments '1:command:(list activate status tenants presets completions version)' ;;
           esac ;;
       esac
     }
@@ -205,19 +258,22 @@ public enum CLIHelp {
       prev="${COMP_WORDS[COMP_CWORD-1]}"
       cmd="${COMP_WORDS[1]}"
       if [[ $COMP_CWORD -eq 1 ]]; then
-        COMPREPLY=($(compgen -W "list activate status tenants completions version help" -- "$cur"))
+        COMPREPLY=($(compgen -W "list activate status tenants presets completions version help" -- "$cur"))
         return
       fi
       case "$prev" in
-        -t|--tenant|-j|--justification|--role|--max-parallel) return ;;
-        --hours) COMPREPLY=($(compgen -W "1 2 4 8 12 24" -- "$cur")); return ;;
+        -t|--tenant|-j|--justification|--role|--max-parallel|--preset) return ;;
+        --hours) COMPREPLY=($(compgen -W "max 1 2 4 8 12 24" -- "$cur")); return ;;
       esac
       case "$cmd" in
         list) opts="--tenant --json --role --active --eligible --help" ;;
-        activate) opts="--tenant --json --role --all --justification --hours --yes --dry-run --max-parallel --help" ;;
+        activate) opts="--tenant --json --role --all --preset --justification --hours --yes --dry-run --max-parallel --help" ;;
         status|tenants) opts="--tenant --json --help" ;;
+        presets)
+          if [[ $COMP_CWORD -eq 2 ]]; then opts="list show save delete"
+          else opts="--tenant --json --role --exact --justification --hours --force --help"; fi ;;
         completions) opts="zsh bash fish" ;;
-        help) opts="list activate status tenants completions version" ;;
+        help) opts="list activate status tenants presets completions version" ;;
         *) opts="" ;;
       esac
       COMPREPLY=($(compgen -W "$opts" -- "$cur"))
@@ -232,22 +288,27 @@ public enum CLIHelp {
     complete -c pimento -n __fish_use_subcommand -a activate -d 'Activate eligible roles'
     complete -c pimento -n __fish_use_subcommand -a status -d 'Show your active roles'
     complete -c pimento -n __fish_use_subcommand -a tenants -d 'List the tenants your az login can reach'
+    complete -c pimento -n __fish_use_subcommand -a presets -d 'List, show, save or delete role presets'
     complete -c pimento -n __fish_use_subcommand -a completions -d 'Print a completion script'
     complete -c pimento -n __fish_use_subcommand -a version -d 'Print the version'
     complete -c pimento -n __fish_use_subcommand -a help -d 'Show help for a command'
-    complete -c pimento -n '__fish_seen_subcommand_from list activate status tenants' -s t -l tenant -r -d 'Tenant GUID or domain'
-    complete -c pimento -n '__fish_seen_subcommand_from list activate status tenants' -l json -d 'Machine-readable output'
-    complete -c pimento -n '__fish_seen_subcommand_from list activate status tenants' -s h -l help -d 'Show help'
-    complete -c pimento -n '__fish_seen_subcommand_from list activate' -l role -r -d 'Role name, * as wildcard'
+    complete -c pimento -n '__fish_seen_subcommand_from list activate status tenants presets' -s t -l tenant -r -d 'Tenant GUID or domain'
+    complete -c pimento -n '__fish_seen_subcommand_from list activate status tenants presets' -l json -d 'Machine-readable output'
+    complete -c pimento -n '__fish_seen_subcommand_from list activate status tenants presets' -s h -l help -d 'Show help'
+    complete -c pimento -n '__fish_seen_subcommand_from list activate presets' -l role -r -d 'Role name, * as wildcard'
     complete -c pimento -n '__fish_seen_subcommand_from list' -l active -d 'Only active roles'
     complete -c pimento -n '__fish_seen_subcommand_from list' -l eligible -d 'Only roles that are not active'
     complete -c pimento -n '__fish_seen_subcommand_from activate' -l all -d 'Every eligible role'
-    complete -c pimento -n '__fish_seen_subcommand_from activate' -s j -l justification -r -d 'Justification'
-    complete -c pimento -n '__fish_seen_subcommand_from activate' -l hours -x -a '1 2 4 8 12 24' -d 'Duration in hours'
+    complete -c pimento -n '__fish_seen_subcommand_from activate presets' -s j -l justification -r -d 'Justification'
+    complete -c pimento -n '__fish_seen_subcommand_from activate presets' -l hours -x -a 'max 1 2 4 8 12 24' -d 'Duration in hours, or max'
+    complete -c pimento -n '__fish_seen_subcommand_from activate' -l preset -r -d 'Saved preset'
+    complete -c pimento -n '__fish_seen_subcommand_from presets; and not __fish_seen_subcommand_from list show save delete' -a 'list show save delete'
+    complete -c pimento -n '__fish_seen_subcommand_from presets' -l exact -d 'Store the matching roles, not the filters'
+    complete -c pimento -n '__fish_seen_subcommand_from presets' -s f -l force -d 'Replace a preset with the same name'
     complete -c pimento -n '__fish_seen_subcommand_from activate' -s y -l yes -d 'Do not ask for confirmation'
     complete -c pimento -n '__fish_seen_subcommand_from activate' -l dry-run -d 'Print the requests, send nothing'
     complete -c pimento -n '__fish_seen_subcommand_from activate' -l max-parallel -x -d 'Requests in flight at once'
     complete -c pimento -n '__fish_seen_subcommand_from completions' -a 'zsh bash fish'
-    complete -c pimento -n '__fish_seen_subcommand_from help' -a 'list activate status tenants completions version'
+    complete -c pimento -n '__fish_seen_subcommand_from help' -a 'list activate status tenants presets completions version'
     """#
 }

@@ -16,22 +16,50 @@ final class CLIHarness: @unchecked Sendable {
     var stdinIsTTY = false
     var stdoutIsTTY = false
     var width: Int?
-    var variables: [String: String] = [:]
+    var variables: [String: String]
     var now = Fixture.now
     var tokens: TokenProvider = StaticTokenProvider()
     var tenants: [TenantInfo] = []
+
+    /// Policy maxima the fake ARM returns, by role GUID: Owner 2 h (with
+    /// approval), Contributor 4 h, anything else 8 h.
+    static let policyMaxima = [
+        EligibleRole.ownerRoleGUID: "PT2H",
+        "b24988ac-6180-42a0-ab88-20f7382dd24c": "PT4H",
+    ]
+
+    static func defaultPolicy(_ request: URLRequest) throws -> (Data, Int) {
+        guard let guid = filteredRoleGUID(request) else { return (Data(), 400) }
+        return (policyResponse(roleGUID: guid, maxDuration: policyMaxima[guid] ?? "PT8H", approval: guid == EligibleRole.ownerRoleGUID), 200)
+    }
+
+    /// Each harness gets its own presets file, so no test touches the real one.
+    let presetsURL = temporaryPresetsURL()
+
+    private var policyHandler: @Sendable (URLRequest) throws -> (Data, Int) = CLIHarness.defaultPolicy
+    /// How the fake ARM answers policy GETs (default: `defaultPolicy`).
+    var policy: @Sendable (URLRequest) throws -> (Data, Int) {
+        get { lock.withLock { policyHandler } }
+        set { lock.withLock { policyHandler = newValue } }
+    }
 
     init(answers: [String] = [], put: @escaping @Sendable (URLRequest) throws -> (Data, Int) = { _ in
         (try Fixture.data("success-response"), 201)
     }) {
         self.answers = answers
+        variables = [PresetStore.environmentVariable: presetsURL.path]
+        weak var weakSelf: CLIHarness?
         transport = RecordingTransport { request in
             if request.httpMethod == "PUT" { return try put(request) }
+            if request.url!.path.hasSuffix("roleManagementPolicyAssignments") {
+                return try (weakSelf?.policy ?? CLIHarness.defaultPolicy)(request)
+            }
             let url = request.url!.absoluteString
             if url.contains("roleEligibilityScheduleInstances") { return (try Fixture.data("eligibilities"), 200) }
             if url.contains("roleAssignmentScheduleInstances") { return (try Fixture.data("assignments"), 200) }
             return (Data(), 404)
         }
+        weakSelf = self
     }
 
     var out: String { lock.withLock { outText } }

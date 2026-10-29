@@ -92,6 +92,7 @@ public struct CLIRunner: Sendable {
         case .list(let o): return try await list(o)
         case .status(let o): return try await status(o)
         case .activate(let o): return try await activate(o)
+        case .presets(let c): return try await presets(c)
         }
     }
 
@@ -143,13 +144,15 @@ public struct CLIRunner: Sendable {
 
     func list(_ o: ListOptions) async throws -> CLIExit {
         let tenant = try resolveTenant(o.tenant)
-        let snapshot: RoleSnapshot
-        do { snapshot = try await load(tenant).1 } catch { return report(error, tenant: tenant.tenantId) }
+        let service: PIMService, snapshot: RoleSnapshot
+        do { (service, snapshot) = try await load(tenant) } catch { return report(error, tenant: tenant.tenantId) }
         let roles = o.criteria.apply(snapshot.roles)
+        let policies = await self.policies(for: roles, service: service)
         if o.json {
             out(CLIJSON.encode(CLIJSON.RoleList(
                 tenantId: snapshot.identity.tenantId ?? tenant.tenantId,
-                user: .init(snapshot.identity), roles: roles.map { CLIJSON.Role($0) })))
+                user: .init(snapshot.identity),
+                roles: roles.map { CLIJSON.Role($0, policy: policies[$0.policyKey] ?? .failed("not loaded")) })))
             return .success
         }
         let interactive = env.stdoutIsTTY
@@ -158,7 +161,7 @@ public struct CLIRunner: Sendable {
             err(snapshot.roles.isEmpty ? "You have no eligible Azure-resource roles in this tenant." : "No roles match.")
             return .success
         }
-        roleTable(roles, now: env.now()).render(style: outStyle, maxWidth: env.terminalWidth).forEach { out($0) }
+        roleTable(roles, now: env.now(), policies: policies).render(style: outStyle, maxWidth: env.terminalWidth).forEach { out($0) }
         if interactive {
             let active = roles.filter(\.isActive).count
             out(outStyle.dim("\(CLIFormat.plural(roles.count, "role")), \(active) active"))
@@ -172,10 +175,17 @@ public struct CLIRunner: Sendable {
         return "Signed in as \(who.isEmpty ? snapshot.identity.objectId : who) · tenant \(tid)"
     }
 
-    public func roleTable(_ roles: [EligibleRole], now: Date) -> TextTable {
+    /// Policies of `roles`, by scope + role. Failures stay `.failed`: the
+    /// caller falls back to the asked duration. Never throws.
+    func policies(for roles: [EligibleRole], service: PIMService) async -> [RoleMatcher.Key: PolicyLookup] {
+        (try? await service.loadPolicies(for: roles)) ?? [:]
+    }
+
+    public func roleTable(_ roles: [EligibleRole], now: Date, policies: [RoleMatcher.Key: PolicyLookup]? = nil) -> TextTable {
         let showCondition = roles.contains(where: \.hasCondition)
         var headers = ["RESOURCE", "TYPE", "ROLE", "MEMBERSHIP"]
         if showCondition { headers.append("COND") }
+        if policies != nil { headers.append("MAX") }
         headers.append("STATUS")
         var table = TextTable(headers: headers, flexible: [0, 2, 3])
         for r in roles {
@@ -186,6 +196,10 @@ public struct CLIRunner: Sendable {
                 .init(r.membership.label, .dim),
             ]
             if showCondition { row.append(.init(r.hasCondition ? "yes" : "", .dim)) }
+            if let policies {
+                let max = policies[r.policyKey]?.maxMinutes.map { DurationText.short(minutes: $0) } ?? "?"
+                row.append(.init(max, .dim))
+            }
             row.append(statusCell(r, now: now))
             table.append(row)
         }
@@ -253,28 +267,70 @@ public struct CLIRunner: Sendable {
         let policy = ConfirmationPolicy.decide(dryRun: o.dryRun, assumeYes: o.assumeYes, interactive: env.stdinIsTTY)
         if policy == .refuse { throw ConfirmationRequired() }
 
-        let tenant = try resolveTenant(o.tenant)
+        // A preset saved for one tenant is used there unless a tenant is given.
+        let store = PresetStore(environment: env.variables)
+        var library: PresetLibrary?
+        var tenant = try resolveTenant(o.tenant)
+        if let name = o.preset {
+            library = try store.load()
+            if tenant.tenantId == nil, let only = library?.named(name), only.count == 1, let tid = only[0].tenantId {
+                tenant = TenantSelection(tenantId: tid, source: .commandLine)
+            }
+        }
         // A dry run gets a GET-only transport: it cannot send a PUT even by mistake.
         let service: PIMService, snapshot: RoleSnapshot
         do { (service, snapshot) = try await load(tenant, readOnly: o.dryRun) } catch { return report(error, tenant: tenant.tenantId) }
         let now = env.now()
-        let matched = o.criteria.apply(snapshot.roles)
-        guard !matched.isEmpty else {
-            err(snapshot.roles.isEmpty
-                ? "You have no eligible Azure-resource roles in this tenant."
-                : "No eligible role matches. `pimento list` shows what there is.")
-            return .failure
+        let tenantId = snapshot.identity.tenantId ?? tenant.tenantId
+
+        var matched: [EligibleRole]
+        var missing: [PresetRole] = []
+        var preset: Preset?
+        if let name = o.preset, let library {
+            let p = try library.find(name, tenantId: tenantId)
+            let resolution = p.resolve(in: snapshot.roles)
+            preset = p
+            matched = resolution.roles
+            missing = resolution.missing
+            for rule in resolution.unmatchedRules {
+                err(errStyle.yellow("note:") + " the preset's rule `\(rule.label)` matches no role")
+            }
+        } else {
+            matched = o.criteria.apply(snapshot.roles)
         }
-        let skipped = matched.filter(\.isActive)
-        let plans = try ActivationRequestBuilder.plan(
-            matched.filter { !$0.isActive }, principalId: snapshot.identity.objectId,
-            justification: o.justification, hours: o.hours, now: now)
+        let justification = o.justification.isEmpty ? (preset?.trimmedJustification ?? "") : o.justification
+        guard !justification.isEmpty else { throw CLIParseError.missingJustification }
+        let requested = o.duration ?? preset?.duration ?? .hours(ActivationRequestBuilder.defaultHours)
 
         // Human-readable progress goes to stdout, or to stderr when stdout is JSON.
         let toStderr = o.json, runner = self
         let human: @Sendable (String) -> Void = { line in toStderr ? runner.err(line) : runner.out(line) }
         let style = o.json ? errStyle : outStyle
-        let tenantLabel = snapshot.identity.tenantId ?? tenant.tenantId ?? "az's default tenant"
+        let tenantLabel = tenantId ?? "az's default tenant"
+
+        for m in missing {
+            human(style.yellow("missing") + "  \(m.label): no longer eligible, left out")
+        }
+        guard !matched.isEmpty else {
+            if preset != nil {
+                err("None of the preset's roles are among your eligible roles in tenant \(tenantLabel).")
+            } else {
+                err(snapshot.roles.isEmpty
+                    ? "You have no eligible Azure-resource roles in this tenant."
+                    : "No eligible role matches. `pimento list` shows what there is.")
+            }
+            if o.json { out(CLIJSON.encode(CLIJSON.Activation.empty(o, preset: preset, tenantId: tenantId, user: snapshot.identity, justification: justification, requested: requested, missing: missing))) }
+            return .failure
+        }
+        let skipped = matched.filter(\.isActive)
+        let toActivate = matched.filter { !$0.isActive }
+        let policies = await self.policies(for: toActivate, service: service)
+        let plans = try ActivationRequestBuilder.plan(
+            toActivate, principalId: snapshot.identity.objectId, justification: justification, now: now
+        ) { role in
+            EffectiveDuration.resolve(requested, policyMaxMinutes: policies[role.policyKey]?.maxMinutes,
+                                      fallbackHours: ActivationRequestBuilder.defaultHours)
+        }
 
         func json(_ outcomes: [String: ActivationOutcome]) -> CLIJSON.Activation {
             let byRole = Dictionary(plans.map { ($0.role.id, $0) }, uniquingKeysWith: { a, _ in a })
@@ -282,9 +338,10 @@ public struct CLIRunner: Sendable {
                 CLIJSON.Result(role: role, outcome: outcomes[role.id], plan: byRole[role.id])
             }
             return CLIJSON.Activation(
-                dryRun: o.dryRun, tenantId: tenantLabel == "az's default tenant" ? nil : tenantLabel,
-                user: .init(snapshot.identity), hours: o.hours, justification: o.justification,
-                results: results, summary: .init(results))
+                dryRun: o.dryRun, tenantId: tenantId, user: .init(snapshot.identity),
+                hours: requested.hours, duration: requested.stringValue, preset: preset?.name,
+                justification: justification, results: results,
+                missing: missing.isEmpty ? nil : missing.map(CLIJSON.MissingRole.init), summary: .init(results))
         }
 
         for r in skipped {
@@ -298,22 +355,33 @@ public struct CLIRunner: Sendable {
         }
 
         let owners = plans.filter(\.role.isOwner).count
+        let forWhat = requested == .maximum ? "for the longest each role allows" : "for up to \(CLIFormat.plural(requested.hours ?? 0, "hour"))"
         human((o.dryRun ? "Would activate " : "Activate ")
-            + "\(CLIFormat.plural(plans.count, "role")) for \(CLIFormat.plural(o.hours, "hour")) in tenant \(tenantLabel):")
-        var table = TextTable(headers: ["ROLE", "RESOURCE", "TYPE", "MEMBERSHIP"], flexible: [0, 1, 3])
+            + "\(CLIFormat.plural(plans.count, "role")) \(forWhat)\(preset.map { " (preset \($0.name))" } ?? "") in tenant \(tenantLabel):")
+        var table = TextTable(headers: ["ROLE", "RESOURCE", "TYPE", "MEMBERSHIP", "DURATION"], flexible: [0, 1, 3])
         for p in plans {
             table.append([
                 .init(p.role.isOwner ? "\(p.role.roleName) (!)" : p.role.roleName, p.role.isOwner ? .strong : .plain),
                 .init(p.role.scopeName),
                 .init(p.role.scopeTypeLabel, .dim),
                 .init(p.role.membership.label, .dim),
+                Self.durationCell(p.duration),
             ])
         }
         table.render(style: style, maxWidth: o.json ? nil : env.terminalWidth).forEach { human("  " + $0) }
+        let clamped = plans.filter(\.duration.isClamped)
+        if !clamped.isEmpty, case .hours(let h) = requested {
+            human(style.yellow("note:") + " \(CLIFormat.plural(clamped.count, "role")) capped at the policy maximum (asked \(h) h).")
+        }
+        let unknown = plans.filter { $0.duration.policyMaxMinutes == nil }.count
+        if unknown > 0 {
+            let fallback = requested == .maximum ? "using \(ActivationRequestBuilder.defaultHours) h" : "using the asked duration"
+            human(style.yellow("note:") + " policy maximum unknown for \(CLIFormat.plural(unknown, "role")), \(fallback).")
+        }
         if owners > 0 {
             human(style.boldRed("Warning:") + " \(CLIFormat.plural(owners, "Owner role")) (!): full control of the resource, including access.")
         }
-        human("Justification: \(o.justification)")
+        human("Justification: \(justification)")
 
         if o.dryRun {
             if !o.json {
@@ -354,11 +422,19 @@ public struct CLIRunner: Sendable {
         if summary.submitted > 0 { parts.append("\(summary.submitted) submitted for approval") }
         if summary.skipped > 0 { parts.append("\(summary.skipped) already active") }
         if summary.failed > 0 { parts.append(style.red("\(summary.failed) failed")) }
+        if !missing.isEmpty { parts.append(style.yellow("\(missing.count) missing")) }
         human(parts.joined(separator: ", ") + ".")
         if o.json { out(CLIJSON.encode(json(outcomes))) }
         let code = CLIExit.code(for: Array(outcomes.values))
         if code == .auth { err("hint: sign in with `\(AzureCLIError.loginCommand(tenant: tenant.tenantId))`") }
         return code
+    }
+
+    /// `8 h`, `4 h (max)` when capped, `8 h (max ?)` when the maximum is unknown.
+    static func durationCell(_ d: EffectiveDuration) -> TextTable.Cell {
+        if d.isClamped { return .init("\(d.text) (max)", .warn) }
+        if d.requested == .maximum { return .init(d.policyMaxMinutes == nil ? "\(d.text) (max ?)" : "\(d.text) (max)", d.policyMaxMinutes == nil ? .warn : .plain) }
+        return .init(d.text)
     }
 
     public static func resultLine(

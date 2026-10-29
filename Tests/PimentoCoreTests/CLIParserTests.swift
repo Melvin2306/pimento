@@ -43,7 +43,7 @@ struct CLIParserTests {
         #expect(o.criteria.filters == ["prod"])
         #expect(o.criteria.roles == ["Reader"])
         #expect(o.justification == "INC-42 hotfix")
-        #expect(o.hours == 4)
+        #expect(o.duration == .hours(4))
         #expect(o.assumeYes)
         #expect(o.dryRun)
         #expect(o.maxParallel == 3)
@@ -55,7 +55,7 @@ struct CLIParserTests {
             Issue.record("expected activate"); return
         }
         #expect(defaults.all)
-        #expect(defaults.hours == ActivationRequestBuilder.defaultHours)
+        #expect(defaults.duration == nil)
         #expect(defaults.maxParallel == 8)
         #expect(!defaults.assumeYes && !defaults.dryRun && !defaults.json)
     }
@@ -68,7 +68,7 @@ struct CLIParserTests {
     }
 
     @Test func numbersAreValidated() {
-        #expect(throws: CLIParseError.invalidNumber(flag: "--hours", value: "four")) {
+        #expect(throws: CLIParseError.invalidHours("four")) {
             try CLIParser.parse(["activate", "--all", "-j", "x", "--hours", "four"])
         }
         #expect(throws: CLIParseError.outOfRange(flag: "--hours", value: 25, range: 1...24)) {
@@ -145,7 +145,7 @@ struct CLILegacyTests {
         // Substring match on the role, as in 0.1.0.
         #expect(o.criteria.roles == ["*owner*"])
         #expect(o.criteria.filters == ["prod"])
-        #expect(o.hours == 4)
+        #expect(o.duration == .hours(4))
         #expect(!o.all)
         #expect(call.deprecation?.contains("pimento activate --dry-run") == true)
 

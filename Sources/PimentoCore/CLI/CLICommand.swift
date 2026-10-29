@@ -81,11 +81,53 @@ public struct ActivateOptions: Equatable, Sendable {
     public var criteria = RoleCriteria()
     /// Every eligible role (still narrowed by filters and `--role`).
     public var all = false
+    /// A saved preset instead of filters / `--role` / `--all`.
+    public var preset: String?
+    /// Empty: the preset's justification, if it has one.
     public var justification = ""
-    public var hours = ActivationRequestBuilder.defaultHours
+    /// nil: the preset's duration, else the default (8 hours).
+    public var duration: RequestedDuration?
     public var assumeYes = false
     public var dryRun = false
     public var maxParallel = 8
+    public init() {}
+}
+
+/// `pimento presets …`.
+public enum PresetsCommand: Equatable, Sendable {
+    case list(PresetListOptions)
+    case show(PresetShowOptions)
+    case save(PresetSaveOptions)
+    case delete(PresetShowOptions)
+
+    public static let names = ["list", "show", "save", "delete"]
+}
+
+public struct PresetListOptions: Equatable, Sendable {
+    /// Only presets of this tenant (and presets for any tenant).
+    public var tenant: String?
+    public var json = false
+    public init() {}
+}
+
+public struct PresetShowOptions: Equatable, Sendable {
+    public var name = ""
+    public var tenant: String?
+    public var json = false
+    public init() {}
+}
+
+public struct PresetSaveOptions: Equatable, Sendable {
+    public var name = ""
+    public var tenant: String?
+    public var json = false
+    public var criteria = RoleCriteria()
+    /// Store the roles that match now, instead of the filters as a rule.
+    public var exact = false
+    public var justification: String?
+    public var duration: RequestedDuration?
+    /// Replace a preset of the same name.
+    public var force = false
     public init() {}
 }
 
@@ -113,9 +155,10 @@ public enum CLICommand: Equatable, Sendable {
     case activate(ActivateOptions)
     case status(StatusOptions)
     case tenants(TenantsOptions)
+    case presets(PresetsCommand)
     case completions(CompletionShell)
 
-    public static let names = ["list", "activate", "status", "tenants", "completions", "version", "help"]
+    public static let names = ["list", "activate", "status", "tenants", "presets", "completions", "version", "help"]
 }
 
 /// A parsed command line, plus a note when it used a deprecated spelling.
@@ -137,6 +180,9 @@ public enum CLIParseError: Error, Equatable, LocalizedError {
     case missingValue(String)
     case valueNotAllowed(String)
     case invalidNumber(flag: String, value: String)
+    case invalidHours(String)
+    case missingPresetName(String)
+    case unknownPresetCommand(String)
     case outOfRange(flag: String, value: Int, range: ClosedRange<Int>)
     case conflicting(String, String)
     case missingJustification
@@ -153,12 +199,16 @@ public enum CLIParseError: Error, Equatable, LocalizedError {
         case .missingValue(let flag): "\(flag) needs a value."
         case .valueNotAllowed(let flag): "\(flag) takes no value."
         case .invalidNumber(let flag, let value): "\(flag) needs a whole number, got “\(value)”."
+        case .invalidHours(let value):
+            "--hours takes 1-\(ActivationRequestBuilder.maxHours) or max (the longest each role's policy allows), got “\(value)”."
+        case .missingPresetName(let c): "`pimento presets \(c)` needs a preset name."
+        case .unknownPresetCommand(let c): "Unknown presets command “\(c)”. Use list, show, save or delete."
         case .outOfRange(let flag, let value, let range):
             "\(flag) must be between \(range.lowerBound) and \(range.upperBound), got \(value)."
         case .conflicting(let a, let b): "Use either \(a) or \(b), not both."
         case .missingJustification: "activate needs a justification: -j \"TEXT\"."
         case .noSelection:
-            "Say which roles to activate: resource filters, --role NAME, or --all for every eligible role."
+            "Say which roles to activate: resource filters, --role NAME, --preset NAME, or --all for every eligible role."
         case .missingShell: "Name a shell: pimento completions zsh|bash|fish."
         case .unknownShell(let s): "No completions for “\(s)”. Use zsh, bash or fish."
         }
@@ -191,6 +241,17 @@ public enum CLIParser {
         "-y": Flag(key: "yes", takesValue: false),
         "--dry-run": Flag(key: "dry-run", takesValue: false),
         "--max-parallel": Flag(key: "max-parallel", takesValue: true),
+        "--preset": Flag(key: "preset", takesValue: true),
+    ]) { a, _ in a }
+
+    private static let presetSaveFlags = tenant.merging(json) { a, _ in a }.merging([
+        "--role": Flag(key: "role", takesValue: true),
+        "--exact": Flag(key: "exact", takesValue: false),
+        "--justification": Flag(key: "justification", takesValue: true),
+        "-j": Flag(key: "justification", takesValue: true),
+        "--hours": Flag(key: "hours", takesValue: true),
+        "--force": Flag(key: "force", takesValue: false),
+        "-f": Flag(key: "force", takesValue: false),
     ]) { a, _ in a }
 
     private static let plainFlags = tenant.merging(json) { a, _ in a }
@@ -226,6 +287,7 @@ public enum CLIParser {
             o.tenant = scan.values["tenant"]?.last
             o.json = scan.values["json"] != nil
             return CLIInvocation(.tenants(o))
+        case "presets": return try CLIInvocation(parsePresets(rest))
         case "completions":
             if rest.contains("--help") || rest.contains("-h") { return CLIInvocation(.help(topic: first)) }
             guard let name = rest.first else { throw CLIParseError.missingShell }
@@ -266,16 +328,79 @@ public enum CLIParser {
         o.all = scan.values["all"] != nil
         o.assumeYes = scan.values["yes"] != nil
         o.dryRun = scan.values["dry-run"] != nil
+        o.preset = scan.values["preset"]?.last?.trimmingCharacters(in: .whitespaces)
         o.justification = (scan.values["justification"]?.last ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        if let raw = scan.values["hours"]?.last {
-            o.hours = try number(raw, flag: "--hours", range: Preferences.hoursRange)
-        }
+        if let raw = scan.values["hours"]?.last { o.duration = try hours(raw) }
         if let raw = scan.values["max-parallel"]?.last {
             o.maxParallel = try number(raw, flag: "--max-parallel", range: ActivateOptions.maxParallelRange)
+        }
+        if o.preset != nil {
+            if o.criteria.hasSelection || o.all { throw CLIParseError.conflicting("--preset", "filters, --role or --all") }
+            // The justification may come from the preset: checked once it is loaded.
+            return .activate(o)
         }
         guard o.criteria.hasSelection || o.all else { throw CLIParseError.noSelection }
         guard !o.justification.isEmpty else { throw CLIParseError.missingJustification }
         return .activate(o)
+    }
+
+    /// `--hours N` (1-24) or `--hours max`.
+    static func hours(_ raw: String) throws -> RequestedDuration {
+        if let d = RequestedDuration(argument: raw) { return d }
+        if let n = Int(raw) { throw CLIParseError.outOfRange(flag: "--hours", value: n, range: Preferences.hoursRange) }
+        throw CLIParseError.invalidHours(raw)
+    }
+
+    static func parsePresets(_ args: [String]) throws -> CLICommand {
+        guard let sub = args.first, !sub.hasPrefix("-") || sub == "--help" || sub == "-h" else {
+            // `pimento presets` alone, or with options only: list.
+            return try parsePresets(["list"] + args)
+        }
+        if sub == "--help" || sub == "-h" || sub == "help" { return .help(topic: "presets") }
+        let rest = Array(args.dropFirst())
+        switch sub {
+        case "list", "ls":
+            let scan = try scan(rest, command: "presets list", flags: plainFlags, positionals: false)
+            if scan.help { return .help(topic: "presets") }
+            var o = PresetListOptions()
+            o.tenant = scan.values["tenant"]?.last
+            o.json = scan.values["json"] != nil
+            return .presets(.list(o))
+        case "show", "delete", "rm":
+            let command = sub == "rm" ? "delete" : sub
+            let scan = try scan(rest, command: "presets \(command)", flags: plainFlags, positionals: true)
+            if scan.help { return .help(topic: "presets") }
+            guard let name = scan.positionals.first?.trimmingCharacters(in: .whitespaces), !name.isEmpty else {
+                throw CLIParseError.missingPresetName(command)
+            }
+            if scan.positionals.count > 1 { throw CLIParseError.unexpectedArgument(scan.positionals[1], command: "presets \(command)") }
+            var o = PresetShowOptions()
+            o.name = name
+            o.tenant = scan.values["tenant"]?.last
+            o.json = scan.values["json"] != nil
+            return .presets(command == "show" ? .show(o) : .delete(o))
+        case "save", "add":
+            let scan = try scan(rest, command: "presets save", flags: presetSaveFlags, positionals: true)
+            if scan.help { return .help(topic: "presets") }
+            guard let name = scan.positionals.first?.trimmingCharacters(in: .whitespaces), !name.isEmpty else {
+                throw CLIParseError.missingPresetName("save")
+            }
+            var o = PresetSaveOptions()
+            o.name = name
+            o.tenant = scan.values["tenant"]?.last
+            o.json = scan.values["json"] != nil
+            o.criteria.filters = Array(scan.positionals.dropFirst())
+            o.criteria.roles = scan.values["role"] ?? []
+            o.criteria.state = .any
+            o.exact = scan.values["exact"] != nil
+            o.force = scan.values["force"] != nil
+            o.justification = scan.values["justification"]?.last?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let raw = scan.values["hours"]?.last { o.duration = try hours(raw) }
+            guard o.criteria.hasSelection else { throw CLIParseError.noSelection }
+            return .presets(.save(o))
+        default:
+            throw CLIParseError.unknownPresetCommand(sub)
+        }
     }
 
     /// `--list`, `--dry-run`, `--tenants` (0.1.0) mapped onto the subcommands.

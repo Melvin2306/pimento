@@ -169,8 +169,12 @@ public enum CLIJSON {
         /// Seconds until the activation ends (`status` only).
         public let secondsLeft: Int?
         public let eligibilityScheduleId: String
+        /// The policy's longest activation, ISO 8601 (`list` only; absent when unknown).
+        public let maxDuration: String?
+        /// What the role's PIM policy asks for on activation (`list` only).
+        public let policy: Policy?
 
-        public init(_ role: EligibleRole, now: Date? = nil) {
+        public init(_ role: EligibleRole, now: Date? = nil, policy lookup: PolicyLookup? = nil) {
             id = role.id
             roleName = role.roleName
             roleDefinitionId = role.roleDefinitionId
@@ -187,6 +191,35 @@ public enum CLIJSON {
             activeUntil = role.activeUntil.map(AzureDate.format)
             secondsLeft = now.flatMap { now in role.activeUntil.map { max(0, Int($0.timeIntervalSince(now))) } }
             eligibilityScheduleId = role.eligibilityScheduleId
+            maxDuration = lookup?.policy?.maxDurationISO
+            policy = lookup.map(Policy.init)
+        }
+    }
+
+    public struct Policy: Encodable, Equatable, Sendable {
+        /// `loaded`, `notFound` or `failed`.
+        public let status: String
+        public let maxDuration: String?
+        public let requiresJustification: Bool?
+        public let requiresTicket: Bool?
+        public let requiresMfa: Bool?
+        public let requiresApproval: Bool?
+        public let authenticationContext: String?
+        public let error: String?
+
+        public init(_ lookup: PolicyLookup) {
+            let p = lookup.policy
+            switch lookup {
+            case .loaded: status = "loaded"; error = nil
+            case .notFound: status = "notFound"; error = nil
+            case .failed(let message): status = "failed"; error = message
+            }
+            maxDuration = p?.maxDurationISO
+            requiresJustification = p?.requiresJustification
+            requiresTicket = p?.requiresTicket
+            requiresMfa = p?.requiresMFA
+            requiresApproval = p?.requiresApproval
+            authenticationContext = p?.authenticationContext?.nonEmpty
         }
     }
 
@@ -231,9 +264,18 @@ public enum CLIJSON {
         public let message: String?
         public let rules: [String]?
         public let request: Request?
+        /// The duration requested for this role, ISO 8601, after the policy cap.
+        public let duration: String?
+        /// The role's policy maximum, ISO 8601, when known.
+        public let maxDuration: String?
+        /// True when the asked duration was capped at the policy maximum.
+        public let capped: Bool?
 
         public init(role: EligibleRole, outcome: ActivationOutcome?, plan: PlannedRequest?) {
             self.role = Role(role)
+            duration = plan?.duration.iso
+            maxDuration = plan?.duration.policyMaxMinutes.map { ISODuration.format(minutes: $0) }
+            capped = plan?.duration.isClamped == true ? true : nil
             request = outcome == nil ? plan.map { Request(method: "PUT", url: $0.url.absoluteString, body: $0.body) } : nil
             var status: String?, until: String?, code: String?, message: String?, rules: [String]?
             switch outcome {
@@ -285,14 +327,74 @@ public enum CLIJSON {
         }
     }
 
+    public struct MissingRole: Encodable, Equatable, Sendable {
+        public let scope: String
+        public let roleDefinitionId: String
+        public let roleName: String?
+        public let scopeName: String?
+
+        public init(_ r: PresetRole) {
+            scope = r.scope
+            roleDefinitionId = r.roleDefinitionId
+            roleName = r.roleName
+            scopeName = r.scopeName
+        }
+    }
+
     public struct Activation: Encodable, Equatable, Sendable {
         public let dryRun: Bool
         public let tenantId: String?
         public let user: User
-        public let hours: Int
+        /// The asked hours; absent for `--hours max`.
+        public let hours: Int?
+        /// The asked duration: `max` or ISO 8601 (`PT8H`).
+        public let duration: String
+        public let preset: String?
         public let justification: String
         public let results: [Result]
+        /// Preset roles that are no longer eligible.
+        public let missing: [MissingRole]?
         public let summary: Summary
+
+        static func empty(
+            _ o: ActivateOptions, preset: Preset?, tenantId: String?, user: Identity, justification: String,
+            requested: RequestedDuration, missing: [PresetRole]
+        ) -> Activation {
+            Activation(
+                dryRun: o.dryRun, tenantId: tenantId, user: .init(user), hours: requested.hours,
+                duration: requested.stringValue, preset: preset?.name, justification: justification, results: [],
+                missing: missing.isEmpty ? nil : missing.map(MissingRole.init), summary: .init([]))
+        }
+    }
+
+    /// One preset in `pimento presets list|show --json`.
+    public struct PresetDoc: Encodable, Equatable, Sendable {
+        public let id: String
+        public let name: String
+        public let tenantId: String?
+        public let roles: [MissingRole]
+        public let match: [PresetRule]?
+        public let justification: String?
+        public let duration: String?
+        public let createdAt: String?
+        public let updatedAt: String?
+
+        public init(_ p: Preset) {
+            id = p.id.uuidString.lowercased()
+            name = p.name
+            tenantId = p.tenantId
+            roles = p.roles.map(MissingRole.init)
+            match = p.match.isEmpty ? nil : p.match
+            justification = p.trimmedJustification
+            duration = p.duration?.stringValue
+            createdAt = p.createdAt.map(AzureDate.format)
+            updatedAt = p.updatedAt.map(AzureDate.format)
+        }
+    }
+
+    public struct PresetList: Encodable, Equatable, Sendable {
+        public let file: String
+        public let presets: [PresetDoc]
     }
 
     public static func encode<T: Encodable>(_ value: T) -> String {
