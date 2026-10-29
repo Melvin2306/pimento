@@ -1,0 +1,39 @@
+Sources/PimentoApp/TenantViews.swift
+  s_4884204a812fec::t_919d112db2e79c 8,35-37,100,269-270,283-284,293-296,318,329,332,339
+Sources/PimentoApp/ContentView.swift
+  s_4884204a812fec::t_41b5bfcd3edf26 264-266,269-305,327-329,342-351,354,356,388,429,448,456,476-477,487-496,499,509,545,551,554,587-590,593,613
+  s_4884204a812fec::t_8433d6ce27607e 11,16,19,58,73,80,147,150-158,160,170,187,199,207,213-222,224,230-236,238,244-245,252-253
+README.md
+  s_4884204a812fec::t_f80cf567f5bf2a 43,135,139-156
+  s_4884204a812fec::t_25ebd7749ee705 157
+Sources/PimentoApp/Theme.swift
+  s_4884204a812fec::t_1bf3a1b6a74be9 1-129,138-156,158-178,189-223,227,230-375,377-418,420-465,467-474,476-551,553-554,556-613,615-616,618-630,637-686,688-734
+  s_4884204a812fec::t_20494bbba5471d 376,475
+  s_4884204a812fec::t_919d112db2e79c 130-137
+  s_4884204a812fec::t_c8a0246f0505f4 224-226,228-229,466
+  s_4884204a812fec::t_1eb07f79094294 157,179-188,419,631-636,687
+  s_4884204a812fec::t_3c5380f1f7c775 552,555,614,617
+Sources/PimentoApp/SettingsView.swift
+  s_4884204a812fec::t_919d112db2e79c 66-76,97,103,108-116,192,254
+  s_4884204a812fec::t_0dd7662edf0762 65
+Sources/PimentoApp/main.swift
+  s_4884204a812fec::t_919d112db2e79c 46,86
+CHANGELOG.md
+  s_4884204a812fec::t_f80cf567f5bf2a 28-32
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1dedfd245e60437338d09108a4f0ee165455aa1f",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
