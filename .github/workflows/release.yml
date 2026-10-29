@@ -21,13 +21,36 @@ jobs:
           test "v${version}" = "${GITHUB_REF_NAME}" || { echo "tag ${GITHUB_REF_NAME} != v${version}"; exit 1; }
       - name: Test
         run: swift test
-      - name: Bundle (ad-hoc signed, not notarized)
-        run: scripts/bundle.sh --zip
+      - name: Bundle the app, CLI inside (ad-hoc signed, not notarized)
+        run: |
+          scripts/bundle.sh --zip
+          build/Pimento.app/Contents/Helpers/pimento version
+      - name: Package the CLI on its own (universal, ad-hoc signed)
+        run: scripts/package-cli.sh
+      - name: Checksums
+        run: |
+          cd build
+          shasum -a 256 Pimento-*.zip pimento-cli-*-macos.tar.gz | tee SHA256SUMS.txt
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" build/Pimento-*.zip \
-            --title "Pimento ${GITHUB_REF_NAME#v}" \
+          version="${GITHUB_REF_NAME#v}"
+          cat > build/notes.md <<NOTES
+          Two downloads:
+
+          - **Pimento-${version}.zip**: the Mac app, with the \`pimento\` command-line tool inside
+            (Pimento › Install Command Line Tool… puts it on your PATH).
+          - **pimento-cli-${version}-macos.tar.gz**: only the command-line tool (Apple silicon and Intel),
+            with shell completions.
+
+          Verify with \`shasum -a 256 -c SHA256SUMS.txt --ignore-missing\`.
+
+          Ad-hoc signed, not notarized: right-click the app and choose Open on first launch, or run
+          \`xattr -dr com.apple.quarantine Pimento.app\` (\`xattr -d com.apple.quarantine pimento\` for the CLI).
+          NOTES
+          gh release create "$GITHUB_REF_NAME" \
+            build/Pimento-*.zip build/pimento-cli-*-macos.tar.gz build/SHA256SUMS.txt \
+            --title "Pimento ${version}" \
             --generate-notes \
-            --notes "Ad-hoc signed, not notarized: right-click the app and choose Open on first launch, or run \`xattr -dr com.apple.quarantine Pimento.app\`."
+            --notes-file build/notes.md

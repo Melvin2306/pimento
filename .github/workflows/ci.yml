@@ -38,8 +38,25 @@ jobs:
           build/Pimento.app/Contents/Helpers/pimento help >/dev/null
           # 0.1.0's flags on the app binary are handed to the bundled CLI.
           build/Pimento.app/Contents/MacOS/Pimento --version
+      - name: Package the CLI on its own (universal)
+        run: |
+          scripts/package-cli.sh
+          tarball="$(ls build/pimento-cli-*-macos.tar.gz)"
+          tar -tzf "$tarball"
+          mkdir -p build/cli-check && tar -xzf "$tarball" -C build/cli-check
+          bin="$(ls build/cli-check/*/pimento)"
+          lipo -archs "$bin" | grep -q arm64
+          lipo -archs "$bin" | grep -q x86_64
+          "$bin" version
+          # Linked against Foundation and system libraries only: no AppKit/SwiftUI.
+          ! otool -L "$bin" | grep -E 'AppKit|SwiftUI|UserNotifications'
       - uses: actions/upload-artifact@v4
         with:
           name: Pimento-app
           path: build/Pimento-*.zip
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pimento-cli
+          path: build/pimento-cli-*-macos.tar.gz
           if-no-files-found: error
