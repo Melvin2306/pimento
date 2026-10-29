@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// Everything the `pimento` command touches outside itself: the terminal, the
 /// environment, the clock, and how it reaches Azure. `main.swift` passes the
@@ -71,13 +74,17 @@ public struct CLISignIn: Sendable {
     public var transport: HTTPTransport
     /// Opens the sign-in page in a browser; false if it could not.
     public var openURL: @Sendable (URL) async -> Bool
+    /// Whether browser sign-in works here (it needs a loopback listener: not
+    /// on Windows). Without it, `login` uses a device code.
+    public var browserSignIn: Bool
 
     public init(settings: AuthSettingsStore?, store: TokenStore, transport: HTTPTransport,
-                openURL: @escaping @Sendable (URL) async -> Bool) {
+                openURL: @escaping @Sendable (URL) async -> Bool, browserSignIn: Bool = LoopbackListener.isSupported) {
         self.settings = settings
         self.store = store
         self.transport = transport
         self.openURL = openURL
+        self.browserSignIn = browserSignIn
     }
 
     /// No settings, an empty in-memory store, no network, no browser.

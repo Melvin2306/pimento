@@ -328,8 +328,9 @@ public struct PresetLibrary: Equatable, Sendable {
     }
 }
 
-/// The presets file, shared by the app and the CLI:
-/// `~/Library/Application Support/Pimento/presets.json`, or `$PIMENTO_PRESETS`.
+/// The presets file, shared by the app and the CLI: `presets.json` in
+/// `PimentoPaths.dataDirectory` (`~/Library/Application Support/Pimento` on
+/// macOS), or `$PIMENTO_PRESETS`.
 public struct PresetStore: Sendable {
     public static let environmentVariable = "PIMENTO_PRESETS"
 
@@ -341,18 +342,14 @@ public struct PresetStore: Sendable {
         self.init(url: Self.location(environment: environment))
     }
 
-    public static func location(environment: [String: String], home: String = NSHomeDirectory()) -> URL {
-        if let custom = environment[environmentVariable]?.trimmingCharacters(in: .whitespaces), !custom.isEmpty {
-            let expanded = custom == "~" ? home : custom.hasPrefix("~/") ? home + custom.dropFirst() : custom
-            return URL(fileURLWithPath: expanded)
+    public static func location(
+        environment: [String: String], home: String = NSHomeDirectory(), platform: HostPlatform = .current
+    ) -> URL {
+        if let custom = PimentoPaths.nonEmpty(environment[environmentVariable]) {
+            return URL(fileURLWithPath: PimentoPaths.expandTilde(custom, home: home, platform: platform))
         }
-        #if os(macOS)
-        let base = URL(fileURLWithPath: home).appendingPathComponent("Library/Application Support", isDirectory: true)
-        #else
-        let base = environment["XDG_DATA_HOME"].map { URL(fileURLWithPath: $0) }
-            ?? URL(fileURLWithPath: home).appendingPathComponent(".local/share", isDirectory: true)
-        #endif
-        return base.appendingPathComponent("Pimento", isDirectory: true).appendingPathComponent("presets.json")
+        return URL(fileURLWithPath: platform.join(
+            PimentoPaths.dataDirectoryPath(environment: environment, home: home, platform: platform), "presets.json"))
     }
 
     /// The saved presets; an empty library when the file does not exist yet.

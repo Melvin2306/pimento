@@ -335,16 +335,16 @@ struct ApprovalNoticeTests {
     @Test func approved() {
         let n = ApprovalNotice.decision(transition(.approved(until: AzureDate.parse("2026-10-29T15:50:00Z"))), now: Fixture.now, timeZone: utc)
         #expect(n.title == "Approved and active: Contributor")
-        #expect(n.body == "Contoso Staging. Active until 15:50.")
+        #expect(n.body == "Contoso Staging. Active until \(shortTime("2026-10-29T15:50:00Z", utc)).")
         #expect(n.id == "approval-7a1b2c3d-0000-4000-8000-000000000002")
         // The listed end wins over the request's estimate.
         let listed = ApprovalNotice.decision(transition(.approved(until: nil)), until: AzureDate.parse("2026-10-29T16:00:00Z"), now: Fixture.now, timeZone: utc)
-        #expect(listed.body == "Contoso Staging. Active until 16:00.")
+        #expect(listed.body == "Contoso Staging. Active until \(shortTime("2026-10-29T16:00:00Z", utc)).")
         // Approved for a later start.
         let later = ApprovalNotice.decision(transition(.approved(until: AzureDate.parse("2026-10-30T12:00:00Z")), start: "2026-10-30T08:00:00Z"),
                                             now: Fixture.now, timeZone: utc)
         #expect(later.title == "Approved: Contributor")
-        #expect(later.body == "Contoso Staging. Starts Fri 08:00, until 12:00.")
+        #expect(later.body == "Contoso Staging. Starts Fri 08:00, until \(shortTime("2026-10-30T12:00:00Z", utc)).")
     }
 
     @Test func deniedWithTheApproversWords() {

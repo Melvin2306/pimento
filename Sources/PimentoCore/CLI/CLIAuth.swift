@@ -13,7 +13,10 @@ extension CLIRunner {
         let clientId = try AuthSourceResolver.clientId(
             commandLine: o.clientId, environment: env.variables, saved: settings.clientId, account: previous?.clientId)
         let account: SignedInAccount
-        if o.deviceCode {
+        if o.deviceCode || !env.signIn.browserSignIn {
+            if !o.deviceCode {
+                err(errStyle.dim("Browser sign-in is not available on this platform; signing in with a device code."))
+            }
             let challenge = try await broker.startDeviceCode(clientId: clientId, tenant: tenant)
             err("To sign in, open \(errStyle.bold(challenge.verificationURL.absoluteString)) and enter the code \(errStyle.bold(challenge.userCode)).")
             err(errStyle.dim("Waiting for you to finish (the code expires in \(WaitTimeout.label(TimeInterval(challenge.expiresIn))); Ctrl-C stops)…"))

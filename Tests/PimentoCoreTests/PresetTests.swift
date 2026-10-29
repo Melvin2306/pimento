@@ -195,17 +195,18 @@ struct PresetFileTests {
         let (library, _) = try store.update { try $0.save(Preset(name: "C", tenantId: nil, roles: [role])) }
         #expect(library.presets.map(\.name) == ["A", "B", "C"])
         #expect(try store.load().presets.map(\.name) == ["A", "B", "C"])
-        let perms = try FileManager.default.attributesOfItem(atPath: url.path)[.posixPermissions] as? Int
-        #expect(perms == 0o600)
+        #expect(hasMode(url.path, 0o600))
     }
 
     @Test func locationDefaultAndOverride() {
-        #expect(PresetStore.location(environment: [:], home: "/Users/alex").path
-            == "/Users/alex/Library/Application Support/Pimento/presets.json")
-        #expect(PresetStore.location(environment: ["PIMENTO_PRESETS": "~/dotfiles/pimento.json"], home: "/Users/alex").path
-            == "/Users/alex/dotfiles/pimento.json")
-        #expect(PresetStore.location(environment: ["PIMENTO_PRESETS": "/tmp/p.json"], home: "/Users/alex").path == "/tmp/p.json")
-        #expect(PresetStore.location(environment: ["PIMENTO_PRESETS": " "], home: "/Users/alex").path
-            == "/Users/alex/Library/Application Support/Pimento/presets.json")
+        func location(_ environment: [String: String], _ platform: HostPlatform = .macOS) -> String {
+            PresetStore.location(environment: environment, home: "/Users/alex", platform: platform).path
+        }
+        #expect(location([:]) == filePath("/Users/alex/Library/Application Support/Pimento/presets.json"))
+        #expect(location(["PIMENTO_PRESETS": "~/dotfiles/pimento.json"]) == filePath("/Users/alex/dotfiles/pimento.json"))
+        #expect(location(["PIMENTO_PRESETS": "/tmp/p.json"]) == filePath("/tmp/p.json"))
+        #expect(location(["PIMENTO_PRESETS": " "]) == filePath("/Users/alex/Library/Application Support/Pimento/presets.json"))
+        #expect(location([:], .linux) == filePath("/Users/alex/.config/pimento/presets.json"))
+        #expect(location(["XDG_CONFIG_HOME": "/cfg"], .linux) == filePath("/cfg/pimento/presets.json"))
     }
 }

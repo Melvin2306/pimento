@@ -122,8 +122,8 @@ public struct AuthSettings: Codable, Equatable, Sendable {
     }
 }
 
-/// `auth.json` next to the presets (`~/Library/Application Support/Pimento`
-/// on macOS, `$XDG_CONFIG_HOME/pimento` elsewhere), mode 600.
+/// `auth.json` next to the presets, in `PimentoPaths.dataDirectory`, mode 600
+/// (where there are POSIX modes).
 public struct AuthSettingsStore: Sendable {
     public let url: URL
 
@@ -133,12 +133,11 @@ public struct AuthSettingsStore: Sendable {
         self.init(url: Self.location(environment: environment))
     }
 
-    public static func location(environment: [String: String], home: String = NSHomeDirectory()) -> URL {
-        #if os(macOS)
-        return PresetStore.location(environment: [:], home: home).deletingLastPathComponent().appendingPathComponent("auth.json")
-        #else
-        return FileTokenStore.configDirectory(environment: environment, home: home).appendingPathComponent("auth.json")
-        #endif
+    public static func location(
+        environment: [String: String], home: String = NSHomeDirectory(), platform: HostPlatform = .current
+    ) -> URL {
+        URL(fileURLWithPath: platform.join(
+            PimentoPaths.dataDirectoryPath(environment: environment, home: home, platform: platform), "auth.json"))
     }
 
     /// The saved settings; empty when the file is missing or unreadable.

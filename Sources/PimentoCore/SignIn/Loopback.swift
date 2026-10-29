@@ -71,11 +71,15 @@ public enum LoopbackRequest {
     }
 }
 
+#if !os(Windows)
 /// A one-shot HTTP listener on the loopback interface (127.0.0.1, and ::1 on
 /// the same port when available) for the authorization code redirect. It
 /// answers each request, ignores ones without our `state`, and stops at the
 /// first callback with it, at the timeout, or when cancelled.
 public final class LoopbackListener: @unchecked Sendable {
+    /// Whether browser sign-in can work here (not on Windows, see below).
+    public static let isSupported = true
+
     public let port: UInt16
     private var sockets: [Int32]
     private let lock = NSLock()
@@ -257,3 +261,24 @@ public final class LoopbackListener: @unchecked Sendable {
         return callback
     }
 }
+
+#else
+
+/// Windows: no loopback listener yet (it would need Winsock), so no browser
+/// sign-in; `pimento login` uses a device code instead.
+public final class LoopbackListener: @unchecked Sendable {
+    public static let isSupported = false
+    public static let unsupportedMessage = "browser sign-in is not available on Windows; use `pimento login --device-code`"
+
+    public let port: UInt16 = 0
+    public var redirectURI: String { "\(MicrosoftIdentity.redirectBase):\(port)" }
+
+    public init() throws { throw SignInError.loopback(Self.unsupportedMessage) }
+
+    public func close() {}
+
+    public func waitForCallback(state: String, timeout: TimeInterval) async throws -> String {
+        throw SignInError.loopback(Self.unsupportedMessage)
+    }
+}
+#endif

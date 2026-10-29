@@ -210,8 +210,7 @@ struct CLIHistoryCommandTests {
         let text = try String(contentsOf: file, encoding: .utf8)
         #expect(text.components(separatedBy: "\r\n").count == 3)
         #expect(text.contains(",approve,") && text.contains(",'=cmd,"))
-        let mode = try FileManager.default.attributesOfItem(atPath: file.path)[.posixPermissions] as? Int
-        #expect(mode == 0o600)
+        #expect(hasMode(file.path, 0o600))
 
         let stdout = try seeded()
         #expect(await stdout.run("history", "export", "-") == 0)

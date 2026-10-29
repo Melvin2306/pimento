@@ -1,0 +1,5 @@
+# Sources, tests and fixtures keep LF on every checkout (Windows CI too):
+# tests compare text byte for byte.
+* text=auto eol=lf
+*.icns binary
+*.png binary

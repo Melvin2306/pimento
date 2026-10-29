@@ -151,8 +151,9 @@ public enum ActivationResponseMapper {
     static func error(statusCode: Int, data: Data) -> (code: String, message: String) {
         let envelope = try? JSONDecoder().decode(ARMErrorEnvelope.self, from: data)
         let code = envelope?.error?.code ?? "HTTP \(statusCode)"
+        // (Lowercased: "forbidden" on macOS, "Forbidden" in swift-corelibs-foundation.)
         let message = envelope?.error?.message ?? envelope?.topLevelMessage
-            ?? (data.isEmpty ? HTTPURLResponse.localizedString(forStatusCode: statusCode) : String(decoding: data.prefix(500), as: UTF8.self))
+            ?? (data.isEmpty ? HTTPURLResponse.localizedString(forStatusCode: statusCode).lowercased() : String(decoding: data.prefix(500), as: UTF8.self))
         return (code, message)
     }
 

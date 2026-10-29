@@ -127,11 +127,13 @@ struct HistoryRecordTests {
 struct HistoryStoreTests {
     @Test func locationAndEnvironmentOverride() {
         let home = "/Users/someone"
-        #expect(HistoryStore.location(environment: [:], home: home).path == "/Users/someone/Library/Application Support/Pimento/history.jsonl")
-        #expect(HistoryStore.location(environment: ["PIMENTO_HISTORY": "~/h.jsonl"], home: home).path == "/Users/someone/h.jsonl")
+        #expect(HistoryStore.location(environment: [:], home: home, platform: .macOS).path
+            == filePath("/Users/someone/Library/Application Support/Pimento/history.jsonl"))
+        #expect(HistoryStore.location(environment: [:], home: home, platform: .linux).path == filePath("/Users/someone/.config/pimento/history.jsonl"))
+        #expect(HistoryStore.location(environment: ["PIMENTO_HISTORY": "~/h.jsonl"], home: home).path == filePath("/Users/someone/h.jsonl"))
         let store = HistoryStore(url: URL(fileURLWithPath: "/tmp/x/history.jsonl"))
-        #expect(store.rotatedURL.path == "/tmp/x/history.1.jsonl")
-        #expect(store.settingsURL.path == "/tmp/x/history-settings.json")
+        #expect(store.rotatedURL.path == filePath("/tmp/x/history.1.jsonl"))
+        #expect(store.settingsURL.path == filePath("/tmp/x/history-settings.json"))
     }
 
     @Test func appendsLinesWithMode600() throws {
@@ -143,8 +145,7 @@ struct HistoryStoreTests {
         #expect(loaded.records.map(\.id) == ["rec-1", "rec-2", "rec-3"])
         let text = try String(contentsOf: store.url, encoding: .utf8)
         #expect(text.split(separator: "\n").count == 3 && text.hasSuffix("\n"))
-        let mode = try FileManager.default.attributesOfItem(atPath: store.url.path)[.posixPermissions] as? Int
-        #expect(mode == 0o600)
+        #expect(hasMode(store.url.path, 0o600))
     }
 
     @Test func skipsBrokenLines() throws {
@@ -211,8 +212,7 @@ struct HistoryStoreTests {
         #expect(store.records(settings: HistorySettings(retention: .days30), now: Fixture.now).map(\.id) == ["rec-3"])
         #expect(try store.prune(retention: .days30, now: Fixture.now) == 1)
         #expect(store.load().records.map(\.id) == ["rec-3"])
-        let mode = try FileManager.default.attributesOfItem(atPath: store.url.path)[.posixPermissions] as? Int
-        #expect(mode == 0o600)
+        #expect(hasMode(store.url.path, 0o600))
     }
 
     @Test func clearRemovesEverythingButSettings() throws {
@@ -248,8 +248,12 @@ struct HistoryStoreTests {
         recorder.record([.sample(2)])
         #expect(store.load().records.count == 1)
 
-        // A path that cannot be a file: no throw, the error is kept.
-        let blocked = HistoryRecorder(store: HistoryStore(url: URL(fileURLWithPath: "/dev/null/history.jsonl")), source: .cli)
+        // A path that cannot be a file (its folder is a file): no throw, the error is kept.
+        let notAFolder = temporaryHistoryURL().deletingLastPathComponent().appendingPathComponent("not-a-folder")
+        try FileManager.default.createDirectory(at: notAFolder.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("x".utf8).write(to: notAFolder)
+        defer { try? FileManager.default.removeItem(at: notAFolder) }
+        let blocked = HistoryRecorder(store: HistoryStore(url: notAFolder.appendingPathComponent("history.jsonl")), source: .cli)
         blocked.record([.sample(3)])
         #expect(blocked.lastError != nil)
 
@@ -363,8 +367,7 @@ struct HistoryCSVTests {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try HistoryCSV.write([.sample(1)], to: url, timeZone: TimeZone(identifier: "UTC")!)
         #expect(try String(contentsOf: url, encoding: .utf8).hasPrefix("timestamp_utc,local_time,"))
-        let mode = try FileManager.default.attributesOfItem(atPath: url.path)[.posixPermissions] as? Int
-        #expect(mode == 0o600)
+        #expect(hasMode(url.path, 0o600))
     }
 }
 

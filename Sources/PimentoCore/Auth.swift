@@ -61,7 +61,7 @@ public enum AzureCLIError: Error, LocalizedError, Equatable {
     public var errorDescription: String? {
         switch self {
         case .notFound:
-            "Azure CLI (az) not found. Install it with `brew install azure-cli`."
+            "Azure CLI (az) not found. \(AzureCLI.installHint())"
         case .failed(let stderr):
             "az could not get an access token for Azure Resource Manager.\n\n" + stderr
         case .timedOut:
@@ -81,22 +81,89 @@ public enum AzureCLIError: Error, LocalizedError, Equatable {
 }
 
 /// Runs the user's `az` binary. Arguments are passed as an argv array, never
-/// through a shell.
+/// through a shell (on Windows, see `launch`).
 public enum AzureCLI {
+    /// Tried before `$PATH` on macOS: apps launched from Finder get a minimal PATH.
     public static let candidatePaths = ["/opt/homebrew/bin/az", "/usr/local/bin/az"]
 
-    /// Finds `az` in the usual Homebrew locations, then `$PATH`. Apps launched
-    /// from Finder get a minimal PATH, hence the fixed candidates first.
+    /// How to install the Azure CLI here.
+    public static func installHint(platform: HostPlatform = .current) -> String {
+        switch platform {
+        case .macOS: "Install it with `brew install azure-cli`."
+        case .linux: "Install it from https://learn.microsoft.com/cli/azure/install-azure-cli-linux."
+        case .windows: "Install it with `winget install -e --id Microsoft.AzureCLI`."
+        }
+    }
+
+    /// The names `az` has in a `PATH` folder: `az`; on Windows `az.cmd` (the
+    /// installer's), `az.bat` (pip) or `az.exe`.
+    static func executableNames(platform: HostPlatform) -> [String] {
+        platform == .windows ? ["az.cmd", "az.bat", "az.exe"] : ["az"]
+    }
+
+    /// `PATH` (`Path` on Windows, where variable names ignore case).
+    static func searchPath(_ environment: [String: String], platform: HostPlatform) -> String {
+        if let path = environment["PATH"] { return path }
+        guard platform == .windows else { return "" }
+        return environment.first { $0.key.uppercased() == "PATH" }?.value ?? ""
+    }
+
+    /// Finds `az`: on macOS in the usual Homebrew locations first, then in `$PATH`.
     public static func locate(
         environment: [String: String] = ProcessInfo.processInfo.environment,
-        isExecutable: (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) }
+        platform: HostPlatform = .current,
+        isExecutable: (String) -> Bool = AzureCLI.isExecutable
     ) -> String? {
-        for path in candidatePaths where isExecutable(path) { return path }
-        for dir in (environment["PATH"] ?? "").split(separator: ":") where !dir.isEmpty {
-            let path = "\(dir)/az"
-            if isExecutable(path) { return path }
+        if platform == .macOS {
+            for path in candidatePaths where isExecutable(path) { return path }
+        }
+        for dir in searchPath(environment, platform: platform).split(separator: platform.pathListSeparator) where !dir.isEmpty {
+            let folder = platform == .windows ? String(dir).trimmingCharacters(in: CharacterSet(charactersIn: "\"")) : String(dir)
+            for name in executableNames(platform: platform) {
+                let path = platform.join(folder, name)
+                if isExecutable(path) { return path }
+            }
         }
         return nil
+    }
+
+    /// An executable file; on Windows any file (az.cmd has no execute bit).
+    public static func isExecutable(_ path: String) -> Bool {
+        #if os(Windows)
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) && !isDirectory.boolValue
+        #else
+        return FileManager.default.isExecutableFile(atPath: path)
+        #endif
+    }
+
+    /// What to start for `az arguments`. Elsewhere `az` itself. On Windows,
+    /// `az.cmd` is a batch file, which CreateProcess cannot run and cmd.exe
+    /// would parse (with its own quoting rules). So the installer's layout
+    /// (`…\wbin\az.cmd` next to `…\python.exe`) runs Python directly, the way
+    /// az.cmd does; another batch file goes through `cmd.exe /d /c` only when
+    /// every argument is plain (letters, digits and `._:/@=-`), else it is refused.
+    public static func launch(
+        az: String, arguments: [String], platform: HostPlatform = .current,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        fileExists: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) }
+    ) throws -> (executable: String, arguments: [String]) {
+        let lower = az.lowercased()
+        guard platform == .windows, lower.hasSuffix(".cmd") || lower.hasSuffix(".bat") else { return (az, arguments) }
+        func parent(_ path: Substring) -> Substring? {
+            path.lastIndex(where: { $0 == "\\" || $0 == "/" }).map { path[..<$0] }
+        }
+        if let bin = parent(Substring(az)), let root = parent(bin), !root.isEmpty {
+            let python = platform.join(String(root), "python.exe")
+            if fileExists(python) { return (python, ["-IBm", "azure.cli"] + arguments) }
+        }
+        let plain = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._:/@=-")
+        guard arguments.allSatisfy({ !$0.isEmpty && $0.unicodeScalars.allSatisfy(plain.contains) }) else {
+            throw AzureCLIError.failed("Refusing to pass these arguments through cmd.exe to \(az).")
+        }
+        let windows = environment.first { $0.key.uppercased() == "SYSTEMROOT" }?.value ?? #"C:\Windows"#
+        let cmd = environment.first { $0.key.uppercased() == "COMSPEC" }?.value ?? platform.join(windows, "System32", "cmd.exe")
+        return (cmd, ["/d", "/c", az] + arguments)
     }
 
     /// Runs `az` with `arguments` off the main thread and returns its stdout.
@@ -109,13 +176,30 @@ public enum AzureCLI {
         }
     }
 
+    /// Set from another thread: the pipe reader and the timeout.
+    private final class Box<T>: @unchecked Sendable {
+        private let lock = NSLock()
+        private var stored: T
+        init(_ value: T) { stored = value }
+        var value: T {
+            get { lock.withLock { stored } }
+            set { lock.withLock { stored = newValue } }
+        }
+    }
+
     private static func runSync(az: String, arguments: [String], timeout: TimeInterval) throws -> Data {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: az)
-        process.arguments = arguments
+        let platform = HostPlatform.current
         var env = ProcessInfo.processInfo.environment
-        let extra = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-        env["PATH"] = env["PATH"].map { "\($0):\(extra)" } ?? extra
+        let (executable, argv) = try launch(az: az, arguments: arguments, platform: platform, environment: env)
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: executable)
+        process.arguments = argv
+        if platform != .windows {
+            let extra = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+            env["PATH"] = env["PATH"].map { "\($0):\(extra)" } ?? extra
+        } else if executable.lowercased().hasSuffix("python.exe") {
+            env["AZ_INSTALLER"] = "MSI" // what az.cmd sets
+        }
         env["AZURE_CORE_NO_COLOR"] = "1"
         env["AZURE_CORE_COLLECT_TELEMETRY"] = "0"
         process.environment = env
@@ -126,23 +210,27 @@ public enum AzureCLI {
         do { try process.run() } catch { throw AzureCLIError.failed(error.localizedDescription) }
 
         // Drain both pipes concurrently so neither can fill up and block az.
-        var errData = Data()
+        let errData = Box(Data()), timedOut = Box(false)
         let group = DispatchGroup()
         group.enter()
         DispatchQueue.global().async {
-            errData = err.fileHandleForReading.readDataToEndOfFile()
+            errData.value = err.fileHandleForReading.readDataToEndOfFile()
             group.leave()
         }
-        let killer = DispatchWorkItem { if process.isRunning { process.terminate() } }
+        let killer = DispatchWorkItem {
+            guard process.isRunning else { return }
+            timedOut.value = true
+            process.terminate()
+        }
         DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: killer)
         let outData = out.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
         group.wait()
         killer.cancel()
 
-        if process.terminationReason == .uncaughtSignal { throw AzureCLIError.timedOut }
+        if timedOut.value || process.terminationReason == .uncaughtSignal { throw AzureCLIError.timedOut }
         guard process.terminationStatus == 0 else {
-            let stderr = String(decoding: errData, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+            let stderr = String(decoding: errData.value, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
             throw AzureCLIError.failed(stderr.isEmpty ? "az exited with status \(process.terminationStatus)" : stderr)
         }
         return outData

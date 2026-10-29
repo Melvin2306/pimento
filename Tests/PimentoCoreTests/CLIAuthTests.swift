@@ -141,7 +141,8 @@ struct CLIAuthTests {
         #expect(h.givenTokens.value?.last is BrokerTokenProvider)
     }
 
-    @Test func loginWithTheBrowserPassesASavedClaimsChallenge() async throws {
+    @Test(.enabled(if: LoopbackListener.isSupported, "no loopback listener on Windows"))
+    func loginWithTheBrowserPassesASavedClaimsChallenge() async throws {
         let h = CLIHarness()
         h.signInTransport = fakeLogin()
         let challenge = #"{"access_token":{"acrs":{"essential":true,"value":"c1"}}}"#
@@ -160,6 +161,26 @@ struct CLIAuthTests {
         #expect(h.err.contains(url.absoluteString))
         #expect(h.out.contains("\"source\" : \"pimento\""))
         #expect(h.authSettings.load().claimsChallenge == nil)
+    }
+
+    /// Windows has no browser sign-in: `login` uses a device code by itself.
+    @Test func loginWithoutABrowserUsesADeviceCode() async throws {
+        let h = CLIHarness()
+        h.browserSignIn = false
+        h.signInTransport = fakeLogin()
+        h.openURL = { _ in
+            Issue.record("no browser without browser sign-in")
+            return false
+        }
+        #expect(await h.run("login", "--client-id", testClientId) == 0)
+        #expect(h.err.contains("Browser sign-in is not available on this platform"))
+        #expect(h.err.contains("https://microsoft.com/devicelogin") && h.err.contains("WXYZ-1234"))
+        #expect(h.out.contains("Signed in as Test User <test@example.com>"))
+    }
+
+    @Test(.enabled(if: !LoopbackListener.isSupported, "Windows only"))
+    func listenerIsUnavailableOnWindows() {
+        #expect(throws: SignInError.self) { _ = try LoopbackListener() }
     }
 
     @Test func loginNeedsAClientId() async throws {

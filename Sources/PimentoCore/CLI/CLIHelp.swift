@@ -429,7 +429,7 @@ public enum CLIHelp {
 
     A preset is a named set of roles with an optional justification and duration,
     for `pimento activate --preset NAME`. The app and the CLI share the file
-    ~/Library/Application Support/Pimento/presets.json ($\(PresetStore.environmentVariable) overrides it).
+    \(PimentoPaths.displayFile("presets.json")) ($\(PresetStore.environmentVariable) overrides it).
     Presets belong to a tenant; with one preset of a name, activate uses its tenant.
 
     save stores the filters as a rule that is resolved at activation time, so new
@@ -465,7 +465,7 @@ public enum CLIHelp {
     schedule, cancel, deactivate, renew, extend, approve and deny, with the time,
     tenant, role, resource, outcome (Azure's status or error code and a short message),
     duration, start, justification, ticket and request id. Never tokens or request bodies.
-    The file is ~/Library/Application Support/Pimento/history.jsonl (JSON Lines, mode 600,
+    The file is \(PimentoPaths.displayFile("history.jsonl")) (JSON Lines, mode 600,
     shared with the app; $\(HistoryStore.environmentVariable) points elsewhere). Recording and how long
     records are kept (30, 90, 365 days or forever) are set in the app (Settings › History).
 
@@ -507,6 +507,7 @@ public enum CLIHelp {
     Azure CLI is not needed. Opens your browser (authorization code with PKCE,
     answer on http://localhost:<random port>); --device-code prints a code to
     enter on another device instead, for SSH sessions and headless machines.
+    On Windows there is no browser sign-in yet: login always uses a device code.
 
     Afterwards Pimento sign-in is the auth source of the app and the CLI (the
     shared setting); `--auth az` or $\(AuthSourceResolver.environmentVariable)=az picks the Azure CLI again.
@@ -519,9 +520,9 @@ public enum CLIHelp {
                           tenant. Other tenants work without signing in again.
           --json          The account as JSON
 
-    The refresh token is kept in the Keychain (service io.github.melvin2306.pimento);
-    with $\(TokenStores.storeVariable)=file, or without a Keychain, in
-    ~/.config/pimento/tokens.json (mode 600, less secure). Access tokens stay in memory.
+    The refresh token is kept in the Keychain (service io.github.melvin2306.pimento)
+    on macOS; with $\(TokenStores.storeVariable)=file, and on Linux and Windows, in
+    \(FileTokenStore.displayLocation()) (less secure). Access tokens stay in memory.
     """
 
     static let logout = """

@@ -1,9 +1,4 @@
 import Foundation
-#if canImport(Darwin)
-import Darwin
-#elseif canImport(Glibc)
-import Glibc
-#endif
 
 /// How long records are kept.
 public enum HistoryRetention: Int, CaseIterable, Codable, Sendable {
@@ -86,14 +81,16 @@ public struct HistoryLoad: Equatable, Sendable {
     }
 }
 
-/// The history file, shared by the app and the CLI:
-/// `~/Library/Application Support/Pimento/history.jsonl`, or `$PIMENTO_HISTORY`.
+/// The history file, shared by the app and the CLI: `history.jsonl` in
+/// `PimentoPaths.dataDirectory` (`~/Library/Application Support/Pimento` on
+/// macOS), or `$PIMENTO_HISTORY`.
 ///
-/// Append-only JSON Lines, mode 600. Every append takes an exclusive `flock`
-/// on the file and writes each record with one `write(2)` on an `O_APPEND`
-/// descriptor, so the app and the CLI can write at the same time without
-/// interleaving. Past `maxBytes` the file becomes `history.1.jsonl`
-/// (replacing an older one) and a new file starts.
+/// Append-only JSON Lines, mode 600. Every append takes an exclusive lock
+/// (`flock` on the file; on Windows `LockFileEx` on `history.jsonl.lock`) and
+/// writes each record with one write on an append-only descriptor, so the app
+/// and the CLI can write at the same time without interleaving. Past
+/// `maxBytes` the file becomes `history.1.jsonl` (replacing an older one) and
+/// a new file starts. (The plumbing is in HistoryFile.swift, per platform.)
 public struct HistoryStore: Sendable {
     public static let environmentVariable = "PIMENTO_HISTORY"
     /// About 8,000 records.
@@ -111,13 +108,14 @@ public struct HistoryStore: Sendable {
         self.init(url: Self.location(environment: environment))
     }
 
-    public static func location(environment: [String: String], home: String = NSHomeDirectory()) -> URL {
-        if let custom = environment[environmentVariable]?.trimmingCharacters(in: .whitespaces), !custom.isEmpty {
-            let expanded = custom == "~" ? home : custom.hasPrefix("~/") ? home + custom.dropFirst() : custom
-            return URL(fileURLWithPath: expanded)
+    public static func location(
+        environment: [String: String], home: String = NSHomeDirectory(), platform: HostPlatform = .current
+    ) -> URL {
+        if let custom = PimentoPaths.nonEmpty(environment[environmentVariable]) {
+            return URL(fileURLWithPath: PimentoPaths.expandTilde(custom, home: home, platform: platform))
         }
-        let presets = PresetStore.location(environment: [:], home: home)
-        return presets.deletingLastPathComponent().appendingPathComponent("history.jsonl")
+        return URL(fileURLWithPath: platform.join(
+            PimentoPaths.dataDirectoryPath(environment: environment, home: home, platform: platform), "history.jsonl"))
     }
 
     /// `history.1.jsonl`: the previous file after a rotation.
@@ -146,7 +144,7 @@ public struct HistoryStore: Sendable {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         do {
             try encoder.encode(settings).write(to: settingsURL, options: .atomic)
-            _ = chmod(settingsURL.path, 0o600)
+            PrivateFile.restrict(settingsURL)
         } catch {
             throw HistoryError.io(error.localizedDescription)
         }
@@ -196,8 +194,8 @@ public struct HistoryStore: Sendable {
     public func append(_ records: [HistoryRecord]) throws {
         guard !records.isEmpty else { return }
         let lines = try records.map { try $0.jsonLine() + Data([0x0A]) }
-        try withLockedFile { fd in
-            for line in lines { try Self.writeAll(fd, line) }
+        try withLockedFile { write in
+            for line in lines { try write(line) }
         }
     }
 
@@ -206,7 +204,7 @@ public struct HistoryStore: Sendable {
     @discardableResult
     public func importRecords(_ records: [HistoryRecord]) throws -> (added: Int, known: Int) {
         var added = 0, known = 0
-        try withLockedFile { fd in
+        try withLockedFile { write in
             var seen = Set(load().records.flatMap(\.requestIds))
             for record in records {
                 let ids = record.requestIds
@@ -214,7 +212,7 @@ public struct HistoryStore: Sendable {
                     known += 1
                     continue
                 }
-                try Self.writeAll(fd, try record.jsonLine() + Data([0x0A]))
+                try write(try record.jsonLine() + Data([0x0A]))
                 seen.formUnion(ids)
                 added += 1
             }
@@ -269,78 +267,6 @@ public struct HistoryStore: Sendable {
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         } catch {
             throw HistoryError.io(error.localizedDescription)
-        }
-    }
-
-    /// Runs `body` with the history file open for appending and exclusively
-    /// locked. Rotates first when the file has grown past `maxBytes`. A file
-    /// replaced while waiting for the lock (another writer rotated, pruned or
-    /// cleared it) is opened again.
-    func withLockedFile(_ body: (Int32) throws -> Void) throws {
-        try createDirectory()
-        for _ in 0..<8 {
-            let fd = open(url.path, O_WRONLY | O_APPEND | O_CREAT | O_CLOEXEC, 0o600)
-            guard fd >= 0 else { throw HistoryError.io(String(cString: strerror(errno))) }
-            defer { close(fd) }
-            guard flock(fd, LOCK_EX) == 0 else { throw HistoryError.io(String(cString: strerror(errno))) }
-            var held = stat(), current = stat()
-            guard fstat(fd, &held) == 0 else { throw HistoryError.io(String(cString: strerror(errno))) }
-            guard stat(url.path, &current) == 0, current.st_ino == held.st_ino, current.st_dev == held.st_dev else { continue }
-            _ = fchmod(fd, 0o600)
-            if held.st_size > off_t(maxBytes) {
-                _ = rename(url.path, rotatedURL.path)
-                continue
-            }
-            // A line cut off by a crash must not swallow the next record.
-            if held.st_size > 0 {
-                let reader = open(url.path, O_RDONLY | O_CLOEXEC)
-                if reader >= 0 {
-                    var last: UInt8 = 0
-                    if pread(reader, &last, 1, held.st_size - 1) == 1, last != 0x0A { try Self.writeAll(fd, Data([0x0A])) }
-                    close(reader)
-                }
-            }
-            try body(fd)
-            return
-        }
-        throw HistoryError.io("the file kept changing while waiting for it")
-    }
-
-    /// Replaces `file` atomically (write a temporary file, rename it over).
-    /// Called with the lock held.
-    func replace(_ file: URL, with data: Data) throws {
-        let temp = file.deletingLastPathComponent().appendingPathComponent(".\(file.lastPathComponent).\(UUID().uuidString).tmp")
-        let fd = open(temp.path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0o600)
-        guard fd >= 0 else { throw HistoryError.io(String(cString: strerror(errno))) }
-        do {
-            try Self.writeAll(fd, data)
-            close(fd)
-        } catch {
-            close(fd)
-            unlink(temp.path)
-            throw error
-        }
-        guard rename(temp.path, file.path) == 0 else {
-            let why = String(cString: strerror(errno))
-            unlink(temp.path)
-            throw HistoryError.io(why)
-        }
-    }
-
-    /// `write(2)` until all of `data` is written (one call for a line in practice).
-    static func writeAll(_ fd: Int32, _ data: Data) throws {
-        try data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
-            guard var p = buffer.baseAddress else { return }
-            var left = buffer.count
-            while left > 0 {
-                let n = write(fd, p, left)
-                if n < 0 {
-                    if errno == EINTR { continue }
-                    throw HistoryError.io(String(cString: strerror(errno)))
-                }
-                left -= n
-                p += n
-            }
         }
     }
 }

@@ -1,0 +1,177 @@
+import Foundation
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#elseif os(Windows)
+import WinSDK
+#endif
+
+// The history file's locking and atomic replacement, per platform.
+
+#if !os(Windows)
+extension HistoryStore {
+    /// Runs `body` with the history file open for appending and exclusively
+    /// locked. Rotates first when the file has grown past `maxBytes`. A file
+    /// replaced while waiting for the lock (another writer rotated, pruned or
+    /// cleared it) is opened again.
+    func withLockedFile(_ body: (_ write: (Data) throws -> Void) throws -> Void) throws {
+        try createDirectory()
+        for _ in 0..<8 {
+            let fd = open(url.path, O_WRONLY | O_APPEND | O_CREAT | O_CLOEXEC, 0o600)
+            guard fd >= 0 else { throw HistoryError.io(String(cString: strerror(errno))) }
+            defer { close(fd) }
+            guard flock(fd, LOCK_EX) == 0 else { throw HistoryError.io(String(cString: strerror(errno))) }
+            var held = stat(), current = stat()
+            guard fstat(fd, &held) == 0 else { throw HistoryError.io(String(cString: strerror(errno))) }
+            guard stat(url.path, &current) == 0, current.st_ino == held.st_ino, current.st_dev == held.st_dev else { continue }
+            _ = fchmod(fd, 0o600)
+            if held.st_size > off_t(maxBytes) {
+                _ = rename(url.path, rotatedURL.path)
+                continue
+            }
+            // A line cut off by a crash must not swallow the next record.
+            if held.st_size > 0 {
+                let reader = open(url.path, O_RDONLY | O_CLOEXEC)
+                if reader >= 0 {
+                    var last: UInt8 = 0
+                    if pread(reader, &last, 1, held.st_size - 1) == 1, last != 0x0A { try Self.writeAll(fd, Data([0x0A])) }
+                    close(reader)
+                }
+            }
+            try body { try Self.writeAll(fd, $0) }
+            return
+        }
+        throw HistoryError.io("the file kept changing while waiting for it")
+    }
+
+    /// Replaces `file` atomically (write a temporary file, rename it over).
+    /// Called with the lock held.
+    func replace(_ file: URL, with data: Data) throws {
+        let temp = file.deletingLastPathComponent().appendingPathComponent(".\(file.lastPathComponent).\(UUID().uuidString).tmp")
+        let fd = open(temp.path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0o600)
+        guard fd >= 0 else { throw HistoryError.io(String(cString: strerror(errno))) }
+        do {
+            try Self.writeAll(fd, data)
+            close(fd)
+        } catch {
+            close(fd)
+            unlink(temp.path)
+            throw error
+        }
+        guard rename(temp.path, file.path) == 0 else {
+            let why = String(cString: strerror(errno))
+            unlink(temp.path)
+            throw HistoryError.io(why)
+        }
+    }
+
+    /// `write(2)` until all of `data` is written (one call for a line in practice).
+    static func writeAll(_ fd: Int32, _ data: Data) throws {
+        try data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
+            guard var p = buffer.baseAddress else { return }
+            var left = buffer.count
+            while left > 0 {
+                let n = write(fd, p, left)
+                if n < 0 {
+                    if errno == EINTR { continue }
+                    throw HistoryError.io(String(cString: strerror(errno)))
+                }
+                left -= n
+                p += n
+            }
+        }
+    }
+}
+
+#else
+extension HistoryStore {
+    /// `history.jsonl.lock`: Windows locks a separate file, which is never
+    /// replaced, so the history itself can be renamed and replaced under it.
+    var lockURL: URL { url.deletingLastPathComponent().appendingPathComponent(url.lastPathComponent + ".lock") }
+
+    /// Runs `body` with the history exclusively locked (`LockFileEx` on
+    /// `lockURL`). Rotates first when the file has grown past `maxBytes`. The
+    /// file is opened for appending on the first write only, so `body` can
+    /// replace it (prune, clear) while no handle is open on it.
+    func withLockedFile(_ body: (_ write: (Data) throws -> Void) throws -> Void) throws {
+        try createDirectory()
+        let lock = try WindowsFileLock(url: lockURL)
+        defer { lock.unlock() }
+        let files = FileManager.default
+        let size = ((try? files.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.intValue ?? 0
+        if size > maxBytes {
+            do {
+                if files.fileExists(atPath: rotatedURL.path) { try files.removeItem(at: rotatedURL) }
+                try files.moveItem(at: url, to: rotatedURL)
+            } catch {
+                throw HistoryError.io(error.localizedDescription)
+            }
+        }
+        var handle: FileHandle?
+        defer { try? handle?.close() }
+        func append(_ data: Data) throws {
+            do {
+                if handle == nil {
+                    if !files.fileExists(atPath: url.path), !files.createFile(atPath: url.path, contents: nil) {
+                        throw HistoryError.io("could not create \(url.path)")
+                    }
+                    let opened = try FileHandle(forWritingTo: url)
+                    handle = opened
+                    let end = try opened.seekToEnd()
+                    // A line cut off by a crash must not swallow the next record.
+                    if end > 0 {
+                        let reader = try FileHandle(forReadingFrom: url)
+                        try reader.seek(toOffset: end - 1)
+                        let last = try reader.read(upToCount: 1)
+                        try reader.close()
+                        if last != Data([0x0A]) { try opened.write(contentsOf: Data([0x0A])) }
+                    }
+                }
+                try handle?.write(contentsOf: data)
+            } catch let error as HistoryError {
+                throw error
+            } catch {
+                throw HistoryError.io(error.localizedDescription)
+            }
+        }
+        try body(append)
+    }
+
+    /// Replaces `file` atomically. Called with the lock held.
+    func replace(_ file: URL, with data: Data) throws {
+        do { try data.write(to: file, options: .atomic) } catch { throw HistoryError.io(error.localizedDescription) }
+    }
+}
+
+/// An exclusive `LockFileEx` lock on a small file, held until `unlock()`:
+/// what `flock` is elsewhere. Blocks while another process holds it.
+final class WindowsFileLock {
+    private let handle: HANDLE
+
+    init(url: URL) throws {
+        let path = url.withUnsafeFileSystemRepresentation { String(cString: $0!) }
+        let opened = path.withCString(encodedAs: UTF16.self) {
+            CreateFileW($0, DWORD(GENERIC_READ) | DWORD(GENERIC_WRITE),
+                        DWORD(FILE_SHARE_READ) | DWORD(FILE_SHARE_WRITE) | DWORD(FILE_SHARE_DELETE),
+                        nil, DWORD(OPEN_ALWAYS), DWORD(FILE_ATTRIBUTE_NORMAL), nil)
+        }
+        guard let opened, opened != INVALID_HANDLE_VALUE else {
+            throw HistoryError.io("could not open \(path) (Windows error \(GetLastError()))")
+        }
+        var overlapped = OVERLAPPED()
+        if !LockFileEx(opened, DWORD(LOCKFILE_EXCLUSIVE_LOCK), 0, DWORD.max, DWORD.max, &overlapped) {
+            let code = GetLastError()
+            CloseHandle(opened)
+            throw HistoryError.io("could not lock \(path) (Windows error \(code))")
+        }
+        handle = opened
+    }
+
+    func unlock() {
+        var overlapped = OVERLAPPED()
+        _ = UnlockFileEx(handle, 0, DWORD.max, DWORD.max, &overlapped)
+        CloseHandle(handle)
+    }
+}
+#endif

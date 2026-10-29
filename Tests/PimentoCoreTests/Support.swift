@@ -1,5 +1,28 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 @testable import PimentoCore
+
+/// A clock time as notifications show it: short, in the machine's locale
+/// ("14:00" with a 24-hour locale, "2:00 PM" in en_US, with ICU's own spaces).
+func shortTime(_ iso: String, _ timeZone: TimeZone) -> String {
+    AzureDate.parse(iso)!.formatted(Date.FormatStyle(date: .omitted, time: .shortened, timeZone: timeZone))
+}
+
+/// Whether `path` has POSIX permission bits `mode`. Always true on Windows,
+/// which has no POSIX modes (Pimento's folder is in the user profile there).
+func hasMode(_ path: String, _ mode: Int) -> Bool {
+    #if os(Windows)
+    return true
+    #else
+    return ((try? FileManager.default.attributesOfItem(atPath: path)[.posixPermissions]) as? NSNumber)?.intValue == mode
+    #endif
+}
+
+/// `path` as `URL(fileURLWithPath:).path` gives it back on this platform
+/// (unchanged on macOS and Linux; Foundation on Windows may rewrite it).
+func filePath(_ path: String) -> String { URL(fileURLWithPath: path).path }
 
 enum Fixture {
     static func data(_ name: String) throws -> Data {

@@ -4,6 +4,9 @@ import Darwin
 import Glibc
 #endif
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 import Testing
 @testable import PimentoCore
 
@@ -39,6 +42,7 @@ func oauthError(_ error: String, _ description: String = "", codes: [Int] = [], 
     return try! JSONSerialization.data(withJSONObject: body)
 }
 
+#if !os(Windows)
 /// Acts as the browser: sends `GET target` to the loopback listener on `port`.
 @discardableResult
 func browse(port: UInt16, _ target: String) -> String {
@@ -72,6 +76,11 @@ func browse(port: UInt16, _ target: String) -> String {
     }
     return String(decoding: response, as: UTF8.self)
 }
+#else
+/// Windows: no loopback listener, so nothing to browse (the tests that would are disabled).
+@discardableResult
+func browse(port: UInt16, _ target: String) -> String { "" }
+#endif
 
 func query(_ url: URL) -> [String: String] {
     Dictionary((URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []).map { ($0.name, $0.value ?? "") },
@@ -386,7 +395,8 @@ struct LoopbackTests {
         #expect(String(decoding: LoopbackRequest.response(for: .ignored), as: UTF8.self).hasPrefix("HTTP/1.1 404"))
     }
 
-    @Test func listenerReturnsTheCodeAndSkipsStrangers() async throws {
+    @Test(.enabled(if: LoopbackListener.isSupported, "no loopback listener on Windows"))
+    func listenerReturnsTheCodeAndSkipsStrangers() async throws {
         let listener = try LoopbackListener()
         #expect(listener.port > 0)
         #expect(listener.redirectURI == "http://localhost:\(listener.port)")
@@ -401,7 +411,8 @@ struct LoopbackTests {
         #expect(try await code == "the-code")
     }
 
-    @Test func listenerReportsTheIdentityPlatformsError() async throws {
+    @Test(.enabled(if: LoopbackListener.isSupported, "no loopback listener on Windows"))
+    func listenerReportsTheIdentityPlatformsError() async throws {
         let listener = try LoopbackListener()
         async let code = listener.waitForCallback(state: "s1", timeout: 10)
         try await Task.sleep(nanoseconds: 50_000_000)
@@ -415,7 +426,8 @@ struct LoopbackTests {
         }
     }
 
-    @Test func listenerTimesOutAndCancels() async throws {
+    @Test(.enabled(if: LoopbackListener.isSupported, "no loopback listener on Windows"))
+    func listenerTimesOutAndCancels() async throws {
         let listener = try LoopbackListener()
         await #expect(throws: SignInError.timedOut) { _ = try await listener.waitForCallback(state: "s", timeout: 0.3) }
 
@@ -443,7 +455,8 @@ struct TokenBrokerTests {
         return account
     }
 
-    @Test func browserSignInWithLoopbackAndPKCE() async throws {
+    @Test(.enabled(if: LoopbackListener.isSupported, "no loopback listener on Windows"))
+    func browserSignInWithLoopbackAndPKCE() async throws {
         let seen = TestBox<URL>()
         let (broker, transport, store) = broker { request in
             let f = formFields(request)
@@ -477,7 +490,8 @@ struct TokenBrokerTests {
         #expect(await transport.requests.count == 1)
     }
 
-    @Test func browserSignInRejectsAForeignNonce() async throws {
+    @Test(.enabled(if: LoopbackListener.isSupported, "no loopback listener on Windows"))
+    func browserSignInRejectsAForeignNonce() async throws {
         let (broker, _, store) = broker { _ in (tokenAnswer(nonce: "someone-else"), 200) }
         await #expect(throws: SignInError.nonceMismatch) {
             _ = try await broker.signInWithBrowser(clientId: testClientId, timeout: 10) { url in
@@ -490,7 +504,8 @@ struct TokenBrokerTests {
         #expect(try store.accounts().isEmpty)
     }
 
-    @Test func browserSignInThatCannotOpenStopsListening() async throws {
+    @Test(.enabled(if: LoopbackListener.isSupported, "no loopback listener on Windows"))
+    func browserSignInThatCannotOpenStopsListening() async throws {
         let (broker, transport, _) = broker { _ in (tokenAnswer(), 200) }
         await #expect(throws: SignInError.self) {
             _ = try await broker.signInWithBrowser(clientId: testClientId, timeout: 10) { _ in false }
@@ -668,9 +683,6 @@ struct SignInStorageTests {
         FileManager.default.temporaryDirectory.appendingPathComponent("pimento-signin-\(UUID().uuidString)", isDirectory: true)
     }
 
-    func mode(_ path: String) -> Int {
-        ((try? FileManager.default.attributesOfItem(atPath: path)[.posixPermissions]) as? NSNumber)?.intValue ?? -1
-    }
 
     let account = SignedInAccount(objectId: Fixture.userOID, homeTenantId: homeTenant, tenantId: otherTenant, username: "test@example.com",
                                   name: "Test User", clientId: testClientId, signedInAt: Fixture.now)
@@ -719,13 +731,13 @@ struct SignInStorageTests {
         let store = FileTokenStore(url: url)
         #expect(try store.accounts().isEmpty)
         try store.save(account, refreshToken: "secret-rt")
-        #expect(mode(url.path) == 0o600)
-        #expect(mode(url.deletingLastPathComponent().path) == 0o700)
+        #expect(hasMode(url.path, 0o600))
+        #expect(hasMode(url.deletingLastPathComponent().path, 0o700))
         #expect(try store.accounts() == [account])
         #expect(try store.refreshToken(for: account.id) == "secret-rt")
         // Rewrites keep the mode, and leave no temporary files behind.
         try store.save(account, refreshToken: "rotated")
-        #expect(mode(url.path) == 0o600)
+        #expect(hasMode(url.path, 0o600))
         #expect(try FileManager.default.contentsOfDirectory(atPath: url.deletingLastPathComponent().path) == ["tokens.json"])
         #expect(try FileTokenStore(url: url).refreshToken(for: account.id) == "rotated")
         try store.remove(account.id)
@@ -736,9 +748,12 @@ struct SignInStorageTests {
     }
 
     @Test func fileStoreLocation() {
-        #expect(FileTokenStore.location(environment: [:], home: "/home/u").path == "/home/u/.config/pimento/tokens.json")
-        #expect(FileTokenStore.location(environment: ["XDG_CONFIG_HOME": "/x"], home: "/home/u").path == "/x/pimento/tokens.json")
-        #expect(FileTokenStore.location(environment: [FileTokenStore.fileVariable: "~/t.json"], home: "/home/u").path == "/home/u/t.json")
+        for platform in [HostPlatform.macOS, .linux] {
+            #expect(FileTokenStore.location(environment: [:], home: "/home/u", platform: platform).path == filePath("/home/u/.config/pimento/tokens.json"))
+            #expect(FileTokenStore.location(environment: ["XDG_CONFIG_HOME": "/x"], home: "/home/u", platform: platform).path
+                == filePath("/x/pimento/tokens.json"))
+        }
+        #expect(FileTokenStore.location(environment: [FileTokenStore.fileVariable: "~/t.json"], home: "/home/u").path == filePath("/home/u/t.json"))
         #expect(TokenStores.standard(environment: [TokenStores.storeVariable: "file", FileTokenStore.fileVariable: "/tmp/x.json"]) is FileTokenStore)
     }
 
@@ -749,7 +764,7 @@ struct SignInStorageTests {
         #expect(store.load() == AuthSettings())
         try store.update { $0.source = .pimento; $0.clientId = testClientId; $0.accountId = account.id }
         #expect(store.load() == AuthSettings(source: .pimento, clientId: testClientId, accountId: account.id))
-        #expect(mode(store.url.path) == 0o600)
+        #expect(hasMode(store.url.path, 0o600))
         try Data(#"{"source":"msal","clientId":"nope","accountId":"x"}"#.utf8).write(to: store.url)
         #expect(store.load() == AuthSettings(source: nil, clientId: nil, accountId: "x"))
         try Data("garbage".utf8).write(to: store.url)

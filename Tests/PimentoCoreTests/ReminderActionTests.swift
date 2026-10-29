@@ -63,7 +63,7 @@ struct ReminderActionTests {
         let roles = try roles().map(ReminderRole.init)
         let minute = AzureDate.parse("2026-10-29T14:00:00Z")!
         let shared = ActivationSummary.reminder(expiringAt: minute, roles: roles, fireAt: minute.addingTimeInterval(-600), timeZone: utc)
-        #expect(shared.title == "2 PIM roles expire at 2:00 PM" || shared.title == "2 PIM roles expire at 14:00")
+        #expect(shared.title == "2 PIM roles expire at \(shortTime("2026-10-29T14:00:00Z", utc))")
         let other = ActivationSummary.reminder(expiringAt: minute.addingTimeInterval(3600), roles: [roles[1]], fireAt: minute, timeZone: utc)
         let pending: [(id: String, fireAt: Date, payload: ReminderPayload)] = [
             (shared.id, shared.fireAt, ReminderPayload(roles: roles, tenantId: "t", justification: "j")),

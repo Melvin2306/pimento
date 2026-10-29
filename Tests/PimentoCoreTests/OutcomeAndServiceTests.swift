@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 import Testing
 @testable import PimentoCore
 
@@ -79,9 +82,45 @@ struct AuthTests {
 
     @Test func locatesAzPreferringHomebrew() {
         let present: Set<String> = ["/opt/homebrew/bin/az", "/custom/bin/az"]
-        #expect(AzureCLI.locate(environment: ["PATH": "/custom/bin"], isExecutable: present.contains) == "/opt/homebrew/bin/az")
-        #expect(AzureCLI.locate(environment: ["PATH": "/x:/custom/bin"], isExecutable: ["/custom/bin/az"].contains) == "/custom/bin/az")
-        #expect(AzureCLI.locate(environment: [:], isExecutable: { _ in false }) == nil)
+        #expect(AzureCLI.locate(environment: ["PATH": "/custom/bin"], platform: .macOS, isExecutable: present.contains) == "/opt/homebrew/bin/az")
+        #expect(AzureCLI.locate(environment: ["PATH": "/x:/custom/bin"], platform: .macOS, isExecutable: ["/custom/bin/az"].contains)
+            == "/custom/bin/az")
+        #expect(AzureCLI.locate(environment: [:], platform: .macOS, isExecutable: { _ in false }) == nil)
+        // Linux: only PATH.
+        #expect(AzureCLI.locate(environment: ["PATH": "/usr/bin"], platform: .linux, isExecutable: present.contains) == nil)
+        #expect(AzureCLI.locate(environment: ["PATH": "/usr/bin:/custom/bin"], platform: .linux, isExecutable: present.contains)
+            == "/custom/bin/az")
+    }
+
+    @Test func locatesAzCmdOnWindows() {
+        let wbin = #"C:\Program Files\Microsoft SDKs\Azure\CLI2\wbin"#
+        let present: Set<String> = [wbin + #"\az.cmd"#, #"C:\tools\az.exe"#]
+        // `Path`, `;`-separated, quotes allowed; az.cmd before az.exe.
+        #expect(AzureCLI.locate(environment: ["Path": #"C:\Windows;"\#(wbin)";C:\tools"#], platform: .windows,
+                                isExecutable: present.contains) == wbin + #"\az.cmd"#)
+        #expect(AzureCLI.locate(environment: ["PATH": #"C:\tools"#], platform: .windows, isExecutable: present.contains) == #"C:\tools\az.exe"#)
+        #expect(AzureCLI.locate(environment: ["PATH": #"C:\none"#], platform: .windows, isExecutable: present.contains) == nil)
+    }
+
+    @Test func launchesAzWithoutAShell() throws {
+        let args = ["account", "get-access-token", "--tenant", "contoso.example", "--resource", "https://management.azure.com/"]
+        // macOS and Linux: az itself.
+        #expect(try AzureCLI.launch(az: "/usr/bin/az", arguments: args, platform: .linux) == ("/usr/bin/az", args))
+        // Windows, installer layout: Python, as az.cmd does.
+        let cli2 = #"C:\Program Files\Microsoft SDKs\Azure\CLI2"#
+        let python = try AzureCLI.launch(az: cli2 + #"\wbin\az.cmd"#, arguments: args, platform: .windows, environment: [:],
+                                         fileExists: { $0 == cli2 + #"\python.exe"# })
+        #expect(python == (cli2 + #"\python.exe"#, ["-IBm", "azure.cli"] + args))
+        // Another batch file: cmd.exe, plain arguments only.
+        let cmd = try AzureCLI.launch(az: #"C:\py\Scripts\az.bat"#, arguments: args, platform: .windows,
+                                      environment: ["ComSpec": #"C:\Windows\system32\cmd.exe"#], fileExists: { _ in false })
+        #expect(cmd == (#"C:\Windows\system32\cmd.exe"#, ["/d", "/c", #"C:\py\Scripts\az.bat"#] + args))
+        #expect(throws: AzureCLIError.self) {
+            try AzureCLI.launch(az: #"C:\py\Scripts\az.bat"#, arguments: ["--tenant", "a&calc"], platform: .windows,
+                                environment: [:], fileExists: { _ in false })
+        }
+        // az.exe runs directly.
+        #expect(try AzureCLI.launch(az: #"C:\tools\az.exe"#, arguments: args, platform: .windows) == (#"C:\tools\az.exe"#, args))
     }
 
     @Test func tokenCommandPinsTenantAndResource() {

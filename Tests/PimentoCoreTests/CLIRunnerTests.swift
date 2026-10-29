@@ -34,6 +34,8 @@ final class CLIHarness: @unchecked Sendable {
     let authSettings = AuthSettingsStore(url: temporaryPresetsURL().deletingLastPathComponent().appendingPathComponent("auth.json"))
     var signInTransport: HTTPTransport = OfflineTransport()
     var openURL: @Sendable (URL) async -> Bool = { _ in false }
+    /// Whether `login` may use the browser (false on Windows).
+    var browserSignIn = LoopbackListener.isSupported
     /// Use the tokens of the auth source (`--auth`) instead of `tokens`.
     var useAuthTokens = false
     /// The token providers the commands asked for, in order.
@@ -139,7 +141,8 @@ final class CLIHarness: @unchecked Sendable {
                 }
             },
             history: historyStore,
-            signIn: CLISignIn(settings: authSettings, store: tokenStore, transport: signInTransport, openURL: openURL))
+            signIn: CLISignIn(settings: authSettings, store: tokenStore, transport: signInTransport, openURL: openURL,
+                              browserSignIn: browserSignIn))
     }
 
     @discardableResult
@@ -550,7 +553,9 @@ struct CLIInstallTests {
         #expect(script == #"do shell script "echo \"a\\b\"" with prompt "Pimento" with administrator privileges"#)
     }
 
-    @Test func readsLinkStateFromDisk() throws {
+    /// The symlink into Pimento.app is a macOS (app) feature; Windows symlinks need extra rights.
+    @Test(.enabled(if: HostPlatform.current != .windows, "macOS app feature; symlinks need privileges on Windows"))
+    func readsLinkStateFromDisk() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("pimento-install-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }

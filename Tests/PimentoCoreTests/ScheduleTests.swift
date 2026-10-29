@@ -281,7 +281,7 @@ struct ScheduledStartNoticeTests {
         #expect(notices[0].id == "scheduled-aaaa-tenant-" + String(Int(utc("2026-10-30T07:00:00Z").timeIntervalSince1970)))
         #expect(notices[0].fireAt == utc("2026-10-30T07:00:00Z"))
         #expect(notices[0].title == "Scheduled activation started")
-        #expect(notices[0].body == "Owner · rg-app-dev, until 10:00")
+        #expect(notices[0].body == "Owner · rg-app-dev, until \(shortTime("2026-10-30T09:00:00Z", berlin))")
         #expect(notices.allSatisfy { $0.id.hasPrefix(ScheduledStartNotice.idPrefix(tenantId: "aaaa-tenant")) })
         #expect(notices.allSatisfy { ScheduledStartNotice.isNotice($0.id) })
         #expect(ScheduledStartNotice.idPrefix(tenantId: nil) == "scheduled-default-")

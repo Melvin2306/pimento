@@ -99,18 +99,31 @@ public struct FileTokenStore: TokenStore {
 
     public var label: String { url.path.replacingOccurrences(of: NSHomeDirectory(), with: "~") }
 
-    /// `$XDG_CONFIG_HOME/pimento`, else `~/.config/pimento`.
-    public static func configDirectory(environment: [String: String], home: String = NSHomeDirectory()) -> URL {
-        let base = environment["XDG_CONFIG_HOME"].flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0) }
-            ?? URL(fileURLWithPath: home).appendingPathComponent(".config", isDirectory: true)
-        return base.appendingPathComponent("pimento", isDirectory: true)
+    /// `$XDG_CONFIG_HOME/pimento`, else `~/.config/pimento` (macOS, Linux);
+    /// `%APPDATA%\Pimento` on Windows.
+    public static func configDirectory(
+        environment: [String: String], home: String = NSHomeDirectory(), platform: HostPlatform = .current
+    ) -> URL {
+        let path = platform == .windows
+            ? PimentoPaths.dataDirectoryPath(environment: environment, home: home, platform: platform)
+            : platform.join(PimentoPaths.xdgConfigHome(environment: environment, home: home, platform: platform), "pimento")
+        return URL(fileURLWithPath: path, isDirectory: true)
     }
 
-    public static func location(environment: [String: String], home: String = NSHomeDirectory()) -> URL {
-        if let custom = environment[fileVariable]?.trimmingCharacters(in: .whitespaces), !custom.isEmpty {
-            return URL(fileURLWithPath: custom.hasPrefix("~/") ? home + custom.dropFirst() : custom)
+    /// The default file as help texts show it, with how it is protected.
+    public static func displayLocation(platform: HostPlatform = .current) -> String {
+        platform == .windows
+            ? PimentoPaths.displayFile("tokens.json", platform: platform) + ", in your user profile"
+            : "~/.config/pimento/tokens.json, mode 600"
+    }
+
+    public static func location(
+        environment: [String: String], home: String = NSHomeDirectory(), platform: HostPlatform = .current
+    ) -> URL {
+        if let custom = PimentoPaths.nonEmpty(environment[fileVariable]) {
+            return URL(fileURLWithPath: PimentoPaths.expandTilde(custom, home: home, platform: platform))
         }
-        return configDirectory(environment: environment, home: home).appendingPathComponent("tokens.json")
+        return configDirectory(environment: environment, home: home, platform: platform).appendingPathComponent("tokens.json")
     }
 
     struct Entry: Codable {
@@ -172,9 +185,23 @@ public struct FileTokenStore: TokenStore {
 }
 
 /// Writes files only you can read: folder 700, file 600 from creation (a
-/// temporary file opened with mode 600, then renamed over the target).
+/// temporary file opened with mode 600, then renamed over the target). On
+/// Windows there are no POSIX modes: the file is written atomically into the
+/// folder, which is in your user profile (`%APPDATA%`) and inherits its ACL.
 enum PrivateFile {
+    /// Mode 600 where there are POSIX modes; nothing on Windows (the folder
+    /// is in your user profile).
+    static func restrict(_ url: URL) {
+        #if !os(Windows)
+        _ = chmod(url.path, 0o600)
+        #endif
+    }
+
     static func write(_ data: Data, to url: URL) throws {
+        #if os(Windows)
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try data.write(to: url, options: .atomic)
+        #else
         let dir = url.deletingLastPathComponent()
         if !FileManager.default.fileExists(atPath: dir.path) {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
@@ -198,6 +225,7 @@ enum PrivateFile {
             throw CocoaError(.fileWriteUnknown, userInfo: [NSFilePathErrorKey: url.path])
         }
         _ = chmod(url.path, 0o600)
+        #endif
     }
 }
 
