@@ -156,6 +156,32 @@ enum Notifier {
         }
     }
 
+    /// Replaces the pending "scheduled activation started" notifications of
+    /// `tenantId` with one per start minute of `requests` (none when they are
+    /// turned off). Run whenever the pending requests were read, so requests
+    /// cancelled anywhere (app, CLI, portal) lose theirs.
+    static func syncScheduledStarts(_ requests: [ScheduledRequest], tenantId: String?, prefs: Preferences) {
+        guard isAvailable else { return }
+        let prefix = ScheduledStartNotice.idPrefix(tenantId: tenantId)
+        let notices = prefs.notifyScheduledStart ? ScheduledStartNotice.notices(for: requests, tenantId: tenantId, now: Date()) : []
+        let sound = prefs.playSound
+        UNUserNotificationCenter.current().getPendingNotificationRequests { pending in
+            let stale = pending.map(\.identifier).filter { $0.hasPrefix(prefix) && !notices.map(\.id).contains($0) }
+            UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: stale)
+            for notice in notices {
+                let content = UNMutableNotificationContent()
+                content.title = notice.title
+                content.body = notice.body
+                content.sound = sound ? .default : nil
+                content.threadIdentifier = "scheduled"
+                content.interruptionLevel = .active
+                let trigger = UNTimeIntervalNotificationTrigger(timeInterval: max(1, notice.fireAt.timeIntervalSinceNow), repeats: false)
+                // Same identifier per start minute: replaces a pending one.
+                schedule(UNNotificationRequest(identifier: notice.id, content: content, trigger: trigger))
+            }
+        }
+    }
+
     /// Drops every pending expiry reminder (reminders were turned off).
     static func cancelReminders() {
         guard isAvailable else { return }

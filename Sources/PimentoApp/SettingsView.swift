@@ -190,21 +190,25 @@ private struct ActivationSettings: View {
             }
 
             Section {
-                Toggle("Remember recent justifications", isOn: $model.prefs.rememberJustifications)
+                Toggle("Remember recent justifications and tickets", isOn: $model.prefs.rememberJustifications)
                 Toggle("Start with the last justification filled in", isOn: $model.prefs.prefillLastJustification)
                     .disabled(!model.prefs.rememberJustifications)
                 LabeledContent("Remembered") {
                     HStack {
-                        Text("\(model.recentJustifications.count)").foregroundStyle(.secondary)
-                        Button("Clear") { model.clearRecentJustifications() }
-                            .disabled(model.recentJustifications.isEmpty)
+                        Text("\(model.recentJustifications.count) justifications, \(model.recentTickets.count) tickets")
+                            .foregroundStyle(.secondary)
+                        Button("Clear") {
+                            model.clearRecentJustifications()
+                            model.clearRecentTickets()
+                        }
+                        .disabled(model.recentJustifications.isEmpty && model.recentTickets.isEmpty)
                     }
                 }
             } header: {
                 Text("Justification")
             } footer: {
                 Text("Up to \(Preferences.recentJustificationLimit), stored on this Mac only. "
-                    + "Pick one from the clock button next to the justification field.")
+                    + "Pick one from the clock button next to the justification or ticket field.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -277,6 +281,16 @@ private struct NotificationSettings: View {
                 Text("Expiry")
             } footer: {
                 Text("Turning reminders off cancels the ones already scheduled; a new lead time moves them.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
+            Section {
+                Toggle("Notify when a scheduled activation starts", isOn: $model.prefs.notifyScheduledStart)
+            } header: {
+                Text("Scheduled activations")
+            } footer: {
+                Text("At the start time, from this Mac, for the activations listed under Scheduled. Best-effort: "
+                    + "it does not check that PIM activated the role. Turning it off removes the pending ones.")
                     .font(.caption).foregroundStyle(.secondary)
             }
 

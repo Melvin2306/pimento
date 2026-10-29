@@ -61,6 +61,26 @@ final class AppModel {
     var showOwnerConfirmation = false
     var banner: Banner?
 
+    // Scheduling: nil starts the activations now; a date schedules them.
+    var scheduleStart: Date?
+    var showStartPicker = false
+    var startPickerDraft = Date()
+    /// Your pending requests in Azure (scheduled, or awaiting approval).
+    var scheduledRequests: [ScheduledRequest] = []
+    var scheduledLoadState: LoadState = .idle
+    var showScheduled = false
+    /// Requests being cancelled, and how cancelling went.
+    var cancelling: Set<String> = []
+    var cancelResults: [String: CancelOutcome] = [:]
+    var showCancelAllConfirmation = false
+
+    // Ticket information: shown when a checked role's policy needs it, or on request.
+    var ticketNumber = ""
+    var ticketSystem = ""
+    var showTicketFields = false
+    /// Most recent first; kept only while `prefs.rememberJustifications` is on.
+    private(set) var recentTickets: [TicketInfo] = []
+
     // PIM policies, per scope + role, for this session (cleared on a tenant
     // switch; failed lookups are retried on refresh).
     var policies: [RoleMatcher.Key: PolicyLookup] = [:]
@@ -127,6 +147,8 @@ final class AppModel {
         static let tenant = "tenantId"
         static let hiddenTenants = "hiddenTenantIds"
         static let recentJustifications = "recentJustifications"
+        static let recentTickets = "recentTickets"
+        static let lastTicketSystem = "lastTicketSystem"
         static let tableColumns = "tableColumns"
     }
 
@@ -162,6 +184,11 @@ final class AppModel {
         let recent = prefs.rememberJustifications ? defaults.stringArray(forKey: Keys.recentJustifications) ?? [] : []
         recentJustifications = recent
         if prefs.prefillLastJustification { justification = recent.first ?? "" }
+        if prefs.rememberJustifications, let data = defaults.data(forKey: Keys.recentTickets),
+           let tickets = try? JSONDecoder().decode([TicketInfo].self, from: data) {
+            recentTickets = tickets
+        }
+        ticketSystem = defaults.string(forKey: Keys.lastTicketSystem) ?? ""
         if let data = defaults.data(forKey: Keys.tableColumns),
            let saved = try? JSONDecoder().decode(TableColumnCustomization<EligibleRole>.self, from: data) {
             columnCustomization = saved
@@ -231,6 +258,130 @@ final class AppModel {
 
     var canActivate: Bool {
         !isActivating && !checkedRoles.isEmpty && !trimmedJustification.isEmpty && identity != nil
+            && missingTicketRoles.isEmpty
+    }
+
+    // MARK: Tickets
+
+    /// The ticket to send: nil without a number (a system alone is not sent).
+    var currentTicket: TicketInfo? {
+        let number = ticketNumber.trimmingCharacters(in: .whitespacesAndNewlines)
+        return number.isEmpty ? nil : TicketInfo(number: number, system: ticketSystem)
+    }
+
+    func requiresTicket(_ role: EligibleRole) -> Bool { policies[role.policyKey]?.policy?.requiresTicket == true }
+
+    /// Checked roles whose policy requires a ticket.
+    var checkedRolesNeedingTicket: [EligibleRole] {
+        TicketRequirement.rolesNeedingTicket(checkedRoles) { self.policies[$0.policyKey] }
+    }
+
+    /// Checked roles that need a ticket the fields do not complete yet.
+    var missingTicketRoles: [EligibleRole] {
+        TicketRequirement.missing(checkedRoles, ticket: currentTicket) { self.policies[$0.policyKey] }
+    }
+
+    var ticketFieldsVisible: Bool {
+        showTicketFields || !checkedRolesNeedingTicket.isEmpty || !ticketNumber.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    func useRecentTicket(_ ticket: TicketInfo) {
+        ticketNumber = ticket.ticketNumber ?? ""
+        if let system = ticket.ticketSystem { ticketSystem = system }
+        showTicketFields = true
+    }
+
+    private func rememberTicket(_ ticket: TicketInfo?) {
+        guard let ticket else { return }
+        if let system = ticket.ticketSystem { UserDefaults.standard.set(system, forKey: Keys.lastTicketSystem) }
+        guard prefs.rememberJustifications else { return }
+        recentTickets = TicketInfo.recording(ticket, in: recentTickets, limit: Preferences.recentJustificationLimit)
+        if let data = try? JSONEncoder().encode(recentTickets) { UserDefaults.standard.set(data, forKey: Keys.recentTickets) }
+    }
+
+    func clearRecentTickets() {
+        recentTickets = []
+        UserDefaults.standard.removeObject(forKey: Keys.recentTickets)
+    }
+
+    // MARK: Scheduling
+
+    /// `Fri 08:00`, for the start menu and the results.
+    func startLabel(_ date: Date) -> String { ScheduleTime.label(date, now: Date()) }
+
+    func setStart(_ date: Date?) {
+        scheduleStart = date
+        if let date {
+            do { try ScheduleTime.validate(date, now: Date()) } catch {
+                banner = Banner(kind: .error, text: error.localizedDescription)
+            }
+        }
+    }
+
+    func openStartPicker() {
+        startPickerDraft = scheduleStart ?? ScheduleTime.Preset.tomorrowMorning.date(now: Date())
+        showStartPicker = true
+    }
+
+    /// The latest start PIM accepts, for the date picker.
+    var latestStart: Date { Date().addingTimeInterval(TimeInterval(ScheduleTime.maxDaysAhead) * 86400) }
+
+    /// Pending requests of the eligibility in `role` (scope + role).
+    func scheduledRequests(for role: EligibleRole) -> [ScheduledRequest] {
+        scheduledRequests.filter { $0.policyKey == role.policyKey }
+    }
+
+    var scheduledCount: Int { scheduledRequests.count }
+
+    /// Reads your pending requests from Azure (read-only) and rebuilds the
+    /// "scheduled activation started" notifications from them.
+    func loadScheduled() async {
+        guard tenantError == nil, scheduledLoadState != .loading else { return }
+        scheduledLoadState = .loading
+        let generation = tenantGeneration
+        let service = service
+        do {
+            let (identity, requests) = try await service.loadScheduledRequests()
+            guard generation == tenantGeneration else { return }
+            scheduledRequests = requests
+            scheduledLoadState = .loaded
+            Notifier.syncScheduledStarts(requests, tenantId: identity.tenantId ?? effectiveTenantId, prefs: prefs)
+        } catch {
+            guard generation == tenantGeneration else { return }
+            scheduledLoadState = .failed(message: error.localizedDescription, needsLogin: (error as? AzureCLIError)?.needsLogin ?? false)
+        }
+    }
+
+    func openScheduled() {
+        cancelResults = [:]
+        showScheduled = true
+        Task { await loadScheduled() }
+    }
+
+    /// Cancels `requests` (POST …/cancel), then reads the list again.
+    func cancelScheduled(_ requests: [ScheduledRequest]) async {
+        let targets = requests.filter { !cancelling.contains($0.name) }
+        guard !targets.isEmpty else { return }
+        for r in targets {
+            cancelling.insert(r.name)
+            cancelResults[r.name] = nil
+        }
+        do {
+            try await service.cancel(targets) { r, outcome in
+                await MainActor.run {
+                    self.cancelling.remove(r.name)
+                    self.cancelResults[r.name] = outcome
+                }
+            }
+        } catch {
+            for r in targets { cancelResults[r.name] = .failed(code: "Auth", message: error.localizedDescription) }
+        }
+        for r in targets { cancelling.remove(r.name) }
+        let done = targets.filter { cancelResults[$0.name] == .canceled }.count
+        let failed = targets.count - done
+        banner = Banner(kind: failed > 0 ? .error : .success,
+                        text: "\(done) scheduled activation\(done == 1 ? "" : "s") cancelled" + (failed > 0 ? ", \(failed) failed." : "."))
+        await loadScheduled()
     }
 
     // MARK: Durations and policies
@@ -290,7 +441,8 @@ final class AppModel {
     var activateTitle: String {
         let n = checkedRoles.count
         let noun = n == 1 ? "role" : "roles"
-        return n == 0 ? "Activate" : "Activate \(n) \(noun)"
+        let verb = scheduleStart == nil ? "Activate" : "Schedule"
+        return n == 0 ? verb : "\(verb) \(n) \(noun)"
     }
 
     // MARK: Actions
@@ -314,6 +466,7 @@ final class AppModel {
             loadState = .loaded
             reloadPresets()
             loadPolicies(retryFailures: true)
+            Task { await loadScheduled() }
         } catch let error as AzureCLIError {
             guard generation == tenantGeneration else { return }
             loadState = .failed(message: error.localizedDescription, needsLogin: error.needsLogin)
@@ -406,6 +559,9 @@ final class AppModel {
         checkedActive = []
         policies = [:]
         policyTask = nil
+        scheduledRequests = []
+        scheduledLoadState = .idle
+        cancelResults = [:]
         progress = [:]
         pending = [:]
         banner = nil
@@ -453,13 +609,33 @@ final class AppModel {
         }
     }
 
-    /// One request per checked role, each capped at its policy maximum.
+    /// One request per checked role, each capped at its policy maximum, from
+    /// the chosen start (now, or scheduled) and with the ticket, if any.
     private func plans() async throws -> [PlannedRequest] {
         guard let identity else { throw ActivationRequestError.missingPrincipal }
         let roles = checkedRoles
+        let now = Date()
+        if let start = scheduleStart { try ScheduleTime.validate(start, now: now) }
         await ensurePolicies(for: roles)
-        return try ActivationRequestBuilder.plan(roles, principalId: identity.objectId, justification: justification) {
+        let needTicket = TicketRequirement.missing(roles, ticket: currentTicket) { self.policies[$0.policyKey] }
+        if !needTicket.isEmpty {
+            showTicketFields = true
+            throw TicketMissing(roles: needTicket)
+        }
+        return try ActivationRequestBuilder.plan(
+            roles, principalId: identity.objectId, justification: justification, now: now,
+            start: scheduleStart, ticket: currentTicket
+        ) {
             self.effectiveDuration(for: $0)
+        }
+    }
+
+    struct TicketMissing: LocalizedError {
+        let roles: [EligibleRole]
+        var errorDescription: String? {
+            "A ticket number and ticket system are required for "
+                + roles.prefix(3).map { "\($0.roleName) · \($0.scopeName)" }.joined(separator: ", ")
+                + (roles.count > 3 ? " and \(roles.count - 3) more" : "") + "."
         }
     }
 
@@ -484,12 +660,14 @@ final class AppModel {
         isActivating = true
         banner = nil
         rememberJustification(trimmedJustification)
+        rememberTicket(currentTicket)
+        let scheduling = scheduleStart != nil
         for plan in planned { progress[plan.id] = .queued }
         do {
             try await service.execute(
                 planned,
                 maxConcurrent: prefs.maxParallelRequests,
-                onStart: { plan in await MainActor.run { self.progress[plan.id] = .running("Activating…") } },
+                onStart: { plan in await MainActor.run { self.progress[plan.id] = .running(scheduling ? "Scheduling…" : "Activating…") } },
                 onResult: { plan, outcome in await MainActor.run { self.progress[plan.id] = .done(outcome) } }
             )
         } catch {
@@ -503,9 +681,19 @@ final class AppModel {
             return nil
         }
         let ok = outcomes.filter { if case .activated = $0 { return true }; return false }.count
+        let scheduledStarts = outcomes.compactMap { o -> Date? in if case .scheduled(_, let start, _) = o { return start }; return nil }
         let skipped = outcomes.filter { $0 == .alreadyActive }.count
         let failed = outcomes.filter(\.isFailure).count
-        banner = Banner(kind: failed > 0 ? .error : .success, text: "\(ok) activated, \(skipped) skipped, \(failed) failed.")
+        if scheduledStarts.isEmpty {
+            banner = Banner(kind: failed > 0 ? .error : .success, text: "\(ok) activated, \(skipped) skipped, \(failed) failed.")
+        } else {
+            let when = Set(scheduledStarts.map(startLabel)).sorted().joined(separator: ", ")
+            var text = "\(scheduledStarts.count) scheduled for \(when)"
+            if ok > 0 { text += ", \(ok) activated" }
+            if skipped > 0 { text += ", \(skipped) skipped" }
+            if failed > 0 { text += ", \(failed) failed" }
+            banner = Banner(kind: failed > 0 ? .error : .success, text: text + ". See Scheduled to cancel.")
+        }
         // Activated and already-active rows are done: show them as active
         // right away and take them out of the selection.
         for plan in planned {
@@ -514,12 +702,14 @@ final class AppModel {
             case .activated(let status, let until):
                 if ActivationOutcome.isGranted(status: status) { pending[plan.id] = .active(until: until, since: plan.requestedAt) }
                 checked.remove(plan.id)
-            case .alreadyActive:
+            case .alreadyActive, .scheduled:
                 checked.remove(plan.id)
             default:
                 break
             }
         }
+        // Back to "now" once everything was scheduled, so the next batch is not scheduled by accident.
+        if scheduling, failed == 0 { scheduleStart = nil }
         isActivating = false
         Notifier.operationFinished(
             roles: planned.map(\.role), outcomes: finishedOutcomes, operation: .activate,
@@ -842,6 +1032,7 @@ final class AppModel {
         checked = Set(resolution.eligible.map(\.id))
         if let text = preset.trimmedJustification { justification = text }
         if let d = preset.duration { duration = d }
+        if let system = preset.trimmedTicketSystem { ticketSystem = system }
         loadPolicies(for: resolution.eligible)
         var parts = ["\(preset.name): \(resolution.eligible.count) role\(resolution.eligible.count == 1 ? "" : "s") selected"]
         if !resolution.active.isEmpty { parts.append("\(resolution.active.count) already active") }
@@ -1000,7 +1191,13 @@ final class AppModel {
         if prefs.effectiveAppearance != old.effectiveAppearance { AppAppearance.apply(prefs) }
         if prefs.defaultHours != old.defaultHours, !isActivating { duration = .hours(prefs.defaultHours) }
         if prefs.autoRefreshMinutes != old.autoRefreshMinutes { restartAutoRefresh() }
-        if !prefs.rememberJustifications, old.rememberJustifications { clearRecentJustifications() }
+        if !prefs.rememberJustifications, old.rememberJustifications {
+            clearRecentJustifications()
+            clearRecentTickets()
+        }
+        if prefs.notifyScheduledStart != old.notifyScheduledStart {
+            Notifier.syncScheduledStarts(scheduledRequests, tenantId: identity?.tenantId ?? effectiveTenantId, prefs: prefs)
+        }
         if !prefs.expiryReminders, old.expiryReminders {
             Notifier.cancelReminders()
         } else if prefs.expiryReminders, prefs.reminderLeadMinutes != old.reminderLeadMinutes {

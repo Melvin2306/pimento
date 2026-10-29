@@ -62,6 +62,9 @@ struct PimentoApp: App {
                 Button("Preview Requests…") { model.buildDryRun() }
                     .keyboardShortcut(.return, modifiers: [.command, .option])
                     .disabled(!model.canActivate)
+                Button("Scheduled Activations…") { model.openScheduled() }
+                    .keyboardShortcut("l", modifiers: [.command, .shift])
+                    .disabled(model.identity == nil)
                 Button("Clear Results") { model.clearResults() }
                     .keyboardShortcut("k")
                     .disabled(model.progress.isEmpty || model.isActivating)

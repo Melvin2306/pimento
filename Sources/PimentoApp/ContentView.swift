@@ -30,6 +30,7 @@ struct ContentView: View {
         .sheet(isPresented: $model.showTenantSheet) { TenantSheet() }
         .sheet(isPresented: $model.showSavePresetSheet) { SavePresetSheet() }
         .sheet(isPresented: $model.showManagePresets) { ManagePresetsSheet() }
+        .sheet(isPresented: $model.showScheduled) { ScheduledSheet() }
         .alert(ownerAlertTitle, isPresented: $model.showOwnerConfirmation) {
             Button(model.activateTitle, role: .destructive) {
                 Task { await model.activate() }
@@ -188,6 +189,16 @@ struct ContentView: View {
             .accessibilityLabel("Settings")
         }
         ToolbarItemGroup(placement: .primaryAction) {
+            Button {
+                model.openScheduled()
+            } label: {
+                Label(model.scheduledCount > 0 ? "Scheduled (\(model.scheduledCount))" : "Scheduled",
+                      systemImage: "calendar.badge.clock")
+                    .labelStyle(.titleAndIcon)
+            }
+            .help("Your scheduled activations and requests waiting for approval, from Azure, with Cancel (⇧⌘L)")
+            .accessibilityLabel("Scheduled activations")
+            .disabled(model.identity == nil)
             PresetsMenu()
             Button("Select All Eligible") { model.selectAllEligible() }
                 .help("Check every role that is not active yet, within the current filter (⇧⌘A)")
@@ -200,7 +211,7 @@ struct ContentView: View {
 
     private var ownerAlertTitle: String {
         let n = model.checkedOwnerRoles.count
-        return "Activate \(n) Owner role\(n == 1 ? "" : "s")?"
+        return "\(model.scheduleStart == nil ? "Activate" : "Schedule") \(n) Owner role\(n == 1 ? "" : "s")?"
     }
 
     private var ownerAlertMessage: String {
@@ -208,8 +219,9 @@ struct ContentView: View {
         let names = owners.prefix(12).map { "• \($0.scopeName)" }.joined(separator: "\n")
         let more = owners.count > 12 ? "\n… and \(owners.count - 12) more" : ""
         let total = model.checkedRoles.count
-        return "You are about to activate \(owners.count) Owner role\(owners.count == 1 ? "" : "s") "
-            + "(\(total) role\(total == 1 ? "" : "s") in total) for \(model.durationSummary):\n\n\(names)\(more)"
+        let when = model.scheduleStart.map { ", starting \(model.startLabel($0))" } ?? ""
+        return "You are about to \(model.scheduleStart == nil ? "activate" : "schedule") \(owners.count) Owner role\(owners.count == 1 ? "" : "s") "
+            + "(\(total) role\(total == 1 ? "" : "s") in total) for \(model.durationSummary)\(when):\n\n\(names)\(more)"
             + "\n\nJustification: \(model.trimmedJustification)"
     }
 }
@@ -357,7 +369,8 @@ struct RoleTable: View {
             .customizationID(AppModel.Column.duration.rawValue)
 
             TableColumn("Status", value: \.statusSortKey) { role in
-                StatusCell(role: role, checked: model.isChecked(role))
+                StatusCell(role: role, checked: model.isChecked(role),
+                           scheduled: model.scheduledRequests(for: role).first, needsTicket: model.requiresTicket(role))
                     .themedCell(checked: model.isChecked(role))
             }
             .width(min: 110, ideal: 150)
@@ -381,15 +394,76 @@ struct RoleTable: View {
 struct StatusCell: View {
     let role: EligibleRole
     var checked = false
+    /// A pending activation of this eligibility (scheduled or awaiting approval).
+    var scheduled: ScheduledRequest?
+    /// Its policy requires ticket information.
+    var needsTicket = false
     @Environment(\.appTheme) private var theme
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        if theme == .native {
-            native
-        } else {
-            themed(ThemePalette(theme, scheme))
+        HStack(spacing: 6) {
+            if let scheduled, !role.isActive {
+                scheduledBadge(scheduled)
+            } else if theme == .native {
+                native
+            } else {
+                themed(ThemePalette(theme, scheme))
+            }
+            if let scheduled, role.isActive {
+                Image(systemName: "calendar.badge.clock")
+                    .foregroundStyle(secondary)
+                    .help(scheduledHelp(scheduled))
+                    .accessibilityLabel(scheduledHelp(scheduled))
+            }
+            if needsTicket && !role.isActive {
+                Label("needs ticket", systemImage: "ticket")
+                    .labelStyle(.titleAndIcon)
+                    .font(.caption)
+                    .foregroundStyle(secondary)
+                    .help("Its PIM policy requires a ticket number and ticket system")
+            }
         }
+    }
+
+    private var secondary: Color {
+        let palette = ThemePalette(theme, scheme)
+        return theme == .native ? .secondary : checked ? palette.selectionText : palette.secondaryText
+    }
+
+    private func scheduledText(_ r: ScheduledRequest) -> String {
+        r.kind == .scheduled ? "Scheduled \(ScheduleTime.label(r.start, now: Date()))" : "Awaiting approval"
+    }
+
+    private func scheduledHelp(_ r: ScheduledRequest) -> String {
+        r.kind == .scheduled
+            ? "Scheduled activation: starts \(r.start.formatted(date: .complete, time: .shortened))"
+                + (r.durationMinutes.map { " for \(DurationText.short(minutes: $0))" } ?? "") + ". Cancel it under Scheduled."
+            : "An activation request waits for approval (\(r.status)). Cancel it under Scheduled."
+    }
+
+    @ViewBuilder private func scheduledBadge(_ r: ScheduledRequest) -> some View {
+        let palette = ThemePalette(theme, scheme)
+        Group {
+            switch theme {
+            case .azure:
+                ThemeBadge(text: scheduledText(r), symbol: "calendar.badge.clock",
+                           foreground: palette.accent, fill: checked ? palette.surface.opacity(0.6) : palette.infoFill, font: palette.font(12))
+            case .windowsXP:
+                Label {
+                    Text(scheduledText(r)).foregroundStyle(checked ? palette.selectionText : palette.text)
+                } icon: {
+                    Image(systemName: "calendar.badge.clock").foregroundStyle(checked ? palette.selectionText : palette.accent)
+                }
+            case .native:
+                Label {
+                    Text(scheduledText(r))
+                } icon: {
+                    Image(systemName: "calendar.badge.clock").foregroundStyle(Color.accentColor)
+                }
+            }
+        }
+        .help(scheduledHelp(r))
     }
 
     private var activeText: String {
@@ -622,10 +696,24 @@ struct ActivationBar: View {
                         .help("Recent justifications")
                         .accessibilityLabel("Recent justifications")
                     }
+                    if !model.ticketFieldsVisible {
+                        Button {
+                            model.showTicketFields = true
+                        } label: {
+                            Image(systemName: "ticket")
+                        }
+                        .buttonStyle(.borderless)
+                        .disabled(model.isActivating)
+                        .help("Add ticket information (number and system)")
+                        .accessibilityLabel("Add ticket information")
+                    }
+                }
+                if model.ticketFieldsVisible {
+                    TicketFields()
                 }
                 Text(hint)
                     .font(.caption)
-                    .foregroundStyle(model.trimmedJustification.isEmpty && !model.checkedRoles.isEmpty ? .red : .secondary)
+                    .foregroundStyle((model.trimmedJustification.isEmpty || !model.missingTicketRoles.isEmpty) && !model.checkedRoles.isEmpty ? .red : .secondary)
             }
             .frame(minWidth: 280)
 
@@ -639,6 +727,8 @@ struct ActivationBar: View {
             .fixedSize()
             .help("How long the roles stay active (also for Renew). Each role gets at most what its PIM policy allows: "
                 + "see the Duration column. Maximum allowed asks for exactly that.")
+
+            StartMenu()
 
             if !model.checkedActiveRoles.isEmpty {
                 HStack(spacing: 8) {
@@ -682,7 +772,7 @@ struct ActivationBar: View {
                 if model.isActivating {
                     HStack(spacing: 6) {
                         ProgressView().controlSize(.small)
-                        Text("Activating…")
+                        Text(model.scheduleStart == nil ? "Activating…" : "Scheduling…")
                     }
                 } else {
                     Text(model.activateTitle)
@@ -715,7 +805,10 @@ struct ActivationBar: View {
         if owners > 0 { parts.append("\(owners) Owner") }
         let capped = model.cappedCheckedRoles.count
         if capped > 0 { parts.append("\(capped) capped at the policy maximum") }
+        if let start = model.scheduleStart { parts.append("starts \(model.startLabel(start))") }
         if model.trimmedJustification.isEmpty { parts.append("justification required") }
+        let missing = model.missingTicketRoles.count
+        if missing > 0 { parts.append("ticket number and system required for \(missing) role\(missing == 1 ? "" : "s")") }
         return parts.joined(separator: " · ")
     }
 }

@@ -334,6 +334,12 @@ private struct PresetEditor: View {
             set: { model.presetDraft?.justification = $0.isEmpty ? nil : $0 })
     }
 
+    private var ticketSystem: Binding<String> {
+        Binding(
+            get: { model.presetDraft?.ticketSystem ?? "" },
+            set: { model.presetDraft?.ticketSystem = $0.isEmpty ? nil : $0 })
+    }
+
     var body: some View {
         let draft = model.presetDraft!
         VStack(alignment: .leading, spacing: 12) {
@@ -351,6 +357,13 @@ private struct PresetEditor: View {
                         .themedTextField()
                         .textFieldStyle(.roundedBorder)
                         .accessibilityLabel("Default justification")
+                }
+                GridRow {
+                    Text("Ticket system")
+                    TextField("Optional, e.g. ServiceNow: filled in when you pick the preset", text: ticketSystem)
+                        .themedTextField()
+                        .textFieldStyle(.roundedBorder)
+                        .accessibilityLabel("Default ticket system")
                 }
                 GridRow {
                     Text("Duration")
