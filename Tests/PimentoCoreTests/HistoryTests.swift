@@ -146,6 +146,9 @@ struct HistoryStoreTests {
         let text = try String(contentsOf: store.url, encoding: .utf8)
         #expect(text.split(separator: "\n").count == 3 && text.hasSuffix("\n"))
         #expect(hasMode(store.url.path, 0o600))
+        #expect(hasMode(store.url.deletingLastPathComponent().path, 0o700))
+        try store.saveSettings(HistorySettings(enabled: false))
+        #expect(hasMode(store.settingsURL.path, 0o600))
     }
 
     @Test func skipsBrokenLines() throws {

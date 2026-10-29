@@ -192,14 +192,6 @@ public struct FileTokenStore: TokenStore {
 /// Windows there are no POSIX modes: the file is written atomically into the
 /// folder, which is in your user profile (`%APPDATA%`) and inherits its ACL.
 enum PrivateFile {
-    /// Mode 600 where there are POSIX modes; nothing on Windows (the folder
-    /// is in your user profile).
-    static func restrict(_ url: URL) {
-        #if !os(Windows)
-        _ = chmod(url.path, 0o600)
-        #endif
-    }
-
     static func write(_ data: Data, to url: URL) throws {
         #if os(Windows)
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)

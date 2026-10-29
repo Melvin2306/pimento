@@ -196,6 +196,9 @@ struct PresetFileTests {
         #expect(library.presets.map(\.name) == ["A", "B", "C"])
         #expect(try store.load().presets.map(\.name) == ["A", "B", "C"])
         #expect(hasMode(url.path, 0o600))
+        // The folder it created is yours only, and no temporary file is left.
+        #expect(hasMode(url.deletingLastPathComponent().path, 0o700))
+        #expect(try FileManager.default.contentsOfDirectory(atPath: url.deletingLastPathComponent().path) == [url.lastPathComponent])
     }
 
     @Test func locationDefaultAndOverride() {

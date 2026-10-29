@@ -49,8 +49,8 @@ public enum HistoryCSV {
     /// Writes the CSV to `url`, readable only by you (it holds justifications).
     public static func write(_ records: [HistoryRecord], to url: URL, timeZone: TimeZone = .current) throws {
         do {
-            try data(records, timeZone: timeZone).write(to: url, options: .atomic)
-            try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+            // Mode 600 from creation, not chmod-ed after an umask-mode write.
+            try PrivateFile.write(data(records, timeZone: timeZone), to: url)
         } catch {
             throw HistoryError.io(error.localizedDescription)
         }

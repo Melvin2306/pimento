@@ -361,12 +361,10 @@ public struct PresetStore: Sendable {
         return try PresetLibrary.decode(data)
     }
 
-    /// Writes atomically, readable only by you.
+    /// Writes atomically, readable only by you from the start (mode 600; a
+    /// new folder 700).
     public func save(_ library: PresetLibrary) throws {
-        let dir = url.deletingLastPathComponent()
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        try library.encoded().write(to: url, options: .atomic)
-        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+        try PrivateFile.write(try library.encoded(), to: url)
     }
 
     /// Reads the file, applies `change` and writes it back, so that a preset

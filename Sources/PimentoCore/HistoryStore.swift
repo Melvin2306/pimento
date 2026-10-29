@@ -143,8 +143,7 @@ public struct HistoryStore: Sendable {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         do {
-            try encoder.encode(settings).write(to: settingsURL, options: .atomic)
-            PrivateFile.restrict(settingsURL)
+            try PrivateFile.write(encoder.encode(settings), to: settingsURL)
         } catch {
             throw HistoryError.io(error.localizedDescription)
         }
@@ -266,7 +265,13 @@ public struct HistoryStore: Sendable {
 
     func createDirectory() throws {
         do {
-            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            let dir = url.deletingLastPathComponent()
+            guard !FileManager.default.fileExists(atPath: dir.path) else { return }
+            #if os(Windows)
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            #else
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+            #endif
         } catch {
             throw HistoryError.io(error.localizedDescription)
         }
