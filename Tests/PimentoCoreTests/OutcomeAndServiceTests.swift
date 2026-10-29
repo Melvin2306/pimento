@@ -68,6 +68,21 @@ struct OutcomeMappingTests {
         #expect(ActivationResponseMapper.failedRules(in: "The following policy rules failed: [\"MfaRule\"]. Rule text") == ["MfaRule"])
         #expect(ActivationResponseMapper.failedRules(in: "no rules here") == [])
     }
+
+    @Test(arguments: ["Failed", "FailedAsResourceIsLocked", "Denied", "AdminDenied", "TimedOut", "Invalid"])
+    func aTerminalStatusInA2xxIsAFailure(_ status: String) {
+        let body = Data(#"{"properties":{"status":"\#(status)"}}"#.utf8)
+        let now = Fixture.now
+        for action in [RequestAction.activate, .deactivate] {
+            let outcome = ActivationResponseMapper.outcome(for: action, statusCode: 201, data: body, requestedAt: now, minutes: 60)
+            #expect(outcome.isFailure, "\(action) \(status)")
+            #expect(outcome == .failed(code: status, message: "PIM answered \(status): the role was not \(action == .activate ? "activated" : "deactivated")."))
+        }
+        // Also for a scheduled start: not "scheduled".
+        let later = ActivationResponseMapper.outcome(statusCode: 201, data: body, requestedAt: now, minutes: 60,
+                                                     scheduledStart: now.addingTimeInterval(3600))
+        #expect(later.isFailure)
+    }
 }
 
 @Suite("Auth helpers")

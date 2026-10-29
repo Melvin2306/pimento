@@ -119,7 +119,8 @@ public enum ActivationResponseMapper {
         case .deactivate:
             if (200..<300).contains(statusCode) {
                 let response = try? JSONDecoder().decode(RequestResponse.self, from: data)
-                return .deactivated(status: response?.properties?.status ?? "")
+                let status = response?.properties?.status ?? ""
+                return failedStatus(status, "deactivated") ?? .deactivated(status: status)
             }
             let (code, message) = error(statusCode: statusCode, data: data)
             switch code {
@@ -171,6 +172,15 @@ public enum ActivationResponseMapper {
         }
     }
 
+    /// Request statuses that end a request without doing it. ARM can return
+    /// them with a 2xx (`FailedAsResourceIsLocked`, for example).
+    static let terminalFailureStatuses: Set<String> = ["failed", "failedasresourceislocked", "invalid", "denied", "admindenied", "timedout"]
+
+    static func failedStatus(_ status: String, _ what: String) -> ActivationOutcome? {
+        guard terminalFailureStatuses.contains(status.lowercased()) else { return nil }
+        return .failed(code: status, message: "PIM answered \(status): the role was not \(what).")
+    }
+
     /// Codes PIM uses when another request for the same assignment is open.
     static let pendingRequestCodes: Set<String> = ["RoleAssignmentRequestExistsWithSameAssignmentId", "PendingRoleAssignmentRequest"]
 
@@ -182,6 +192,7 @@ public enum ActivationResponseMapper {
             let until = AzureDate.parse(p?.scheduleInfo?.expiration?.endDateTime)
                 ?? start.addingTimeInterval(TimeInterval(minutes) * 60)
             let status = p?.status ?? ""
+            if let failed = failedStatus(status, "activated") { return failed }
             // A start in the future: PIM schedules it (`Granted` until then).
             // Requests waiting for approval stay "submitted".
             if start > requestedAt.addingTimeInterval(ScheduleTime.immediateSlack),
