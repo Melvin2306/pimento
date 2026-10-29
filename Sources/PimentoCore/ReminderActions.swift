@@ -143,7 +143,8 @@ public enum ReminderUpdate: Equatable, Sendable {
             guard let rest = item.payload.removing(ended), let minute = ActivationSummary.expiry(ofReminder: item.id) else {
                 return .remove(id: item.id)
             }
-            let reminder = ActivationSummary.reminder(expiringAt: minute, roles: rest.roles, fireAt: item.fireAt, timeZone: timeZone)
+            let reminder = ActivationSummary.reminder(
+                expiringAt: minute, roles: rest.roles, fireAt: item.fireAt, timeZone: timeZone, id: item.id)
             return .replace(reminder, rest)
         }
     }

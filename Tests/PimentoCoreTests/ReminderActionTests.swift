@@ -83,6 +83,23 @@ struct ReminderActionTests {
         #expect(ActivationSummary.expiry(ofReminder: shared.id) == minute)
     }
 
+    @Test func batchesExpiringInTheSameMinuteKeepTheirOwnReminders() throws {
+        let roles = try roles().map(ReminderRole.init)
+        let minute = AzureDate.parse("2026-10-29T17:00:00Z")!
+        let fire = minute.addingTimeInterval(-600)
+        let a = ActivationSummary.reminder(expiringAt: minute, roles: [roles[0]], fireAt: fire, timeZone: utc)
+        let b = ActivationSummary.reminder(expiringAt: minute, roles: [roles[1]], fireAt: fire, timeZone: utc)
+        // Two batches ending in the same minute: neither replaces the other.
+        #expect(a.id != b.id)
+        // The same roles again replace their reminder; order does not matter.
+        #expect(ActivationSummary.reminder(expiringAt: minute, roles: roles, fireAt: fire, timeZone: utc).id
+            == ActivationSummary.reminder(expiringAt: minute, roles: roles.reversed(), fireAt: fire, timeZone: utc).id)
+        for id in [a.id, b.id, "expiry-\(Int(minute.timeIntervalSince1970))"] {
+            #expect(ActivationSummary.expiry(ofReminder: id) == minute)
+            #expect(ActivationSummary.rescheduledFireDate(for: id, reminderLead: 600, now: Fixture.now) == fire)
+        }
+    }
+
     @Test func deactivationAndRenewalSummaries() throws {
         let roles = try roles()
         let ended = Dictionary(uniqueKeysWithValues: roles.map { ($0.id, ActivationOutcome.deactivated(status: "Revoked")) })

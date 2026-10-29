@@ -5,7 +5,9 @@ import Foundation
 /// wording is unit-tested; posting is the app's job.
 public struct ActivationSummary: Equatable, Sendable {
     public struct Reminder: Equatable, Sendable {
-        /// Stable per expiry minute, so a re-run replaces instead of duplicating.
+        /// Stable per expiry minute and set of roles, so a re-run replaces
+        /// instead of duplicating, while another batch expiring in the same
+        /// minute (or another tenant's) gets a reminder of its own.
         public let id: String
         public let fireAt: Date
         public let title: String
@@ -161,23 +163,42 @@ public struct ActivationSummary: Equatable, Sendable {
         }
     }
 
-    /// The reminder for `roles` expiring at `minute`.
-    public static func reminder(expiringAt minute: Date, roles: [ReminderRole], fireAt: Date, timeZone: TimeZone = .current) -> Reminder {
+    /// The reminder for `roles` expiring at `minute`; `id` keeps the
+    /// identifier of a reminder being rewritten.
+    public static func reminder(
+        expiringAt minute: Date, roles: [ReminderRole], fireAt: Date, timeZone: TimeZone = .current, id: String? = nil
+    ) -> Reminder {
         let time = Date.FormatStyle(date: .omitted, time: .shortened, timeZone: timeZone)
         let shown = roles.prefix(listed).map(\.line)
         let more = roles.count - shown.count
         let n = roles.count
         return Reminder(
-            id: reminderPrefix + String(Int(minute.timeIntervalSince1970)),
+            id: id ?? reminderId(expiringAt: minute, roles: roles),
             fireAt: fireAt,
             title: "\(n) PIM role\(n == 1 ? "" : "s") expire\(n == 1 ? "s" : "") at \(minute.formatted(time))",
             body: (shown + (more > 0 ? ["and \(more) more"] : [])).joined(separator: "\n"),
             roles: roles)
     }
 
+    /// `expiry-<minute epoch>-<hash of the role keys>`. The keys contain the
+    /// scope, so the same roles in another tenant hash differently too.
+    static func reminderId(expiringAt minute: Date, roles: [ReminderRole]) -> String {
+        var hash: UInt64 = 0xcbf2_9ce4_8422_2325 // FNV-1a: stable across launches, unlike Hasher
+        for byte in roles.map(\.key).sorted().joined(separator: "\n").utf8 {
+            hash = (hash ^ UInt64(byte)) &* 0x100_0000_01b3
+        }
+        return reminderPrefix + String(Int(minute.timeIntervalSince1970)) + "-" + String(hash, radix: 16)
+    }
+
+    /// The minute epoch of `expiry-<epoch>` and `expiry-<epoch>-<hash>`.
+    static func epoch(ofReminder identifier: String) -> Int? {
+        guard isReminder(identifier) else { return nil }
+        return Int(identifier.dropFirst(reminderPrefix.count).prefix { $0 != "-" })
+    }
+
     /// The expiry minute a reminder identifier stands for.
     public static func expiry(ofReminder identifier: String) -> Date? {
-        guard isReminder(identifier), let epoch = Int(identifier.dropFirst(reminderPrefix.count)) else { return nil }
+        guard let epoch = epoch(ofReminder: identifier) else { return nil }
         return Date(timeIntervalSince1970: TimeInterval(epoch))
     }
 
@@ -193,7 +214,7 @@ public struct ActivationSummary: Equatable, Sendable {
     /// When the reminder `identifier` should fire with a new lead time, or nil
     /// when that moment has passed (or the identifier is not a reminder).
     public static func rescheduledFireDate(for identifier: String, reminderLead: TimeInterval, now: Date = Date()) -> Date? {
-        guard isReminder(identifier), let epoch = Int(identifier.dropFirst(reminderPrefix.count)) else { return nil }
+        guard let epoch = epoch(ofReminder: identifier) else { return nil }
         let fireAt = Date(timeIntervalSince1970: TimeInterval(epoch)).addingTimeInterval(-reminderLead)
         return fireAt > now ? fireAt : nil
     }

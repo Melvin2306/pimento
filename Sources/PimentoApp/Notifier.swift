@@ -95,7 +95,7 @@ enum Notifier {
         content.categoryIdentifier = ReminderAction.categoryIdentifier
         content.userInfo = payload.userInfo
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: max(1, reminder.fireAt.timeIntervalSinceNow), repeats: false)
-        // Same identifier per expiry minute: replaces a pending one.
+        // Same identifier per expiry minute and roles: replaces a pending one.
         schedule(UNNotificationRequest(identifier: reminder.id, content: content, trigger: trigger))
     }
 
