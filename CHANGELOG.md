@@ -8,6 +8,25 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `pimento`, a standalone command-line tool (its own binary, Foundation only, no AppKit/SwiftUI):
+  - `pimento list [FILTER…] [--role NAME] [--active|--eligible]`, `pimento status` (active roles,
+    soonest-expiring first, time left), `pimento tenants`, `pimento version`, `pimento help [COMMAND]`.
+  - `pimento activate (FILTER… | --role NAME | --all) -j TEXT [--hours N] [--yes] [--dry-run]
+    [--max-parallel N]` activates for real through the same code as the app. It needs an explicit
+    selection, shows the plan with Owner roles highlighted, asks on a terminal, refuses without
+    `--yes` when stdin is not one, and sends nothing with `--dry-run` (GET-only transport).
+  - `--json` on list, activate, status and tenants; exit codes 0 ok, 1 failed, 2 usage error,
+    3 az missing / not signed in / token rejected.
+  - Tables fit the terminal and use colour only on a TTY without `NO_COLOR`; piped, plain columns.
+  - `pimento completions zsh|bash|fish`.
+  - `--role` matches the whole role name (`*` as wildcard), so `--role owner` no longer also picks
+    "Storage Blob Data Owner"; a FILTER starting with `/` matches an ARM scope and below.
+- **Pimento › Install Command Line Tool…** links the bundled CLI into `/usr/local/bin` (administrator
+  prompt) or `~/.local/bin` (no password); **Uninstall Command Line Tool…** removes only Pimento's links.
+- Two downloads per release: `Pimento-<version>.zip` (app with the CLI inside) and
+  `pimento-cli-<version>-macos.tar.gz` (universal CLI with completions, LICENSE, README), plus
+  `SHA256SUMS.txt`. `scripts/package-cli.sh` builds the CLI archive; CI builds and checks both.
+- Homebrew formula (CLI) and cask (app) templates in `packaging/homebrew/`, not published yet.
 - macOS notifications: one when a batch of activations finishes (activated, skipped, failed, with
   the expiry), and a reminder 10 minutes before activated roles expire. Shown while the app is
   frontmost too.
@@ -39,6 +58,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- The app binary is `Pimento.app/Contents/MacOS/Pimento` (SwiftPM product `PimentoApp`:
+  `swift run PimentoApp`); the CLI is `Contents/Helpers/pimento` (`swift run pimento`). The app itself
+  only reads `--tenant` from its arguments.
 - **Activate** always sends for real; the dry-run mode switch is gone. **Preview** (⌥⌘↩, also in the
   View menu) shows the requests without sending them. The Owner confirmation is unchanged.
 - The tenant picker in the toolbar no longer looks disabled.
@@ -50,6 +72,12 @@ All notable changes to this project are documented here. The format follows
   short ID and sort last.
 - Long resource, role and group names are truncated with a tooltip instead of wrapping.
 - With "Load roles on launch" off, the window says so and offers Refresh instead of a spinner.
+
+### Deprecated
+
+- `pimento --list`, `--dry-run` and `--tenants` (0.1.0) still work, print a note, and will be removed
+  in the next release: use `pimento list`, `pimento activate --dry-run` and `pimento tenants`. Given to
+  the app binary, they are handed to the bundled CLI.
 
 ### Fixed
 
