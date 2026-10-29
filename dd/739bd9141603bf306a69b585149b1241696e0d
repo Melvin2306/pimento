@@ -1,0 +1,44 @@
+Sources/PimentoCore/ActivationOutcome.swift
+  s_4884204a812fec::t_d6261ea092f69f 56-59,65
+Sources/PimentoCore/ActivationRequest.swift
+  s_4884204a812fec::t_d6261ea092f69f 33,40,53-56,79-89,93,107,122,130-145,148-149,152,154
+Tests/PimentoCoreTests/PresetTests.swift
+  s_4884204a812fec::t_3af7f1668b80bf 1-10,12-50,53-140,142-211
+  s_4884204a812fec::t_1ab555709429bb 11,51-52
+  s_4884204a812fec::t_4b32059c37720f 141
+Sources/PimentoCore/PIMService.swift
+  s_4884204a812fec::t_d6261ea092f69f 135
+Tests/PimentoCoreTests/Fixtures/role-policy-assignments.json
+  s_4884204a812fec::t_1b4129fa9d3451 1-91
+Sources/PimentoCore/RolePolicy.swift
+  s_4884204a812fec::t_60c22c10d257fc 1-156,158-199
+  s_4884204a812fec::t_18ac966d2d46eb 157
+Tests/PimentoCoreTests/PolicyTests.swift
+  s_4884204a812fec::t_d2590d2ab9fa3f 1-191,198-206
+  s_4884204a812fec::t_e1c69eac45ba90 192-197
+Sources/PimentoCore/ActivationDuration.swift
+  s_4884204a812fec::t_04046745afd8c8 16,42,44-45
+  s_4884204a812fec::t_13673d6375e5d4 1-15,17-41,43,46-179
+Sources/PimentoCore/EligibleRole.swift
+  s_4884204a812fec::t_ae795722e25ffb 65-69
+Sources/PimentoCore/Presets.swift
+  s_4884204a812fec::t_41c799edb7836a 1-374
+Tests/PimentoCoreTests/Support.swift
+  s_4884204a812fec::t_ca3915f4527404 42-80
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "dd739bd9141603bf306a69b585149b1241696e0d",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
