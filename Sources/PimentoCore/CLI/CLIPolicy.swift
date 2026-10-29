@@ -9,15 +9,22 @@ public enum CLIExit: Int32, Sendable {
     /// Bad command line: unknown option, missing justification, no selection,
     /// or `activate` without `--yes` when nobody can answer the prompt.
     case usage = 2
-    /// az is missing, not signed in, or ARM rejected the token.
+    /// az is missing, not signed in (az or Pimento sign-in), or ARM rejected the token.
     case auth = 3
     /// `pimento wait` gave up: still no decision when `--timeout` ran out.
     case timeout = 4
 
     public static func code(for error: Error) -> CLIExit {
         switch error {
-        case is CLIParseError, is TenantError, is ConfirmationRequired:
+        case is CLIParseError, is TenantError, is ConfirmationRequired, is AuthSourceError:
             return .usage
+        case let e as SignInError:
+            switch e {
+            case .missingClientId, .invalidClientId: return .usage
+            case .network, .invalidResponse, .loopback, .storage, .cancelled: return .failure
+            case .oauth(let info): return info.needsInteraction ? .auth : .failure
+            default: return .auth
+            }
         case let e as PresetError:
             switch e {
             case .ambiguous, .otherTenant, .emptyName, .noRoles: return .usage

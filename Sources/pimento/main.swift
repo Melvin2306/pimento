@@ -17,6 +17,25 @@ func terminalWidth() -> Int? {
 
 let stdoutIsTTY = isatty(STDOUT_FILENO) != 0
 
+/// `open URL` on macOS, `xdg-open URL` elsewhere; false when that fails.
+func openInBrowser(_ url: URL) -> Bool {
+    #if os(macOS)
+    let tool = "/usr/bin/open"
+    #else
+    let tool = "/usr/bin/xdg-open"
+    #endif
+    guard FileManager.default.isExecutableFile(atPath: tool) else { return false }
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: tool)
+    process.arguments = [url.absoluteString]
+    process.standardInput = FileHandle.nullDevice
+    process.standardOutput = FileHandle.nullDevice
+    process.standardError = FileHandle.nullDevice
+    do { try process.run() } catch { return false }
+    process.waitUntilExit()
+    return process.terminationStatus == 0
+}
+
 let environment = CLIEnvironment(
     write: { text, stream in
         let handle = stream == .out ? FileHandle.standardOutput : FileHandle.standardError
@@ -28,17 +47,27 @@ let environment = CLIEnvironment(
     stdinIsTTY: isatty(STDIN_FILENO) != 0,
     terminalWidth: stdoutIsTTY ? terminalWidth() : nil,
     variables: ProcessInfo.processInfo.environment,
-    makeService: { tenantId, readOnly in
-        // The token comes from `az` on demand, stays in memory, and goes only
-        // to management.azure.com. Read-only commands cannot send a write.
+    makeService: { tokens, readOnly in
+        // Tokens come from `az` or Pimento's sign-in on demand, stay in memory,
+        // and go only to management.azure.com. Read-only commands cannot send a write.
         let transport: HTTPTransport = readOnly ? ReadOnlyTransport(URLSessionTransport()) : URLSessionTransport()
-        return PIMService(transport: transport, tokens: AzureCLITokenProvider(tenantId: tenantId))
+        return PIMService(transport: transport, tokens: tokens)
     },
-    loadTenants: { preferred in
-        try await TenantDirectory.load(preferredTenant: preferred, transport: ReadOnlyTransport(URLSessionTransport()))
+    loadTenants: { preferred, tokens in
+        let transport = ReadOnlyTransport(URLSessionTransport())
+        guard let tokens else { return try await TenantDirectory.load(preferredTenant: preferred, transport: transport) }
+        return TenantDirectory.sorted(try await TenantDirectory.fetchARM(tokens: tokens, transport: transport))
     },
     // Shared with the app; $PIMENTO_HISTORY points elsewhere.
-    history: HistoryStore(environment: ProcessInfo.processInfo.environment)
+    history: HistoryStore(environment: ProcessInfo.processInfo.environment),
+    // Pimento's own sign-in: settings shared with the app, refresh tokens in the
+    // Keychain (or ~/.config/pimento/tokens.json), sign-in data only to
+    // login.microsoftonline.com.
+    signIn: CLISignIn(
+        settings: AuthSettingsStore(),
+        store: TokenStores.standard(),
+        transport: URLSessionTransport(),
+        openURL: { url in openInBrowser(url) })
 )
 
 // A closed pipe (`pimento list | head`) should end quietly, not crash.

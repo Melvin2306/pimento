@@ -483,7 +483,7 @@ extension CLIRunner {
         }
         let owners = sendable.filter(\.request.isOwner).count
         human((o.dryRun ? "Would \(verb) " : "\(o.decision.rawValue) ")
-            + "\(CLIFormat.plural(plans.count, "request")) in tenant \(tenantId ?? "az's default tenant"):")
+            + "\(CLIFormat.plural(plans.count, "request")) in tenant \(tenantId ?? defaultTenantLabel):")
         approvalTable(plans.map(\.request), now: now, style: style, json: o.json).forEach { human("  " + $0) }
         if o.decision == .approve, owners > 0 {
             human(style.boldRed("Warning:") + " \(CLIFormat.plural(owners, "Owner role")) (!): full control of the resource, including access.")
@@ -547,7 +547,7 @@ extension CLIRunner {
         if o.json { out(CLIJSON.encode(doc)) }
         let failures = outcomes.values.filter(\.isFailure)
         if !failures.isEmpty, failures.allSatisfy(\.isAuthFailure) {
-            err("hint: sign in with `\(AzureCLIError.loginCommand(tenant: tenant.tenantId))`")
+            err(loginHint(tenant: tenant.tenantId))
             return .auth
         }
         return failures.isEmpty && notFound.isEmpty && unsendable.isEmpty ? .success : .failure

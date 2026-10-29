@@ -229,7 +229,7 @@ extension CLIRunner {
             if o.json { out(CLIJSON.encode(json([:]))) }
             return .failure
         }
-        human((o.dryRun ? "Would cancel " : "Cancel ") + "\(CLIFormat.plural(selection.requests.count, "request")) in tenant \(tenantId ?? "az's default tenant"):")
+        human((o.dryRun ? "Would cancel " : "Cancel ") + "\(CLIFormat.plural(selection.requests.count, "request")) in tenant \(tenantId ?? defaultTenantLabel):")
         pendingTable(selection.requests, now: now, style: style, json: o.json).forEach { human("  " + $0) }
         if o.dryRun {
             if !o.json {
@@ -274,7 +274,7 @@ extension CLIRunner {
         if o.json { out(CLIJSON.encode(doc)) }
         let failures = outcomes.values.filter(\.isFailure)
         if !failures.isEmpty, failures.allSatisfy(\.isAuthFailure) {
-            err("hint: sign in with `\(AzureCLIError.loginCommand(tenant: tenant.tenantId))`")
+            err(loginHint(tenant: tenant.tenantId))
             return .auth
         }
         return failures.isEmpty && selection.unknownIds.isEmpty ? .success : .failure

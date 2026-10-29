@@ -194,7 +194,8 @@ extension CLIRunner {
         human(summaryLine(doc.summary, missing: s.missing.count, style: style))
         if o.json { out(CLIJSON.encode(doc)) }
         let code = CLIExit.code(for: Array(all.values))
-        if code == .auth { err("hint: sign in with `\(AzureCLIError.loginCommand(tenant: s.tenant.tenantId))`") }
+        if code == .auth { err(loginHint(tenant: s.tenant.tenantId)) }
+        noteClaims(in: Array(all.values), tenant: s.tenantId)
         return code
     }
 
@@ -337,7 +338,8 @@ extension CLIRunner {
         human(summaryLine(doc.summary, missing: s.missing.count, style: style))
         if o.json { out(CLIJSON.encode(doc)) }
         let code = CLIExit.code(for: Array(all.values))
-        if code == .auth { err("hint: sign in with `\(AzureCLIError.loginCommand(tenant: s.tenant.tenantId))`") }
+        if code == .auth { err(loginHint(tenant: s.tenant.tenantId)) }
+        noteClaims(in: Array(all.values), tenant: s.tenantId)
         return code
     }
 
@@ -425,7 +427,8 @@ extension CLIRunner {
         human(summaryLine(doc.summary, missing: 0, style: style))
         if o.json { out(CLIJSON.encode(doc)) }
         let code = CLIExit.code(for: Array(all.values))
-        if code == .auth { err("hint: sign in with `\(AzureCLIError.loginCommand(tenant: s.tenant.tenantId))`") }
+        if code == .auth { err(loginHint(tenant: s.tenant.tenantId)) }
+        noteClaims(in: Array(all.values), tenant: s.tenantId)
         return code
     }
 }

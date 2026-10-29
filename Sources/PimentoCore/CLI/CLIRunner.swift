@@ -17,14 +17,19 @@ public struct CLIEnvironment: Sendable {
     public var variables: [String: String]
     public var now: @Sendable () -> Date
     public var timeZone: TimeZone
-    /// The service for a tenant. `readOnly` services must refuse every write.
-    public var makeService: @Sendable (_ tenantId: String?, _ readOnly: Bool) -> PIMService
-    public var loadTenants: @Sendable (_ preferredTenant: String?) async throws -> [TenantInfo]
+    /// The service using `tokens` (from the chosen auth source). `readOnly`
+    /// services must refuse every write.
+    public var makeService: @Sendable (_ tokens: TokenProvider, _ readOnly: Bool) -> PIMService
+    /// The tenants to list. `tokens` nil: the Azure CLI's view (ARM for
+    /// `preferredTenant` plus az's account cache); else ARM with those tokens.
+    public var loadTenants: @Sendable (_ preferredTenant: String?, _ tokens: TokenProvider?) async throws -> [TenantInfo]
     /// Waits between polls (`pimento wait`); tests advance a fake clock.
     public var sleep: @Sendable (TimeInterval) async -> Void
     /// The history file: every write is recorded there, and `pimento history`
     /// reads it. nil: no history (nothing recorded, `history` refuses).
     public var history: HistoryStore?
+    /// Pimento's own sign-in: settings file, token store, network, browser.
+    public var signIn: CLISignIn
 
     public init(
         write: @escaping @Sendable (String, Stream) -> Void,
@@ -34,10 +39,11 @@ public struct CLIEnvironment: Sendable {
         variables: [String: String],
         now: @escaping @Sendable () -> Date = { Date() },
         timeZone: TimeZone = .current,
-        makeService: @escaping @Sendable (String?, Bool) -> PIMService,
-        loadTenants: @escaping @Sendable (String?) async throws -> [TenantInfo],
+        makeService: @escaping @Sendable (TokenProvider, Bool) -> PIMService,
+        loadTenants: @escaping @Sendable (String?, TokenProvider?) async throws -> [TenantInfo],
         sleep: @escaping @Sendable (TimeInterval) async -> Void = { try? await Task.sleep(nanoseconds: UInt64(max(0, $0) * 1_000_000_000)) },
-        history: HistoryStore? = nil
+        history: HistoryStore? = nil,
+        signIn: CLISignIn = .none
     ) {
         self.write = write
         self.readLine = readLine
@@ -52,6 +58,39 @@ public struct CLIEnvironment: Sendable {
         self.loadTenants = loadTenants
         self.sleep = sleep
         self.history = history
+        self.signIn = signIn
+    }
+}
+
+/// What `pimento login` and `--auth pimento` need from outside.
+public struct CLISignIn: Sendable {
+    /// `auth.json`, shared with the app. nil: nothing saved, nothing read.
+    public var settings: AuthSettingsStore?
+    public var store: TokenStore
+    /// Reaches the token endpoint (wrapped so that nothing else is reachable).
+    public var transport: HTTPTransport
+    /// Opens the sign-in page in a browser; false if it could not.
+    public var openURL: @Sendable (URL) async -> Bool
+
+    public init(settings: AuthSettingsStore?, store: TokenStore, transport: HTTPTransport,
+                openURL: @escaping @Sendable (URL) async -> Bool) {
+        self.settings = settings
+        self.store = store
+        self.transport = transport
+        self.openURL = openURL
+    }
+
+    /// No settings, an empty in-memory store, no network, no browser.
+    public static var none: CLISignIn {
+        CLISignIn(settings: nil, store: InMemoryTokenStore(), transport: OfflineTransport(), openURL: { _ in false })
+    }
+}
+
+/// Refuses every request (the default sign-in transport of tests).
+public struct OfflineTransport: HTTPTransport {
+    public init() {}
+    public func send(_ request: URLRequest) async throws -> (Data, Int) {
+        throw URLError(.notConnectedToInternet)
     }
 }
 
@@ -62,18 +101,29 @@ public struct CLIRunner: Sendable {
     let errStyle: TerminalStyle
     /// Records every write this command sends (source `cli`).
     let recorder: HistoryRecorder?
+    /// Pimento's own sign-in (used with `--auth pimento`, and by login/logout/whoami).
+    let broker: TokenBroker
+    /// Where this command's tokens come from (resolved in `run(_:)`).
+    var auth: AuthContext = .azureCLI
 
     public init(environment: CLIEnvironment) {
         env = environment
         outStyle = TerminalStyle.detect(isTTY: environment.stdoutIsTTY, environment: environment.variables)
         errStyle = TerminalStyle.detect(isTTY: environment.stderrIsTTY, environment: environment.variables)
         recorder = environment.history.map { [now = environment.now] in HistoryRecorder(store: $0, source: .cli, clock: now) }
+        broker = TokenBroker(store: environment.signIn.store, transport: environment.signIn.transport, clock: environment.now)
     }
 
     /// The service for a tenant, recording its writes in the history.
     func makeService(_ tenantId: String?, _ readOnly: Bool) -> PIMService {
-        env.makeService(tenantId, readOnly).recording(to: recorder)
+        env.makeService(auth.tokens(tenantId: tenantId), readOnly).recording(to: recorder)
     }
+
+    /// What a nil tenant means for the current auth source.
+    var defaultTenantLabel: String { auth.source == .az ? "az's default tenant" : "your sign-in tenant" }
+
+    /// The command that fixes a sign-in error.
+    func loginHint(tenant: String?) -> String { "hint: sign in with `\(auth.loginCommand(tenant: tenant))`" }
 
     func out(_ s: String = "") { env.write(s + "\n", .out) }
     func err(_ s: String) { env.write(s + "\n", .err) }
@@ -87,10 +137,19 @@ public struct CLIRunner: Sendable {
             return CLIExit.usage.rawValue
         }
         if let note = invocation.deprecation { err(errStyle.yellow("note:") + " " + note) }
+        var runner = self
         do {
-            return try await run(invocation.command).rawValue
+            let settings = env.signIn.settings?.load() ?? AuthSettings()
+            let selection = try AuthSourceResolver.resolve(commandLine: invocation.auth, environment: env.variables, saved: settings.source)
+            runner.auth = AuthContext(selection: selection, broker: broker, accountId: settings.accountId)
         } catch {
-            return report(error).rawValue
+            err(errStyle.red("error:") + " " + error.localizedDescription)
+            return CLIExit.usage.rawValue
+        }
+        do {
+            return try await runner.run(invocation.command).rawValue
+        } catch {
+            return runner.report(error).rawValue
         }
     }
 
@@ -120,6 +179,9 @@ public struct CLIRunner: Sendable {
         case .approve(let o), .deny(let o): return try await decide(o)
         case .presets(let c): return try await presets(c)
         case .history(let c): return try await history(c)
+        case .login(let o): return try await login(o)
+        case .logout(let o): return try await logout(o)
+        case .whoami(let o): return try await whoami(o)
         }
     }
 
@@ -127,10 +189,27 @@ public struct CLIRunner: Sendable {
     func report(_ error: Error, tenant: String? = nil) -> CLIExit {
         err(errStyle.red("error:") + " " + error.localizedDescription)
         let code = CLIExit.code(for: error)
-        if code == .auth, (error as? AzureCLIError) != .notFound {
-            err("hint: sign in with `\(AzureCLIError.loginCommand(tenant: tenant ?? env.variables[TenantResolver.environmentVariable]))`")
+        if (error as? AzureCLIError) == .notFound {
+            err("hint: or sign in without the Azure CLI: `pimento login` (README › Pimento sign-in)")
+        } else if code == .auth {
+            if let claims = (error as? SignInError)?.claims { rememberClaims(claims) }
+            err(loginHint(tenant: tenant ?? env.variables[TenantResolver.environmentVariable]))
         }
         return code
+    }
+
+    /// Keeps a claims challenge for the next `pimento login` (browser).
+    func rememberClaims(_ claims: String) {
+        guard auth.source == .pimento else { return }
+        _ = try? env.signIn.settings?.update { $0.claimsChallenge = claims }
+    }
+
+    /// After writes: a failed request that carries a claims challenge (MFA,
+    /// authentication context) is remembered for the next sign-in.
+    func noteClaims(in outcomes: [ActivationOutcome], tenant: String?) {
+        guard auth.source == .pimento, let claims = outcomes.lazy.compactMap(\.claimsChallenge).first else { return }
+        rememberClaims(claims)
+        err("hint: Azure asks for more verification (MFA or an authentication context): run `\(auth.loginCommand(tenant: tenant))`, then try again")
     }
 
     func resolveTenant(_ flag: String?) throws -> TenantSelection {
@@ -146,13 +225,13 @@ public struct CLIRunner: Sendable {
 
     func tenants(_ o: TenantsOptions) async throws -> CLIExit {
         let preferred = try o.tenant.map { try resolveTenant($0).tenantId } ?? nil
-        let tenants = try await env.loadTenants(preferred)
+        let tenants = try await env.loadTenants(preferred, auth.source == .az ? nil : auth.tokens(tenantId: preferred))
         if o.json {
             out(CLIJSON.encode(CLIJSON.TenantList(tenants: tenants.map(CLIJSON.Tenant.init))))
             return .success
         }
         guard !tenants.isEmpty else {
-            err("az knows no tenants. Run `az login` first.")
+            err(auth.source == .az ? "az knows no tenants. Run `az login` first." : "No tenants listed for this account. Run `pimento login` first.")
             return .auth
         }
         var table = TextTable(headers: ["TENANT ID", "NAME", "DOMAIN"], flexible: [1, 2])
@@ -198,7 +277,7 @@ public struct CLIRunner: Sendable {
 
     func signedIn(_ snapshot: RoleSnapshot, _ tenant: TenantSelection) -> String {
         let who = [snapshot.identity.name, snapshot.identity.upn.map { "<\($0)>" }].compactMap { $0 }.joined(separator: " ")
-        let tid = snapshot.identity.tenantId ?? tenant.tenantId ?? "az's default tenant"
+        let tid = snapshot.identity.tenantId ?? tenant.tenantId ?? defaultTenantLabel
         return "Signed in as \(who.isEmpty ? snapshot.identity.objectId : who) · tenant \(tid)"
     }
 
@@ -343,7 +422,7 @@ public struct CLIRunner: Sendable {
         let toStderr = o.json, runner = self
         let human: @Sendable (String) -> Void = { line in toStderr ? runner.err(line) : runner.out(line) }
         let style = o.json ? errStyle : outStyle
-        let tenantLabel = tenantId ?? "az's default tenant"
+        let tenantLabel = tenantId ?? defaultTenantLabel
 
         for m in missing {
             human(style.yellow("missing") + "  \(m.label): no longer eligible, left out")
@@ -493,7 +572,8 @@ public struct CLIRunner: Sendable {
         }
         if o.json { out(CLIJSON.encode(json(outcomes))) }
         let code = CLIExit.code(for: Array(outcomes.values))
-        if code == .auth { err("hint: sign in with `\(AzureCLIError.loginCommand(tenant: tenant.tenantId))`") }
+        if code == .auth { err(loginHint(tenant: tenant.tenantId)) }
+        noteClaims(in: Array(outcomes.values), tenant: tenantId)
         return code
     }
 

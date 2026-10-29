@@ -99,14 +99,18 @@ public struct AuthSettings: Codable, Equatable, Sendable {
     public var clientId: String?
     /// The account used for tokens (`SignedInAccount.id`); nil: the most recent.
     public var accountId: String?
+    /// A claims challenge Azure answered with (MFA, Conditional Access): sent
+    /// with the next browser sign-in, then cleared. Not a secret.
+    public var claimsChallenge: String?
 
-    public init(source: AuthSource? = nil, clientId: String? = nil, accountId: String? = nil) {
+    public init(source: AuthSource? = nil, clientId: String? = nil, accountId: String? = nil, claimsChallenge: String? = nil) {
         self.source = source
         self.clientId = clientId
         self.accountId = accountId
+        self.claimsChallenge = claimsChallenge
     }
 
-    private enum CodingKeys: String, CodingKey { case source, clientId, accountId }
+    private enum CodingKeys: String, CodingKey { case source, clientId, accountId, claimsChallenge }
 
     /// Unknown sources and malformed IDs read as unset.
     public init(from decoder: Decoder) throws {
@@ -114,6 +118,7 @@ public struct AuthSettings: Codable, Equatable, Sendable {
         source = (try? c.decodeIfPresent(String.self, forKey: .source)).flatMap { $0.flatMap(AuthSource.init(rawValue:)) }
         clientId = (try? c.decodeIfPresent(String.self, forKey: .clientId))?.flatMap { MicrosoftIdentity.isValidClientId($0) ? $0.lowercased() : nil }
         accountId = try? c.decodeIfPresent(String.self, forKey: .accountId)
+        claimsChallenge = (try? c.decodeIfPresent(String.self, forKey: .claimsChallenge))?.flatMap { ClaimsChallenge.isJSONObject($0) ? $0 : nil }
     }
 }
 

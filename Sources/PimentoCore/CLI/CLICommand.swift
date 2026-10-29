@@ -296,6 +296,30 @@ public struct TenantsOptions: Equatable, Sendable {
     public init() {}
 }
 
+/// `pimento login`: Pimento's own sign-in (browser, or a device code).
+public struct LoginOptions: Equatable, Sendable {
+    /// The tenant to sign in to (default: `organizations`, your home tenant).
+    public var tenant: String?
+    public var clientId: String?
+    public var deviceCode = false
+    public var json = false
+    public init() {}
+}
+
+/// `pimento logout`: forget the signed-in account (or all of them).
+public struct LogoutOptions: Equatable, Sendable {
+    public var all = false
+    public var json = false
+    public init() {}
+}
+
+/// `pimento whoami`: who the current auth source signs in as.
+public struct WhoamiOptions: Equatable, Sendable {
+    public var tenant: String?
+    public var json = false
+    public init() {}
+}
+
 public enum CompletionShell: String, CaseIterable, Sendable {
     case zsh, bash, fish
 }
@@ -320,10 +344,13 @@ public enum CLICommand: Equatable, Sendable {
     case presets(PresetsCommand)
     case history(HistoryCommand)
     case completions(CompletionShell)
+    case login(LoginOptions)
+    case logout(LogoutOptions)
+    case whoami(WhoamiOptions)
 
     public static let names = [
         "list", "activate", "deactivate", "renew", "extend", "scheduled", "cancel", "pending", "wait", "approvals", "approve",
-        "deny", "status", "tenants", "presets", "history", "completions", "version", "help",
+        "deny", "status", "tenants", "presets", "history", "login", "logout", "whoami", "completions", "version", "help",
     ]
 }
 
@@ -331,10 +358,13 @@ public enum CLICommand: Equatable, Sendable {
 public struct CLIInvocation: Equatable, Sendable {
     public var command: CLICommand
     public var deprecation: String?
+    /// `--auth az|pimento`, accepted by every command (validated when resolved).
+    public var auth: String?
 
-    public init(_ command: CLICommand, deprecation: String? = nil) {
+    public init(_ command: CLICommand, deprecation: String? = nil, auth: String? = nil) {
         self.command = command
         self.deprecation = deprecation
+        self.auth = auth
     }
 }
 
@@ -370,6 +400,7 @@ public enum CLIParseError: Error, Equatable, LocalizedError {
     case unknownOutcome(String)
     case missingExportFile
     case clearNeedsConfirmation
+    case invalidClientId(String)
 
     public var errorDescription: String? {
         switch self {
@@ -415,6 +446,8 @@ public enum CLIParseError: Error, Equatable, LocalizedError {
         case .unknownOutcome(let v):
             "Unknown outcome “\(v)”. Use \(HistoryResult.known.map(\.rawValue).joined(separator: ", "))."
         case .missingExportFile: "`pimento history export` needs a file name (FILE.csv, or - for stdout)."
+        case .invalidClientId(let v):
+            "--client-id takes the Application (client) ID GUID of your app registration, got “\(v)”."
         case .clearNeedsConfirmation:
             "Refusing to clear the history without confirmation: stdin is not a terminal. Add --yes."
         }
@@ -539,6 +572,15 @@ public enum CLIParser {
 
     private static let plainFlags = tenant.merging(json) { a, _ in a }
 
+    private static let loginFlags = tenant.merging(json) { a, _ in a }.merging([
+        "--client-id": Flag(key: "client-id", takesValue: true),
+        "--device-code": Flag(key: "device-code", takesValue: false),
+    ]) { a, _ in a }
+
+    private static let logoutFlags = json.merging([
+        "--all": Flag(key: "all", takesValue: false),
+    ]) { a, _ in a }
+
     private static let historyFlags = tenant.merging(json) { a, _ in a }.merging([
         "--since": Flag(key: "since", takesValue: true),
         "--until": Flag(key: "until", takesValue: true),
@@ -575,6 +617,43 @@ public enum CLIParser {
     static let legacyModes = ["--list": "list", "--dry-run": "activate --dry-run", "--tenants": "tenants"]
 
     public static func parse(_ args: [String]) throws -> CLIInvocation {
+        let (rest, auth) = try extractAuth(args)
+        var invocation = try parseCommand(rest)
+        invocation.auth = auth
+        return invocation
+    }
+
+    /// Removes `--auth VALUE` / `--auth=VALUE` (before `--`) from anywhere in the line.
+    static func extractAuth(_ args: [String]) throws -> ([String], String?) {
+        var rest: [String] = []
+        var auth: String?
+        var i = 0
+        while i < args.count {
+            let arg = args[i]
+            if arg == "--" {
+                rest += args[i...]
+                break
+            }
+            if arg == "--auth" {
+                guard i + 1 < args.count, !args[i + 1].hasPrefix("-") else { throw CLIParseError.missingValue("--auth") }
+                auth = args[i + 1]
+                i += 2
+                continue
+            }
+            if arg.hasPrefix("--auth=") {
+                let value = String(arg.dropFirst("--auth=".count))
+                guard !value.isEmpty else { throw CLIParseError.missingValue("--auth") }
+                auth = value
+                i += 1
+                continue
+            }
+            rest.append(arg)
+            i += 1
+        }
+        return (rest, auth)
+    }
+
+    static func parseCommand(_ args: [String]) throws -> CLIInvocation {
         guard let first = args.first else { return CLIInvocation(.help(topic: nil)) }
         if !CLICommand.names.contains(first), let legacy = try parseLegacy(args) { return legacy }
         let rest = Array(args.dropFirst())
@@ -630,6 +709,30 @@ public enum CLIParser {
             return CLIInvocation(.tenants(o))
         case "presets": return try CLIInvocation(parsePresets(rest))
         case "history": return try CLIInvocation(parseHistory(rest))
+        case "login":
+            let scan = try scan(rest, command: first, flags: loginFlags, positionals: false)
+            if scan.help { return CLIInvocation(.help(topic: first)) }
+            var o = LoginOptions()
+            o.tenant = scan.values["tenant"]?.last
+            o.clientId = scan.values["client-id"]?.last?.trimmingCharacters(in: .whitespaces)
+            o.deviceCode = scan.values["device-code"] != nil
+            o.json = scan.values["json"] != nil
+            if let id = o.clientId, !MicrosoftIdentity.isValidClientId(id) { throw CLIParseError.invalidClientId(id) }
+            return CLIInvocation(.login(o))
+        case "logout":
+            let scan = try scan(rest, command: first, flags: logoutFlags, positionals: false)
+            if scan.help { return CLIInvocation(.help(topic: first)) }
+            var o = LogoutOptions()
+            o.all = scan.values["all"] != nil
+            o.json = scan.values["json"] != nil
+            return CLIInvocation(.logout(o))
+        case "whoami":
+            let scan = try scan(rest, command: first, flags: plainFlags, positionals: false)
+            if scan.help { return CLIInvocation(.help(topic: first)) }
+            var o = WhoamiOptions()
+            o.tenant = scan.values["tenant"]?.last
+            o.json = scan.values["json"] != nil
+            return CLIInvocation(.whoami(o))
         case "completions":
             if rest.contains("--help") || rest.contains("-h") { return CLIInvocation(.help(topic: first)) }
             guard let name = rest.first else { throw CLIParseError.missingShell }

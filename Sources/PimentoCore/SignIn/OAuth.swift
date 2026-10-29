@@ -394,3 +394,42 @@ public enum AADSTS {
         }
     }
 }
+
+/// A claims challenge (Conditional Access, MFA, authentication context) that
+/// must go with the next interactive sign-in.
+public enum ClaimsChallenge {
+    /// Finds one in an ARM error message (PIM's authentication-context errors
+    /// append `&claims=<URL-encoded JSON>`) or a `WWW-Authenticate` value
+    /// (`claims="<base64 JSON>"`). Returns the JSON, or nil.
+    public static func find(in text: String) -> String? {
+        var rest = Substring(text)
+        while let r = rest.range(of: "claims=") {
+            let tail = rest[r.upperBound...]
+            if tail.hasPrefix("\"") {
+                let value = tail.dropFirst().prefix { $0 != "\"" }
+                if let data = Data(base64Encoded: String(value)) ?? Base64URL.decode(String(value)),
+                   let json = String(data: data, encoding: .utf8), isJSONObject(json) { return json }
+                if isJSONObject(String(value)) { return String(value) }
+            } else {
+                let value = tail.prefix { !$0.isWhitespace && !"&\"'),".contains($0) }
+                if let decoded = String(value).removingPercentEncoding, isJSONObject(decoded) { return decoded }
+            }
+            rest = tail
+        }
+        return nil
+    }
+
+    static func isJSONObject(_ s: String) -> Bool {
+        s.hasPrefix("{") && (try? JSONSerialization.jsonObject(with: Data(s.utf8))) is [String: Any]
+    }
+}
+
+public extension ActivationOutcome {
+    /// The claims challenge in a failed request's message, if Azure sent one.
+    var claimsChallenge: String? {
+        switch self {
+        case .policyViolation(_, let message), .failed(_, let message): ClaimsChallenge.find(in: message)
+        default: nil
+        }
+    }
+}

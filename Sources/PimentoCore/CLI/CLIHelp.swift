@@ -26,6 +26,9 @@ public enum CLIHelp {
         case "presets": presets
         case "history": history
         case "completions": completions
+        case "login": login
+        case "logout": logout
+        case "whoami": whoami
         case "version": "Usage: pimento version\n\nPrints the version."
         case "help": "Usage: pimento help [COMMAND]\n\nShows help for a command."
         default: main
@@ -54,6 +57,9 @@ public enum CLIHelp {
       tenants      List the tenants your az login can reach
       presets      List, show, save or delete saved role presets
       history      What Pimento sent, and how it went; export as CSV
+      login        Sign in without the Azure CLI (browser, or --device-code)
+      logout       Forget Pimento's sign-in
+      whoami       Show the auth source and who you are signed in as
       completions  Print a completion script for zsh, bash or fish
       version      Print the version
       help         Show help for a command
@@ -61,10 +67,14 @@ public enum CLIHelp {
     Common options:
     \(tenantOption)
           --json          Machine-readable output on stdout
+          --auth SOURCE   az (your Azure CLI session) or pimento (`pimento login`).
+                          Default: $\(AuthSourceResolver.environmentVariable), then the saved setting, then az.
       -h, --help          Show help
 
-    Pimento uses your Azure CLI session (`az login`). The token stays in memory
-    and is only sent to management.azure.com.
+    By default Pimento uses your Azure CLI session (`az login`); with
+    `pimento login` it signs in by itself (README › Pimento sign-in). Access
+    tokens stay in memory and are only sent to management.azure.com; sign-in
+    data only goes to login.microsoftonline.com.
 
     Exit codes: 0 ok, 1 something failed, 2 usage error, 3 az missing or not signed in,
     4 `wait` timed out. Run `pimento help <command>` for details.
@@ -490,6 +500,46 @@ public enum CLIHelp {
       pimento history import-azure --since 30d
     """
 
+    static let login = """
+    Usage: pimento login [--device-code] [--client-id ID] [--tenant ID] [--json]
+
+    Signs in with Pimento's own sign-in (Microsoft identity platform), so the
+    Azure CLI is not needed. Opens your browser (authorization code with PKCE,
+    answer on http://localhost:<random port>); --device-code prints a code to
+    enter on another device instead, for SSH sessions and headless machines.
+
+    Afterwards Pimento sign-in is the auth source of the app and the CLI (the
+    shared setting); `--auth az` or $\(AuthSourceResolver.environmentVariable)=az picks the Azure CLI again.
+
+    Options:
+          --device-code   Sign in with a code on another device
+          --client-id ID  Application (client) ID of your app registration. Default:
+                          $\(AuthSourceResolver.clientIdVariable), then the saved one (README › Pimento sign-in)
+      -t, --tenant ID     Tenant to sign in to. Default: $\(TenantResolver.environmentVariable), then your home
+                          tenant. Other tenants work without signing in again.
+          --json          The account as JSON
+
+    The refresh token is kept in the Keychain (service io.github.melvin2306.pimento);
+    with $\(TokenStores.storeVariable)=file, or without a Keychain, in
+    ~/.config/pimento/tokens.json (mode 600, less secure). Access tokens stay in memory.
+    """
+
+    static let logout = """
+    Usage: pimento logout [--all] [--json]
+
+    Forgets the signed-in account (the default one), or every account with
+    --all: deletes its refresh token. With no account left, the Azure CLI is the
+    auth source again. Your az session is not touched (use `az logout`).
+    """
+
+    static let whoami = """
+    Usage: pimento whoami [--tenant ID] [--json] [--auth SOURCE]
+
+    Shows the auth source and where that choice came from, who its token is
+    for (name, object ID, tenant), and the accounts of Pimento's sign-in.
+    Exit 3 when the source has no valid sign-in.
+    """
+
     static let completions = """
     Usage: pimento completions zsh|bash|fish
 
@@ -533,6 +583,9 @@ public enum CLIHelp {
         'tenants:List the tenants your az login can reach'
         'presets:List, show, save or delete role presets'
         'history:What Pimento sent, and how it went; export as CSV'
+        'login:Sign in without the Azure CLI'
+        'logout:Forget Pimento sign-in'
+        'whoami:Show the auth source and who you are signed in as'
         'completions:Print a completion script'
         'version:Print the version'
         'help:Show help for a command'
@@ -540,6 +593,7 @@ public enum CLIHelp {
       common=(
         '(-t --tenant)'{-t,--tenant}'[Tenant GUID or domain]:tenant: '
         '--json[Machine-readable output]'
+        '--auth[Auth source]:source:(az pimento)'
         '(- *)'{-h,--help}'[Show help]'
       )
       _arguments -C '1: :->command' '*:: :->args' && return
@@ -629,8 +683,14 @@ public enum CLIHelp {
                 '--csv[CSV on stdout]' \
                 '(-y --yes)'{-y,--yes}'[Do not ask (clear)]' \
                 '*:word or file:_files' ;;
+            login)
+              _arguments -s $common \
+                '--device-code[Sign in with a code on another device]' \
+                '--client-id[Application (client) ID]:client id: ' ;;
+            logout) _arguments -s $common '--all[Every account]' ;;
+            whoami) _arguments -s $common ;;
             completions) _arguments '1:shell:(zsh bash fish)' ;;
-            help) _arguments '1:command:(list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets history completions version)' ;;
+            help) _arguments '1:command:(list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets history login logout whoami completions version)' ;;
           esac ;;
       esac
     }
@@ -650,11 +710,12 @@ public enum CLIHelp {
       prev="${COMP_WORDS[COMP_CWORD-1]}"
       cmd="${COMP_WORDS[1]}"
       if [[ $COMP_CWORD -eq 1 ]]; then
-        COMPREPLY=($(compgen -W "list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets history completions version help" -- "$cur"))
+        COMPREPLY=($(compgen -W "list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets history login logout whoami completions version help" -- "$cur"))
         return
       fi
       case "$prev" in
-        -t|--tenant|-j|--justification|--role|--max-parallel|--preset|--days|--ticket|--ticket-system) return ;;
+        -t|--tenant|-j|--justification|--role|--max-parallel|--preset|--days|--ticket|--ticket-system|--client-id) return ;;
+        --auth) COMPREPLY=($(compgen -W "az pimento" -- "$cur")); return ;;
         --at) COMPREPLY=($(compgen -W "now +1h +2h tomorrow08:00 workday08:00" -- "$cur")); return ;;
         --hours) COMPREPLY=($(compgen -W "max 1 2 4 8 12 24" -- "$cur")); return ;;
         --timeout) COMPREPLY=($(compgen -W "10m 30m 1h 2h" -- "$cur")); return ;;
@@ -679,10 +740,14 @@ public enum CLIHelp {
         history)
           if [[ $COMP_CWORD -eq 2 ]]; then opts="export import-azure clear --since --until --action --outcome --tenant --limit --json --csv --help"
           else opts="--since --until --action --outcome --tenant --limit --json --csv --yes --help"; fi ;;
+        login) opts="--tenant --json --auth --device-code --client-id --help" ;;
+        logout) opts="--all --json --help" ;;
+        whoami) opts="--tenant --json --auth --help" ;;
         completions) opts="zsh bash fish" ;;
-        help) opts="list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets history completions version" ;;
+        help) opts="list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets history login logout whoami completions version" ;;
         *) opts="" ;;
       esac
+      [[ "$cmd" != completions && "$cmd" != help && "$cmd" != logout ]] && opts="$opts --auth"
       COMPREPLY=($(compgen -W "$opts" -- "$cur"))
     }
     complete -F _pimento pimento
@@ -707,6 +772,9 @@ public enum CLIHelp {
     complete -c pimento -n __fish_use_subcommand -a tenants -d 'List the tenants your az login can reach'
     complete -c pimento -n __fish_use_subcommand -a presets -d 'List, show, save or delete role presets'
     complete -c pimento -n __fish_use_subcommand -a history -d 'What Pimento sent, and how it went; export as CSV'
+    complete -c pimento -n __fish_use_subcommand -a login -d 'Sign in without the Azure CLI'
+    complete -c pimento -n __fish_use_subcommand -a logout -d 'Forget Pimento sign-in'
+    complete -c pimento -n __fish_use_subcommand -a whoami -d 'Show the auth source and who you are signed in as'
     complete -c pimento -n __fish_use_subcommand -a completions -d 'Print a completion script'
     complete -c pimento -n __fish_use_subcommand -a version -d 'Print the version'
     complete -c pimento -n __fish_use_subcommand -a help -d 'Show help for a command'
@@ -742,7 +810,13 @@ public enum CLIHelp {
     complete -c pimento -n '__fish_seen_subcommand_from history' -s n -l limit -x -d 'At most N records'
     complete -c pimento -n '__fish_seen_subcommand_from history' -l csv -d 'CSV on stdout'
     complete -c pimento -n '__fish_seen_subcommand_from history' -s y -l yes -d 'Do not ask (clear)'
+    complete -c pimento -n '__fish_seen_subcommand_from list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets history login whoami' -l auth -x -a 'az pimento' -d 'Auth source'
+    complete -c pimento -n '__fish_seen_subcommand_from login whoami' -s t -l tenant -r -d 'Tenant GUID or domain'
+    complete -c pimento -n '__fish_seen_subcommand_from login logout whoami' -l json -d 'Machine-readable output'
+    complete -c pimento -n '__fish_seen_subcommand_from login' -l device-code -d 'Sign in with a code on another device'
+    complete -c pimento -n '__fish_seen_subcommand_from login' -l client-id -r -d 'Application (client) ID'
+    complete -c pimento -n '__fish_seen_subcommand_from logout' -l all -d 'Every account'
     complete -c pimento -n '__fish_seen_subcommand_from completions' -a 'zsh bash fish'
-    complete -c pimento -n '__fish_seen_subcommand_from help' -a 'list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets history completions version'
+    complete -c pimento -n '__fish_seen_subcommand_from help' -a 'list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets history login logout whoami completions version'
     """#
 }

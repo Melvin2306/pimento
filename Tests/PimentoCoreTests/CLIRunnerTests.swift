@@ -28,6 +28,16 @@ final class CLIHarness: @unchecked Sendable {
     private var sleepLog: [TimeInterval] = []
     var tokens: TokenProvider = StaticTokenProvider()
     var tenants: [TenantInfo] = []
+    /// Pimento sign-in: an in-memory token store, a temporary settings file,
+    /// a fake token endpoint (offline unless set) and a fake browser.
+    let tokenStore = InMemoryTokenStore()
+    let authSettings = AuthSettingsStore(url: temporaryPresetsURL().deletingLastPathComponent().appendingPathComponent("auth.json"))
+    var signInTransport: HTTPTransport = OfflineTransport()
+    var openURL: @Sendable (URL) async -> Bool = { _ in false }
+    /// Use the tokens of the auth source (`--auth`) instead of `tokens`.
+    var useAuthTokens = false
+    /// The token providers the commands asked for, in order.
+    let givenTokens = TestBox<[TokenProvider]>([])
 
     /// Policy maxima the fake ARM returns, by role GUID: Owner 2 h (with
     /// approval), Contributor 4 h, anything else 8 h.
@@ -114,17 +124,22 @@ final class CLIHarness: @unchecked Sendable {
             stdoutIsTTY: stdoutIsTTY, stderrIsTTY: stdoutIsTTY, stdinIsTTY: stdinIsTTY,
             terminalWidth: width, variables: variables,
             now: { [self] in now }, timeZone: TimeZone(identifier: "UTC")!,
-            makeService: { _, readOnly in
-                PIMService(transport: readOnly ? ReadOnlyTransport(transport) : transport, tokens: tokens)
+            makeService: { [self] given, readOnly in
+                givenTokens.value = (givenTokens.value ?? []) + [given]
+                return PIMService(transport: readOnly ? ReadOnlyTransport(transport) : transport, tokens: useAuthTokens ? given : tokens)
             },
-            loadTenants: { _ in tenants },
+            loadTenants: { [self] _, given in
+                if let given { givenTokens.value = (givenTokens.value ?? []) + [given] }
+                return tenants
+            },
             sleep: { [self] seconds in
                 lock.withLock {
                     sleepLog.append(seconds)
                     clockValue = clockValue.addingTimeInterval(seconds)
                 }
             },
-            history: historyStore)
+            history: historyStore,
+            signIn: CLISignIn(settings: authSettings, store: tokenStore, transport: signInTransport, openURL: openURL))
     }
 
     @discardableResult
