@@ -809,6 +809,24 @@ struct SignInStorageTests {
         #expect(throws: SignInError.self) { try store.accounts() }
     }
 
+    #if !os(Windows)
+    @Test(.enabled(if: getuid() != 0, "root ignores folder permissions"))
+    func fileStoreSignOutThatCannotDeleteTheFileFails() throws {
+        let dir = tempDir()
+        let folder = dir.appendingPathComponent("pimento")
+        defer {
+            _ = chmod(folder.path, 0o700)
+            try? FileManager.default.removeItem(at: dir)
+        }
+        let store = FileTokenStore(url: folder.appendingPathComponent("tokens.json"))
+        try store.save(account, refreshToken: "secret-rt")
+        // A folder the file cannot be deleted from.
+        #expect(chmod(folder.path, 0o500) == 0)
+        #expect(throws: SignInError.self) { try store.remove(account.id) }
+        #expect(try store.refreshToken(for: account.id) == "secret-rt")
+    }
+    #endif
+
     @Test func fileStoreLocation() {
         for platform in [HostPlatform.macOS, .linux] {
             #expect(FileTokenStore.location(environment: [:], home: "/home/u", platform: platform).path == filePath("/home/u/.config/pimento/tokens.json"))

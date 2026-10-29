@@ -177,7 +177,10 @@ public struct FileTokenStore: TokenStore {
         file.accounts.removeAll { $0.account.id == accountId }
         guard file.accounts.count != before else { return }
         if file.accounts.isEmpty {
-            try? FileManager.default.removeItem(at: url)
+            // Signing out must not report success while the refresh token is still on disk.
+            do { try FileManager.default.removeItem(at: url) } catch {
+                throw SignInError.storage("\(label): \(error.localizedDescription)")
+            }
         } else {
             try write(file)
         }
