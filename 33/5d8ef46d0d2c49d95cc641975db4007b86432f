@@ -1,0 +1,29 @@
+CONTRIBUTING.md
+  s_4884204a812fec::t_aa717d7d1282ae 24,34-36,54-58
+README.md
+  s_4884204a812fec::t_aa717d7d1282ae 836,946
+CHANGELOG.md
+  s_4884204a812fec::t_aa717d7d1282ae 24
+Sources/PimentoCore/HistoryImport.swift
+  s_4884204a812fec::t_aa717d7d1282ae 10
+SECURITY.md
+  s_4884204a812fec::t_ca2c71861493cd 30-33,48-49,51-54
+packaging/homebrew/README.md
+  s_4884204a812fec::t_818ab141571e4c 12-13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "335d8ef46d0d2c49d95cc641975db4007b86432f",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
