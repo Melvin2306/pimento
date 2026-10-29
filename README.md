@@ -53,6 +53,10 @@ does the whole list in one go, as you, using the Azure CLI session you already h
   the request and notifies you when it is approved (with the expiry), denied (with the approver's
   reason), or expires. As an approver, **Approvals (N)** in the toolbar lists requests waiting for
   you, to approve or deny in bulk with a justification. See [Approvals](#approvals).
+- **History**: every request Pimento sends, from the app and the CLI, with its outcome, in a
+  searchable **History** window (<kbd>⇧</kbd><kbd>⌘</kbd><kbd>H</kbd>) and `pimento history`. Export it as CSV,
+  import your past requests from Azure (portal activity too), and *Activate Again* from a row.
+  See [History](#history).
 - **Preview (dry run)**: shows the exact `PUT` URLs and JSON bodies without sending anything (<kbd>⌥</kbd><kbd>⌘</kbd><kbd>↩</kbd>).
 - **Notifications**: a macOS notification when a batch finishes, and a reminder before activated roles
   expire (10 minutes by default; adjustable in Settings).
@@ -64,7 +68,7 @@ does the whole list in one go, as you, using the Azure CLI session you already h
 - **Settings** (<kbd>⌘</kbd><kbd>,</kbd>) for notifications, activation defaults, refresh and table columns.
 - **Themes**: Native, Azure-style or, for fun, Windows XP-style (see [Themes](#themes)).
 - **A real command-line tool**, `pimento`: `list`, `activate` (also `--at` and `--ticket`), `deactivate`, `renew`,
-  `scheduled`, `cancel`, `pending`, `wait`, `approvals`, `approve`, `deny`, `status`, `tenants`, with JSON
+  `scheduled`, `cancel`, `pending`, `wait`, `approvals`, `approve`, `deny`, `status`, `tenants`, `history`, with JSON
   output, exit codes and shell completions. Download it on its own, or get it with the app.
 - **No credentials of its own, no dependencies, no telemetry.**
 
@@ -277,6 +281,57 @@ approvals to review*. The list is read whenever Pimento refreshes; with *New app
 (Settings › Notifications), new ones get a notification that opens the sheet. For timely
 notifications, turn on auto-refresh (Settings › General).
 
+### History
+
+Pimento keeps a log of every request it sends, from the app and from the `pimento` CLI:
+activate, schedule, cancel, deactivate, renew, extend, approve and deny. Each entry holds the time,
+the tenant (ID and name when known), role, resource and scope, the outcome (*Succeeded*, *Pending*,
+*Skipped*, *Failed*, with Azure's status or error code and a short message), the duration asked for
+and the one requested after the policy cap, the start, the justification, the ticket, the request ID,
+where it came from (app or CLI) and the Pimento version. Never tokens, and never request or response
+bodies. A renewal is one entry however many attempts it took. Previews and dry runs are not recorded.
+
+**History…** (<kbd>⇧</kbd><kbd>⌘</kbd><kbd>H</kbd>, the toolbar or the View menu) shows it as a table, newest
+first, sortable by any column. Search (role, resource, justification, ticket, request ID), pick a
+period (last 24 hours to last year, all time, or a custom range of days) and filter by action,
+outcome and tenant. **Export CSV…** saves the rows shown, as filtered and sorted. Right-click a row
+for **Activate Again** (checks that role and fills in its justification, ticket and duration; you
+still press Activate) or **Copy Request ID**.
+
+**Import from Azure** reads your own past requests in the current tenant
+(`roleAssignmentScheduleRequests`, `$filter=asTarget()`, read-only) and adds the ones the history
+does not have yet, marked *Azure*: activity from the portal or other tools shows up too. Requests are
+matched by request ID, so importing twice adds nothing. Only your self-service requests are taken
+(activate, deactivate, extend, renew), not assignments an administrator made.
+
+**Settings › History** turns recording on or off (on by default), sets how long entries are kept
+(30, 90 or 365 days, or forever; 1 year by default), shows the file in Finder and clears it (asks
+first). The CLI follows the same settings.
+
+#### History file
+
+`~/Library/Application Support/Pimento/history.jsonl`, shared by the app and the CLI
+(`PIMENTO_HISTORY` points both elsewhere, for the CLI or an app started from a terminal). It is
+[JSON Lines](https://jsonlines.org): one object per line, mode 600. Every write takes an exclusive
+lock on the file and appends each line with a single `write` on an `O_APPEND` descriptor, so the
+app and the CLI can write at the same time. Past 5 MB the file becomes `history.1.jsonl` (replacing
+an older one) and a new one starts. Entries older than the retention are removed when Pimento
+starts, when it first records something, and when the retention changes. The settings are in
+`history-settings.json` next to it (`{"enabled": true, "retentionDays": 365}`, 0 = forever).
+Readers ignore fields they do not know and skip lines they cannot read.
+
+```json
+{"action":"activate","at":"2026-10-29T08:00:03.120Z","durationMinutes":240,"end":"2026-10-29T12:00:02.000Z","id":"5b3e…","justification":"CHG-1001 release 2.4","requestId":"7a1b2c3d-0000-4000-8000-000000000002","requestedDuration":"PT8H","result":"succeeded","roleDefinitionId":"/subscriptions/…/roleDefinitions/b24988ac-6180-42a0-ab88-20f7382dd24c","roleName":"Contributor","scope":"/subscriptions/bbbbbbbb-0000-0000-0000-00000000000b","scopeName":"Contoso Staging","scopeType":"subscription","source":"app","start":"2026-10-29T08:00:02.000Z","status":"Provisioned","tenantId":"11111111-2222-4333-8444-555555555555","tenantLabel":"Contoso","ticketNumber":"CHG-1001","ticketSystem":"ServiceNow","v":1,"version":"0.1.0"}
+```
+
+The CSV export is [RFC 4180](https://www.rfc-editor.org/rfc/rfc4180): UTF-8, a header row, CRLF line
+ends, fields with a comma, quote or line break quoted. Columns: `timestamp_utc` (ISO 8601),
+`local_time`, `action`, `result`, `status`, `message`, `tenant_id`, `tenant`, `role`, `resource`,
+`scope`, `requested_duration`, `duration_minutes`, `start_utc`, `end_utc`, `justification`,
+`ticket_number`, `ticket_system`, `request_id`, `requester` (approve/deny), `source`,
+`pimento_version`. A field that starts with `=`, `+`, `-`, `@`, a tab or a carriage return gets a
+leading `'`, so a spreadsheet does not run it as a formula. The file is written with mode 600.
+
 ### Presets
 
 A preset is a named set of eligibilities, with an optional justification and duration. Use the
@@ -325,6 +380,7 @@ is under General.
 | --- | --- |
 | General | tenant to open with (last used, az's current, or a specific one); load roles on launch; refresh automatically (off, 1, 5 or 15 minutes); theme (see below); show or hide the Type, Membership, Condition and Duration columns (also via right-click on a column header); unhide hidden tenants |
 | Activation | default duration; parallel requests (1 to 16, default 8); confirm before activating Owner roles (on by default); remember recent justifications and tickets and offer them from the clock buttons next to the fields; start with the last justification filled in |
+| History | keep a history (on by default); keep records for 30, 90 or 365 days or forever; the file, Show in Finder, Clear History |
 | Notifications | macOS permission state, with a shortcut to System Settings when it is off; send a test notification; notify when activations finish, or only when something fails; expiry reminders and how long before (5, 10, 15 or 30 minutes); notify when a scheduled activation starts; approval decisions on your requests; new approval requests for you; sound |
 
 ### Themes
@@ -399,6 +455,12 @@ pimento extend fabrikam --role Reader -j "project runs until March" --days 90
 pimento presets save On-call prod --role Owner -j "on-call" --hours max
 pimento activate --preset On-call
 pimento presets list
+
+# History (shared with the app): what was sent and how it went
+pimento history --since 7d
+pimento history --action approve,deny --outcome failed --json
+pimento history export ~/Desktop/pim-history.csv --since 2026-10-01
+pimento history import-azure --since 30d     # add your requests from the portal (read-only)
 ```
 
 | Command | What it does |
@@ -417,6 +479,8 @@ pimento presets list
 | `pimento status` | Active roles with the time left, soonest-expiring first |
 | `pimento tenants` | Tenants by ID, name and domain |
 | `pimento presets [list] \| show NAME \| save NAME FILTER… [--role NAME] [--exact] [-j TEXT] [--hours N\|max] [--ticket-system NAME] [--force] \| delete NAME` | Saved presets (see below) |
+| `pimento history [WORD…] [--since WHEN] [--until WHEN] [--action NAME…] [--outcome NAME…] [--tenant ID\|NAME] [--limit N] [--json \| --csv]` | The history, newest first (50 rows in the table unless `--limit`; all with `--json`/`--csv`) |
+| `pimento history export FILE.csv [filters]`, `history import-azure [--since WHEN]`, `history clear [--yes]` | CSV to a file (`-` for stdout); add your past requests from Azure (read-only); delete it (asks, or `--yes`) |
 | `pimento completions zsh\|bash\|fish` | Prints a shell completion script |
 | `pimento version`, `pimento help [COMMAND]` | Version; help for a command (also `COMMAND --help`) |
 
@@ -636,7 +700,10 @@ directly with the PIM APIs (`api-version=2020-10-01`):
    `approvalId`; once decided it becomes `Provisioned`/`Granted`, `Denied`, `TimedOut` (after 24
    hours) or `Canceled`. A request's name is the last segment of the `targetRoleAssignmentScheduleId`
    it creates, which is how Renew finds the ticket an active role was requested with.
-11. **Approvals** (approver side; the `roleAssignmentApprovals` API is a **preview**,
+11. **History import**: the same `asTarget()` listing as 10, mapped to history entries (your
+   `SelfActivate`, `SelfDeactivate`, `SelfExtend` and `SelfRenew` requests; a `SelfActivate`
+   starting more than two minutes after it was made counts as scheduled) and merged by request name.
+12. **Approvals** (approver side; the `roleAssignmentApprovals` API is a **preview**,
    `api-version=2021-01-01-preview`): `GET …/roleAssignmentScheduleRequests?$filter=asApprover()`
    (2020-10-01) lists the requests you may decide, with requester, role, schedule, justification and
    ticket; `GET /providers/Microsoft.Authorization/roleAssignmentApprovals?$filter=asApprover()`
@@ -665,8 +732,14 @@ directly with the PIM APIs (`api-version=2020-10-01`):
   **Preview** in the app and `pimento activate --dry-run` show the requests without sending them.
 - Presets are kept in `~/Library/Application Support/Pimento/presets.json` (mode 600): names,
   ARM scopes and role definition IDs, and the justification and duration you chose to save.
-- The `pimento` CLI keeps no other state: no settings, no history, no token cache. It only writes
-  the presets file, with `pimento presets save` and `delete`.
+- The **history** (`~/Library/Application Support/Pimento/history.jsonl`, mode 600) records what the
+  app and the CLI sent: time, tenant, role, resource, outcome, duration, justification, ticket and
+  request ID. No tokens, no request or response bodies; error messages are cut to one short line,
+  and one that looks like a raw body is not kept. Turn it off or shorten the retention under
+  Settings › History; *Clear History…* or `pimento history clear` deletes it. The CSV export is
+  written with mode 600 too.
+- The `pimento` CLI keeps no other state: no settings of its own, no token cache. It writes the
+  presets file (`pimento presets save` and `delete`) and the history.
 - No analytics, no update checks, no third-party dependencies (the CLI's argument parser is
   hand-written, so the build needs no package downloads).
 
@@ -695,6 +768,10 @@ See [SECURITY.md](SECURITY.md) for how to report a vulnerability.
   `AuthenticationContextRule` unless your az token already carries the required claims (see FAQ).
 - You choose whole hours (or *Maximum allowed*); a role whose policy allows less, such as 90
   minutes, is requested for exactly its maximum.
+- **History** covers what Pimento sent from this Mac (and what *Import from Azure* reads). An
+  approval request that is decided later keeps its *Pending* entry; importing does not update
+  entries Pimento already has. Import reads one tenant at a time, only your own self-service
+  requests, and only as far back as Azure lists them.
 - Not notarized (yet), so Gatekeeper asks before the first launch of a downloaded build.
 - The CLI is built and tested for macOS only. Its code avoids AppKit and imports
   `FoundationNetworking` where Linux needs it, but there is no Linux build in CI.

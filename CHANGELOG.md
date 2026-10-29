@@ -8,6 +8,34 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Activation history: a local log of every request Pimento sends, from the app and the CLI
+  (activate, schedule, cancel, deactivate, renew, extend, approve, deny): time, tenant (ID and name
+  when known), scope and resource, role, outcome (succeeded/pending/skipped/failed with Azure's
+  status or error code and a short message), requested and effective duration, start, justification,
+  ticket, request ID, source and Pimento version. No tokens, no request or response bodies. One entry
+  per role (a renewal is one entry however many attempts); previews and dry runs record nothing.
+  - File: `~/Library/Application Support/Pimento/history.jsonl` (`PIMENTO_HISTORY` overrides it),
+    JSON Lines, mode 600, shared by the app and the CLI. Appends take an exclusive `flock` and write
+    each line with one `write` on an `O_APPEND` descriptor; a line cut off by a crash does not swallow
+    the next. Past 5 MB it rotates to `history.1.jsonl`. Settings in `history-settings.json`
+    (recording on by default; retention 30/90/365 days or forever, 1 year by default). Lenient reading:
+    unknown fields are ignored, unreadable lines skipped.
+  - App: **History…** (⇧⌘H, toolbar and View menu): a sortable table with search, period (presets or a
+    custom range), action, outcome and tenant filters, relative times, **Export CSV…** (save panel,
+    the rows shown), **Import from Azure**, and a row menu with **Activate Again** (checks the role and
+    fills in justification, ticket and duration) and **Copy Request ID**. **Settings › History**:
+    on/off, retention, Show in Finder, Clear History… (asks first).
+  - CLI: `pimento history [WORD…] [--since WHEN] [--until WHEN] [--action …] [--outcome …] [--tenant ID|NAME]
+    [--limit N] [--json | --csv]`, `pimento history export FILE.csv` (`-` for stdout),
+    `pimento history import-azure [--since WHEN]` and `pimento history clear [--yes]` (exit 2 without
+    `--yes` when stdin is not a terminal). `--since`/`--until` take `7d`, `24h`, `today`, a date, a
+    date and time, or ISO 8601.
+  - CSV: RFC 4180 (header row, CRLF, UTF-8, quoting), ISO 8601 UTC times plus a local-time column;
+    fields starting with `=`, `+`, `-`, `@`, tab or CR get a leading `'` (formula injection guard).
+  - Import from Azure reads your own requests (`roleAssignmentScheduleRequests`, `asTarget()`,
+    read-only), keeps your self-service ones and adds those whose request ID the history does not
+    have yet, as source `azure`.
+
 - Approval workflow (Azure-resource PIM).
   - Requester: an activation that needs approval (`PendingApproval`) shows *Awaiting approval*
     (app) / `awaiting approval … (request 7a1b2c3d)` with a note and exit code 0 (CLI), gets no expiry
