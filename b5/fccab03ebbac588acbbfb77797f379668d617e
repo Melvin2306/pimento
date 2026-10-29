@@ -1,0 +1,31 @@
+README.md
+  s_293161a7e16f84::t_f9196cfc628f40 110,162-164
+  s_4884204a812fec::t_991be7bf816081 15,93-95,98-99,109,112-114,141-161,165,175-181,197-199,363-364,366-367,554,557-558,875-892,971-972,1033-1037,1077-1081,1097,1107-1108,1110
+CHANGELOG.md
+  s_4884204a812fec::t_ae25134bc8d913 219-220
+  s_4884204a812fec::t_1ad5814afde2d0 215-218,221-234,266-267
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b5fccab03ebbac588acbbfb77797f379668d617e",
+  "prompts": {},
+  "sessions": {
+    "s_293161a7e16f84": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a9cfb3aa90d97f2aa",
+        "model": "unknown"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    },
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
