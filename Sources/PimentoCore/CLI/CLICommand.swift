@@ -128,6 +128,50 @@ public struct CancelOptions: Equatable, Sendable {
     public var hasSelection: Bool { !targets.isEmpty || !roles.isEmpty || all }
 }
 
+/// `pimento pending`: your requests waiting for approval.
+public struct PendingOptions: Equatable, Sendable {
+    public var tenant: String?
+    public var json = false
+    public init() {}
+}
+
+/// `pimento wait`: wait until requests are decided.
+public struct WaitOptions: Equatable, Sendable {
+    public static let defaultTimeout: TimeInterval = 30 * 60
+    public static let timeoutRange: ClosedRange<TimeInterval> = 1...(24 * 3600)
+    /// How often `wait` reads your requests.
+    public static let pollInterval: TimeInterval = 30
+
+    public var tenant: String?
+    public var json = false
+    /// Request ids (or their first characters).
+    public var targets: [String] = []
+    /// Every request of yours that waits for approval.
+    public var all = false
+    public var timeout = WaitOptions.defaultTimeout
+    public init() {}
+}
+
+/// `pimento approvals`: requests you may decide.
+public struct ApprovalsOptions: Equatable, Sendable {
+    public var tenant: String?
+    public var json = false
+    public init() {}
+}
+
+/// `pimento approve` / `pimento deny`.
+public struct DecideOptions: Equatable, Sendable {
+    public var decision: ApprovalDecision = .approve
+    public var tenant: String?
+    public var json = false
+    /// Request ids (or their first characters, at least 4).
+    public var targets: [String] = []
+    public var justification = ""
+    public var assumeYes = false
+    public var dryRun = false
+    public init(decision: ApprovalDecision = .approve) { self.decision = decision }
+}
+
 /// `pimento deactivate` and `pimento renew`: act on active roles.
 public struct LifecycleOptions: Equatable, Sendable {
     public var tenant: String?
@@ -229,14 +273,19 @@ public enum CLICommand: Equatable, Sendable {
     case extend(ExtendOptions)
     case scheduled(ScheduledOptions)
     case cancel(CancelOptions)
+    case pending(PendingOptions)
+    case wait(WaitOptions)
+    case approvals(ApprovalsOptions)
+    case approve(DecideOptions)
+    case deny(DecideOptions)
     case status(StatusOptions)
     case tenants(TenantsOptions)
     case presets(PresetsCommand)
     case completions(CompletionShell)
 
     public static let names = [
-        "list", "activate", "deactivate", "renew", "extend", "scheduled", "cancel", "status", "tenants", "presets",
-        "completions", "version", "help",
+        "list", "activate", "deactivate", "renew", "extend", "scheduled", "cancel", "pending", "wait", "approvals", "approve",
+        "deny", "status", "tenants", "presets", "completions", "version", "help",
     ]
 }
 
@@ -274,6 +323,10 @@ public enum CLIParseError: Error, Equatable, LocalizedError {
     case missingTicket(roles: [String])
     case noCancelSelection
     case ambiguousRequestId(String, matches: Int)
+    case noWaitSelection
+    case invalidTimeout(String)
+    case noDecisionSelection(String)
+    case notARequestId(String)
 
     public var errorDescription: String? {
         switch self {
@@ -306,7 +359,48 @@ public enum CLIParseError: Error, Equatable, LocalizedError {
         case .noCancelSelection:
             "Say which requests to cancel: request ids (see `pimento scheduled`), resource filters, --role NAME, or --all."
         case .ambiguousRequestId(let id, let n): "“\(id)” matches \(n) requests; give more of the id."
+        case .noWaitSelection: "Say which requests to wait for: request ids (see `pimento pending`) or --all."
+        case .invalidTimeout(let v):
+            "--timeout takes a duration up to 24h such as 30m, 2h, 1h30m or 90s (a plain number is minutes), got “\(v)”."
+        case .noDecisionSelection(let c): "Say which requests to \(c): request ids from `pimento approvals`."
+        case .notARequestId(let v): "“\(v)” is not a request id (at least 4 characters of hex digits and dashes)."
         }
+    }
+}
+
+/// `--timeout` of `pimento wait`: `30m`, `2h`, `1h30m`, `90s`, `1d`; a plain number is minutes.
+public enum WaitTimeout {
+    public static func parse(_ raw: String) -> TimeInterval? {
+        let s = raw.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !s.isEmpty else { return nil }
+        if let minutes = Int(s) { return minutes > 0 ? TimeInterval(minutes * 60) : nil }
+        var total: TimeInterval = 0
+        var number = ""
+        var sawUnit = false
+        for ch in s {
+            if ch.isNumber { number.append(ch); continue }
+            guard let n = Int(number), n >= 0 else { return nil }
+            switch ch {
+            case "d": total += TimeInterval(n * 86400)
+            case "h": total += TimeInterval(n * 3600)
+            case "m": total += TimeInterval(n * 60)
+            case "s": total += TimeInterval(n)
+            default: return nil
+            }
+            number = ""
+            sawUnit = true
+        }
+        guard number.isEmpty, sawUnit, total > 0 else { return nil }
+        return total
+    }
+
+    /// `30m`, `1h 30m`, `45s`.
+    public static func label(_ t: TimeInterval) -> String {
+        let s = Int(t.rounded())
+        if s < 60 { return "\(s)s" }
+        if s % 3600 == 0 { return "\(s / 3600)h" }
+        if s < 3600 { return s % 60 == 0 ? "\(s / 60)m" : "\(s / 60)m \(s % 60)s" }
+        return "\(s / 3600)h \((s % 3600) / 60)m"
     }
 }
 
@@ -392,6 +486,19 @@ public enum CLIParser {
 
     private static let plainFlags = tenant.merging(json) { a, _ in a }
 
+    private static let waitFlags = tenant.merging(json) { a, _ in a }.merging([
+        "--all": Flag(key: "all", takesValue: false),
+        "--timeout": Flag(key: "timeout", takesValue: true),
+    ]) { a, _ in a }
+
+    private static let decideFlags = tenant.merging(json) { a, _ in a }.merging([
+        "--justification": Flag(key: "justification", takesValue: true),
+        "-j": Flag(key: "justification", takesValue: true),
+        "--yes": Flag(key: "yes", takesValue: false),
+        "-y": Flag(key: "yes", takesValue: false),
+        "--dry-run": Flag(key: "dry-run", takesValue: false),
+    ]) { a, _ in a }
+
     /// The read-only flags of 0.1.0 (`pimento --list`), still accepted for one release.
     static let legacyModes = ["--list": "list", "--dry-run": "activate --dry-run", "--tenants": "tenants"]
 
@@ -419,6 +526,22 @@ public enum CLIParser {
             o.json = scan.values["json"] != nil
             return CLIInvocation(.scheduled(o))
         case "cancel": return try CLIInvocation(parseCancel(rest))
+        case "pending", "approvals":
+            let scan = try scan(rest, command: first, flags: plainFlags, positionals: false)
+            if scan.help { return CLIInvocation(.help(topic: first)) }
+            let tenant = scan.values["tenant"]?.last, json = scan.values["json"] != nil
+            if first == "pending" {
+                var o = PendingOptions()
+                o.tenant = tenant
+                o.json = json
+                return CLIInvocation(.pending(o))
+            }
+            var o = ApprovalsOptions()
+            o.tenant = tenant
+            o.json = json
+            return CLIInvocation(.approvals(o))
+        case "wait": return try CLIInvocation(parseWait(rest))
+        case "approve", "deny": return try CLIInvocation(parseDecide(rest, command: first))
         case "status":
             let scan = try scan(rest, command: first, flags: plainFlags, positionals: false)
             if scan.help { return CLIInvocation(.help(topic: first)) }
@@ -539,6 +662,41 @@ public enum CLIParser {
         o.dryRun = scan.values["dry-run"] != nil
         guard o.hasSelection else { throw CLIParseError.noCancelSelection }
         return .cancel(o)
+    }
+
+    static func parseWait(_ args: [String]) throws -> CLICommand {
+        let scan = try scan(args, command: "wait", flags: waitFlags, positionals: true)
+        if scan.help { return .help(topic: "wait") }
+        var o = WaitOptions()
+        o.tenant = scan.values["tenant"]?.last
+        o.json = scan.values["json"] != nil
+        o.all = scan.values["all"] != nil
+        o.targets = scan.positionals
+        if let raw = scan.values["timeout"]?.last {
+            guard let t = WaitTimeout.parse(raw), WaitOptions.timeoutRange.contains(t) else { throw CLIParseError.invalidTimeout(raw) }
+            o.timeout = t
+        }
+        if o.all, let first = o.targets.first { throw CLIParseError.conflicting("--all", "request id “\(first)”") }
+        guard o.all || !o.targets.isEmpty else { throw CLIParseError.noWaitSelection }
+        for t in o.targets where !CancelSelection.isIdLike(t) { throw CLIParseError.notARequestId(t) }
+        return .wait(o)
+    }
+
+    /// `approve` / `deny`: request ids and a justification.
+    static func parseDecide(_ args: [String], command: String) throws -> CLICommand {
+        let scan = try scan(args, command: command, flags: decideFlags, positionals: true)
+        if scan.help { return .help(topic: command) }
+        var o = DecideOptions(decision: command == "deny" ? .deny : .approve)
+        o.tenant = scan.values["tenant"]?.last
+        o.json = scan.values["json"] != nil
+        o.targets = scan.positionals
+        o.assumeYes = scan.values["yes"] != nil
+        o.dryRun = scan.values["dry-run"] != nil
+        o.justification = (scan.values["justification"]?.last ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !o.targets.isEmpty else { throw CLIParseError.noDecisionSelection(command) }
+        for t in o.targets where !CancelSelection.isIdLike(t) { throw CLIParseError.notARequestId(t) }
+        guard !o.justification.isEmpty else { throw CLIParseError.missingJustificationFor(command) }
+        return command == "deny" ? .deny(o) : .approve(o)
     }
 
     static func parseExtend(_ args: [String]) throws -> CLICommand {

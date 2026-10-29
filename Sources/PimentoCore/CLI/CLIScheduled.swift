@@ -64,6 +64,8 @@ extension CLIJSON {
         public let ticketNumber: String?
         public let ticketSystem: String?
         public let createdOn: String?
+        /// A request waiting for approval: when PIM lets it expire (24 hours).
+        public let expiresAt: String?
 
         public init(_ r: ScheduledRequest) {
             id = r.id
@@ -82,6 +84,7 @@ extension CLIJSON {
             ticketNumber = r.ticketNumber
             ticketSystem = r.ticketSystem
             createdOn = r.createdOn.map(AzureDate.format)
+            expiresAt = r.expiresAt.map(AzureDate.format)
         }
     }
 

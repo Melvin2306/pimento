@@ -182,32 +182,43 @@ public enum ScheduledRequestParser {
         let requests = items.compactMap { item -> ScheduledRequest? in
             guard let p = item.properties,
                   p.requestType?.caseInsensitiveCompare(RequestAction.activate.requestType) == .orderedSame,
-                  let status = p.status, let scope = p.scope, let roleDefinitionId = p.roleDefinitionId,
-                  let start = AzureDate.parse(p.scheduleInfo?.startDateTime)
+                  let status = p.status, let start = AzureDate.parse(p.scheduleInfo?.startDateTime)
             else { return nil }
             if let principalId, let mine = p.principalId, mine.caseInsensitiveCompare(principalId) != .orderedSame { return nil }
-            guard let kind = ScheduledRequest.kind(status: status, start: start, now: now) else { return nil }
-            let id = item.id ?? ""
-            let name = item.name ?? RoleMatcher.lastPathComponent(id)
-            guard !name.isEmpty, seen.insert(name.lowercased()).inserted else { return nil }
-            let expiration = p.scheduleInfo?.expiration
-            let end = AzureDate.parse(expiration?.endDateTime)
-                ?? ISODuration.parse(expiration?.duration).map { start.addingTimeInterval($0) }
-            let x = p.expandedProperties
-            return ScheduledRequest(
-                id: id, name: name, scope: scope, roleDefinitionId: roleDefinitionId,
-                roleName: x?.roleDefinition?.displayName ?? RoleMatcher.lastPathComponent(roleDefinitionId),
-                scopeName: x?.scope?.displayName ?? RoleMatcher.lastPathComponent(scope),
-                scopeType: x?.scope?.type ?? RoleMatcher.inferScopeType(scope),
-                status: status, requestType: p.requestType ?? RequestAction.activate.requestType,
-                start: start, end: end,
-                justification: p.justification?.nonEmpty,
-                ticketNumber: p.ticketInfo?.ticketNumber?.nonEmpty, ticketSystem: p.ticketInfo?.ticketSystem?.nonEmpty,
-                createdOn: AzureDate.parse(p.createdOn),
-                linkedRoleEligibilityScheduleId: p.linkedRoleEligibilityScheduleId, kind: kind,
-                approvalId: p.approvalId?.nonEmpty)
+            guard let kind = ScheduledRequest.kind(status: status, start: start, now: now),
+                  let request = describe(item, kind: kind), seen.insert(request.name.lowercased()).inserted
+            else { return nil }
+            return request
         }
         return requests.sorted { ($0.start, $0.scopeName.lowercased(), $0.roleName) < ($1.start, $1.scopeName.lowercased(), $1.roleName) }
+    }
+
+    /// Any request as a `ScheduledRequest` of `kind`, whatever its status
+    /// (for `pimento wait`, which also reports decided ones). nil without a
+    /// name, scope, role or start.
+    public static func describe(_ item: AssignmentScheduleRequestItem, kind: ScheduledRequest.Kind) -> ScheduledRequest? {
+        guard let p = item.properties, let scope = p.scope, let roleDefinitionId = p.roleDefinitionId,
+              let start = AzureDate.parse(p.scheduleInfo?.startDateTime)
+        else { return nil }
+        let id = item.id ?? ""
+        let name = item.name ?? RoleMatcher.lastPathComponent(id)
+        guard !name.isEmpty else { return nil }
+        let expiration = p.scheduleInfo?.expiration
+        let end = AzureDate.parse(expiration?.endDateTime)
+            ?? ISODuration.parse(expiration?.duration).map { start.addingTimeInterval($0) }
+        let x = p.expandedProperties
+        return ScheduledRequest(
+            id: id, name: name, scope: scope, roleDefinitionId: roleDefinitionId,
+            roleName: x?.roleDefinition?.displayName ?? RoleMatcher.lastPathComponent(roleDefinitionId),
+            scopeName: x?.scope?.displayName ?? RoleMatcher.lastPathComponent(scope),
+            scopeType: x?.scope?.type ?? RoleMatcher.inferScopeType(scope),
+            status: p.status ?? "", requestType: p.requestType ?? RequestAction.activate.requestType,
+            start: start, end: end,
+            justification: p.justification?.nonEmpty,
+            ticketNumber: p.ticketInfo?.ticketNumber?.nonEmpty, ticketSystem: p.ticketInfo?.ticketSystem?.nonEmpty,
+            createdOn: AzureDate.parse(p.createdOn),
+            linkedRoleEligibilityScheduleId: p.linkedRoleEligibilityScheduleId, kind: kind,
+            approvalId: p.approvalId?.nonEmpty)
     }
 
     /// Requests by scope + role, to badge the rows they belong to.

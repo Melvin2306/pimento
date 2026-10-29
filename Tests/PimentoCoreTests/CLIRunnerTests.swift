@@ -17,7 +17,15 @@ final class CLIHarness: @unchecked Sendable {
     var stdoutIsTTY = false
     var width: Int?
     var variables: [String: String]
-    var now = Fixture.now
+    private var clockValue = Fixture.now
+    /// The harness's clock; `sleep` (for `wait`) moves it forward.
+    var now: Date {
+        get { lock.withLock { clockValue } }
+        set { lock.withLock { clockValue = newValue } }
+    }
+    /// Every `sleep` the command asked for, in seconds.
+    var sleeps: [TimeInterval] { lock.withLock { sleepLog } }
+    private var sleepLog: [TimeInterval] = []
     var tokens: TokenProvider = StaticTokenProvider()
     var tenants: [TenantInfo] = []
 
@@ -39,6 +47,12 @@ final class CLIHarness: @unchecked Sendable {
     private var policyHandler: @Sendable (URLRequest) throws -> (Data, Int) = CLIHarness.defaultPolicy
     private var postHandler: @Sendable (URLRequest) throws -> (Data, Int) = { _ in (Data(), 200) }
     private var getHandler: (@Sendable (URLRequest) throws -> (Data, Int)?)?
+    private var patchHandler: @Sendable (URLRequest) throws -> (Data, Int) = { _ in (Data(), 200) }
+    /// How the fake ARM answers PATCHes (approval decisions; default: 200).
+    var patch: @Sendable (URLRequest) throws -> (Data, Int) {
+        get { lock.withLock { patchHandler } }
+        set { lock.withLock { patchHandler = newValue } }
+    }
     /// Answers GETs before the fixtures when it returns something (nil: fixtures).
     var get: (@Sendable (URLRequest) throws -> (Data, Int)?)? {
         get { lock.withLock { getHandler } }
@@ -64,7 +78,12 @@ final class CLIHarness: @unchecked Sendable {
         transport = RecordingTransport { request in
             if request.httpMethod == "PUT" { return try put(request) }
             if request.httpMethod == "POST" { return try weakSelf?.post(request) ?? (Data(), 200) }
+            if request.httpMethod == "PATCH" { return try weakSelf?.patch(request) ?? (Data(), 200) }
             if let answer = try weakSelf?.get?(request) { return answer }
+            let path = request.url!.absoluteString
+            if path.contains("roleAssignmentApprovals/"), path.contains("/stages") { return (try Fixture.data("approval-stages"), 200) }
+            if path.contains("roleAssignmentApprovals?") { return (try Fixture.data("approvals"), 200) }
+            if path.contains("roleAssignmentScheduleRequests?"), path.contains("asApprover()") { return (try Fixture.data("approver-requests"), 200) }
             if request.url!.path.hasSuffix("roleManagementPolicyAssignments") {
                 return try (weakSelf?.policy ?? CLIHarness.defaultPolicy)(request)
             }
@@ -84,7 +103,7 @@ final class CLIHarness: @unchecked Sendable {
     var posts: [URLRequest] { get async { await transport.requests.filter { $0.httpMethod == "POST" } } }
 
     func environment() -> CLIEnvironment {
-        let transport = transport, tokens = tokens, now = now, tenants = tenants
+        let transport = transport, tokens = tokens, tenants = tenants
         return CLIEnvironment(
             write: { [self] text, stream in
                 lock.withLock { if stream == .out { outText += text } else { errText += text } }
@@ -92,11 +111,17 @@ final class CLIHarness: @unchecked Sendable {
             readLine: { [self] in lock.withLock { answers.isEmpty ? nil : answers.removeFirst() } },
             stdoutIsTTY: stdoutIsTTY, stderrIsTTY: stdoutIsTTY, stdinIsTTY: stdinIsTTY,
             terminalWidth: width, variables: variables,
-            now: { now }, timeZone: TimeZone(identifier: "UTC")!,
+            now: { [self] in now }, timeZone: TimeZone(identifier: "UTC")!,
             makeService: { _, readOnly in
                 PIMService(transport: readOnly ? ReadOnlyTransport(transport) : transport, tokens: tokens)
             },
-            loadTenants: { _ in tenants })
+            loadTenants: { _ in tenants },
+            sleep: { [self] seconds in
+                lock.withLock {
+                    sleepLog.append(seconds)
+                    clockValue = clockValue.addingTimeInterval(seconds)
+                }
+            })
     }
 
     @discardableResult

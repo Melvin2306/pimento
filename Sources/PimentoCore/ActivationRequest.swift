@@ -126,6 +126,9 @@ public struct PlannedRequest: Identifiable, Sendable, Equatable {
 
     public var minutes: Int { duration.minutes }
 
+    /// The request GUID (the last segment of the PUT URL).
+    public var requestId: String { url.lastPathComponent }
+
     public var bodyJSON: Data { ActivationRequestBuilder.encode(body) }
 
     public var prettyBody: String { String(decoding: bodyJSON, as: UTF8.self) }

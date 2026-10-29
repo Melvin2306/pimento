@@ -20,6 +20,8 @@ public struct CLIEnvironment: Sendable {
     /// The service for a tenant. `readOnly` services must refuse every write.
     public var makeService: @Sendable (_ tenantId: String?, _ readOnly: Bool) -> PIMService
     public var loadTenants: @Sendable (_ preferredTenant: String?) async throws -> [TenantInfo]
+    /// Waits between polls (`pimento wait`); tests advance a fake clock.
+    public var sleep: @Sendable (TimeInterval) async -> Void
 
     public init(
         write: @escaping @Sendable (String, Stream) -> Void,
@@ -30,7 +32,8 @@ public struct CLIEnvironment: Sendable {
         now: @escaping @Sendable () -> Date = { Date() },
         timeZone: TimeZone = .current,
         makeService: @escaping @Sendable (String?, Bool) -> PIMService,
-        loadTenants: @escaping @Sendable (String?) async throws -> [TenantInfo]
+        loadTenants: @escaping @Sendable (String?) async throws -> [TenantInfo],
+        sleep: @escaping @Sendable (TimeInterval) async -> Void = { try? await Task.sleep(nanoseconds: UInt64(max(0, $0) * 1_000_000_000)) }
     ) {
         self.write = write
         self.readLine = readLine
@@ -43,6 +46,7 @@ public struct CLIEnvironment: Sendable {
         self.timeZone = timeZone
         self.makeService = makeService
         self.loadTenants = loadTenants
+        self.sleep = sleep
     }
 }
 
@@ -97,6 +101,10 @@ public struct CLIRunner: Sendable {
         case .extend(let o): return try await extend(o)
         case .scheduled(let o): return try await scheduled(o)
         case .cancel(let o): return try await cancel(o)
+        case .pending(let o): return try await pending(o)
+        case .wait(let o): return try await wait(o)
+        case .approvals(let o): return try await approvals(o)
+        case .approve(let o), .deny(let o): return try await decide(o)
         case .presets(let c): return try await presets(c)
         }
     }
@@ -447,7 +455,7 @@ public struct CLIRunner: Sendable {
         do {
             try await service.execute(plans, maxConcurrent: o.maxParallel) { plan, outcome in
                 collected.set(plan.role.id, outcome)
-                human(Self.resultLine(plan.role, outcome, now: now, timeZone: tz, style: style))
+                human(Self.resultLine(plan.role, outcome, now: now, timeZone: tz, style: style, requestId: plan.requestId))
             }
         } catch {
             return report(error, tenant: tenant.tenantId)
@@ -457,11 +465,18 @@ public struct CLIRunner: Sendable {
         var parts: [String] = []
         if let n = summary.scheduled { parts.append("\(n) scheduled") }
         if summary.activated > 0 || summary.scheduled == nil { parts.append("\(summary.activated) activated") }
-        if summary.submitted > 0 { parts.append("\(summary.submitted) submitted for approval") }
+        let awaiting = outcomes.values.filter(\.isAwaitingApproval).count
+        if awaiting > 0 { parts.append(style.yellow("\(awaiting) awaiting approval")) }
+        if summary.submitted > awaiting { parts.append("\(summary.submitted - awaiting) submitted") }
         if summary.skipped > 0 { parts.append("\(summary.skipped) already active") }
         if summary.failed > 0 { parts.append(style.red("\(summary.failed) failed")) }
         if !missing.isEmpty { parts.append(style.yellow("\(missing.count) missing")) }
         human(parts.joined(separator: ", ") + ".")
+        if awaiting > 0 {
+            human(style.yellow("note:") + " \(awaiting == 1 ? "1 role waits" : "\(awaiting) roles wait") for an approver, "
+                + "who has 24 hours to decide; nothing is active until then. `pimento pending` lists the requests, "
+                + "`pimento wait --all` waits for the decision.")
+        }
         if o.json { out(CLIJSON.encode(json(outcomes))) }
         let code = CLIExit.code(for: Array(outcomes.values))
         if code == .auth { err("hint: sign in with `\(AzureCLIError.loginCommand(tenant: tenant.tenantId))`") }
@@ -475,12 +490,17 @@ public struct CLIRunner: Sendable {
         return .init(d.text)
     }
 
+    /// `requestId`: shown for a request that waits for approval (for `pimento wait`).
     public static func resultLine(
-        _ role: EligibleRole, _ outcome: ActivationOutcome, now: Date, timeZone: TimeZone, style: TerminalStyle
+        _ role: EligibleRole, _ outcome: ActivationOutcome, now: Date, timeZone: TimeZone, style: TerminalStyle,
+        requestId: String? = nil
     ) -> String {
         let name = "\(role.roleName) · \(role.scopeName)"
         switch outcome {
         case .activated(let status, let until):
+            if outcome.isAwaitingApproval {
+                return style.yellow("awaiting approval") + "  \(name)" + (requestId.map { " (request \($0.prefix(8)))" } ?? "")
+            }
             guard ActivationOutcome.isGranted(status: status) else {
                 return style.yellow("submitted") + "  \(name): \(status)"
             }

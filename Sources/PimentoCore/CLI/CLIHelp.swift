@@ -16,6 +16,11 @@ public enum CLIHelp {
         case "extend": extend
         case "scheduled": scheduled
         case "cancel": cancel
+        case "pending": pending
+        case "wait": wait
+        case "approvals": approvals
+        case "approve": decide(.approve)
+        case "deny": decide(.deny)
         case "status": status
         case "tenants": tenants
         case "presets": presets
@@ -39,6 +44,11 @@ public enum CLIHelp {
       extend       Ask an administrator to extend time-bound assignments
       scheduled    List your scheduled and pending activations
       cancel       Cancel scheduled or pending activations
+      pending      List your requests waiting for approval
+      wait         Wait until requests are approved or denied
+      approvals    List requests you can approve or deny
+      approve      Approve requests (asks first; --dry-run sends nothing)
+      deny         Deny requests
       status       Show your active roles, soonest-expiring first
       tenants      List the tenants your az login can reach
       presets      List, show, save or delete saved role presets
@@ -54,8 +64,8 @@ public enum CLIHelp {
     Pimento uses your Azure CLI session (`az login`). The token stays in memory
     and is only sent to management.azure.com.
 
-    Exit codes: 0 ok, 1 something failed, 2 usage error, 3 az missing or not signed in.
-    Run `pimento help <command>` for details.
+    Exit codes: 0 ok, 1 something failed, 2 usage error, 3 az missing or not signed in,
+    4 `wait` timed out. Run `pimento help <command>` for details.
     """
 
     static let list = """
@@ -132,7 +142,11 @@ public enum CLIHelp {
       2026-11-02T08:00:00Z      ISO 8601 with a zone (Z, +01:00, -0500)
 
     Pimento shows the plan, highlights Owner roles and asks before sending.
-    Exit codes: 0 all activated, scheduled or already active, 1 some failed (or
+    A role whose policy requires approval is submitted and shows "awaiting
+    approval" with its request id (exit code 0): nothing is active until an
+    approver decides (24 hours at most). `pimento pending` lists such requests,
+    `pimento wait --all` waits for the decision.
+    Exit codes: 0 all activated, scheduled, awaiting approval or already active, 1 some failed (or
     you said no), 2 usage error (also: a ticket is required but missing),
     3 token missing or rejected.
 
@@ -188,6 +202,97 @@ public enum CLIHelp {
       pimento cancel contoso-dev --yes
       pimento cancel --all --dry-run
     """
+
+    static let pending = """
+    Usage: pimento pending [--tenant ID] [--json]
+
+    Lists your activation requests that wait for an approver, with how long ago
+    you asked and when PIM lets them expire (24 hours after the request).
+    Read-only. Decided requests drop off the list.
+
+    Options:
+    \(tenantOption)
+          --json          JSON: {tenantId, user, requests: [{name, status, createdOn, expiresAt, …}]}
+
+    ID is the start of the request id: `pimento wait ID` waits for the
+    decision, `pimento cancel ID` withdraws the request.
+    """
+
+    static let wait = """
+    Usage: pimento wait (REQUEST-ID… | --all) [--timeout DURATION] [--tenant ID] [--json]
+
+    Waits until requests that need approval are decided, reading your requests
+    every \(Int(WaitOptions.pollInterval)) seconds (read-only). Prints each decision as it comes:
+    approved (with the end of the activation), denied (with the approver's
+    justification when Azure shows it to you), expired or cancelled.
+
+    Selection:
+      REQUEST-ID          A request id from `pimento pending` or `activate`, or its
+                          first characters (at least 4). A request that was
+                          already decided is reported right away.
+          --all           Every request of yours that waits for approval now
+
+    Options:
+          --timeout DURATION
+                          Give up after this long: 30m (default), 2h, 1h30m, 90s;
+                          a plain number is minutes. At most 24h.
+    \(tenantOption)
+          --json          JSON: {results: [{target, outcome, status, until, reviewer, …}], summary}
+
+    Exit codes: 0 all approved, 1 any denied, expired, cancelled, failed or not
+    found, 2 usage error, 3 token missing or rejected, 4 timed out (still waiting).
+
+    Examples:
+      pimento wait 7a1b2c3d
+      pimento wait --all --timeout 2h && ./deploy.sh
+    """
+
+    static let approvals = """
+    Usage: pimento approvals [--tenant ID] [--json]
+
+    Lists the activation requests you can approve or deny as a PIM approver:
+    requester, role, resource, duration, when it was asked, when it expires
+    (24 hours after the request), justification and ticket. Read-only.
+    Without approver permissions the list is simply empty.
+
+    Options:
+    \(tenantOption)
+          --json          JSON: {available, note, requests: [{name, requester, roleName, …}]}
+
+    `pimento approve ID -j TEXT` or `pimento deny ID -j TEXT` decides one.
+    """
+
+    static func decide(_ d: ApprovalDecision) -> String {
+        let verb = d.command
+        return """
+        Usage: pimento \(verb) REQUEST-ID… -j TEXT [--yes] [--dry-run] [--tenant ID] [--json]
+
+        \(d == .approve ? "Approves" : "Denies") requests you can decide as a PIM approver (see
+        `pimento approvals`): a PATCH on the approval's open stage with
+        reviewResult \(d.rawValue) and your justification. The first approver's
+        decision counts. You cannot decide your own requests.
+
+        Arguments:
+          REQUEST-ID          A request id from `pimento approvals`, or its first
+                              characters (at least 4). Several are decided together.
+
+        Options:
+          -j, --justification TEXT
+                              Why you \(verb) (required; the requester can see it)
+          -y, --yes           Don't ask. Required when stdin is not a terminal.
+              --dry-run       Print the requests (PATCH URL and body), send nothing
+        \(tenantOption)
+              --json          JSON: {decision, dryRun, results: [...], notFound, summary}
+
+        Pimento lists the requests first\(d == .approve ? ", highlights Owner roles" : "") and asks.
+        Exit codes: 0 all \(d.pastTense), 1 something failed, was not found or was
+        decided meanwhile (or you said no), 2 usage error, 3 token missing or rejected.
+
+        Examples:
+          pimento \(verb) 5f0c1d2e -j "\(d == .approve ? "matches CHG-1001" : "use the staging subscription")"
+          pimento \(verb) 5f0c 7a1b -j "batch" --yes --json
+        """
+    }
 
     static let deactivate = """
     Usage: pimento deactivate (FILTER… | --role NAME | --all | --preset NAME) [options]
@@ -371,6 +476,11 @@ public enum CLIHelp {
         'extend:Ask an administrator to extend time-bound assignments'
         'scheduled:List your scheduled and pending activations'
         'cancel:Cancel scheduled or pending activations'
+        'pending:List your requests waiting for approval'
+        'wait:Wait until requests are approved or denied'
+        'approvals:List requests you can approve or deny'
+        'approve:Approve requests'
+        'deny:Deny requests'
         'status:Show your active roles, soonest-expiring first'
         'tenants:List the tenants your az login can reach'
         'presets:List, show, save or delete role presets'
@@ -437,7 +547,18 @@ public enum CLIHelp {
                 '(-y --yes)'{-y,--yes}'[Do not ask for confirmation]' \
                 '--dry-run[Print the requests, send nothing]' \
                 '*:resource filter: ' ;;
-            status|tenants|scheduled) _arguments -s $common ;;
+            status|tenants|scheduled|pending|approvals) _arguments -s $common ;;
+            wait)
+              _arguments -s $common \
+                '--all[Every request waiting for approval]' \
+                '--timeout[Give up after]:duration:(10m 30m 1h 2h)' \
+                '*:request id: ' ;;
+            approve|deny)
+              _arguments -s $common \
+                '(-j --justification)'{-j,--justification}'[Justification]:justification: ' \
+                '(-y --yes)'{-y,--yes}'[Do not ask for confirmation]' \
+                '--dry-run[Print the requests, send nothing]' \
+                '*:request id: ' ;;
             presets)
               _arguments -s $common \
                 '1:presets command:(list show save delete)' \
@@ -449,7 +570,7 @@ public enum CLIHelp {
                 '(-f --force)'{-f,--force}'[Replace a preset with the same name]' \
                 '*:name or filter: ' ;;
             completions) _arguments '1:shell:(zsh bash fish)' ;;
-            help) _arguments '1:command:(list activate deactivate renew extend scheduled cancel status tenants presets completions version)' ;;
+            help) _arguments '1:command:(list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets completions version)' ;;
           esac ;;
       esac
     }
@@ -469,13 +590,14 @@ public enum CLIHelp {
       prev="${COMP_WORDS[COMP_CWORD-1]}"
       cmd="${COMP_WORDS[1]}"
       if [[ $COMP_CWORD -eq 1 ]]; then
-        COMPREPLY=($(compgen -W "list activate deactivate renew extend scheduled cancel status tenants presets completions version help" -- "$cur"))
+        COMPREPLY=($(compgen -W "list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets completions version help" -- "$cur"))
         return
       fi
       case "$prev" in
         -t|--tenant|-j|--justification|--role|--max-parallel|--preset|--days|--ticket|--ticket-system) return ;;
         --at) COMPREPLY=($(compgen -W "now +1h +2h tomorrow08:00 workday08:00" -- "$cur")); return ;;
         --hours) COMPREPLY=($(compgen -W "max 1 2 4 8 12 24" -- "$cur")); return ;;
+        --timeout) COMPREPLY=($(compgen -W "10m 30m 1h 2h" -- "$cur")); return ;;
       esac
       case "$cmd" in
         list) opts="--tenant --json --role --active --eligible --help" ;;
@@ -484,12 +606,14 @@ public enum CLIHelp {
         deactivate) opts="--tenant --json --role --all --preset --justification --yes --dry-run --max-parallel --help" ;;
         renew) opts="--tenant --json --role --all --preset --justification --hours --ticket --ticket-system --yes --dry-run --max-parallel --help" ;;
         extend) opts="--tenant --json --role --all --justification --days --yes --dry-run --help" ;;
-        status|tenants|scheduled) opts="--tenant --json --help" ;;
+        status|tenants|scheduled|pending|approvals) opts="--tenant --json --help" ;;
+        wait) opts="--tenant --json --all --timeout --help" ;;
+        approve|deny) opts="--tenant --json --justification --yes --dry-run --help" ;;
         presets)
           if [[ $COMP_CWORD -eq 2 ]]; then opts="list show save delete"
           else opts="--tenant --json --role --exact --justification --hours --ticket-system --force --help"; fi ;;
         completions) opts="zsh bash fish" ;;
-        help) opts="list activate deactivate renew extend scheduled cancel status tenants presets completions version" ;;
+        help) opts="list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets completions version" ;;
         *) opts="" ;;
       esac
       COMPREPLY=($(compgen -W "$opts" -- "$cur"))
@@ -507,15 +631,20 @@ public enum CLIHelp {
     complete -c pimento -n __fish_use_subcommand -a extend -d 'Ask an administrator to extend time-bound assignments'
     complete -c pimento -n __fish_use_subcommand -a scheduled -d 'List your scheduled and pending activations'
     complete -c pimento -n __fish_use_subcommand -a cancel -d 'Cancel scheduled or pending activations'
+    complete -c pimento -n __fish_use_subcommand -a pending -d 'List your requests waiting for approval'
+    complete -c pimento -n __fish_use_subcommand -a wait -d 'Wait until requests are approved or denied'
+    complete -c pimento -n __fish_use_subcommand -a approvals -d 'List requests you can approve or deny'
+    complete -c pimento -n __fish_use_subcommand -a approve -d 'Approve requests'
+    complete -c pimento -n __fish_use_subcommand -a deny -d 'Deny requests'
     complete -c pimento -n __fish_use_subcommand -a status -d 'Show your active roles'
     complete -c pimento -n __fish_use_subcommand -a tenants -d 'List the tenants your az login can reach'
     complete -c pimento -n __fish_use_subcommand -a presets -d 'List, show, save or delete role presets'
     complete -c pimento -n __fish_use_subcommand -a completions -d 'Print a completion script'
     complete -c pimento -n __fish_use_subcommand -a version -d 'Print the version'
     complete -c pimento -n __fish_use_subcommand -a help -d 'Show help for a command'
-    complete -c pimento -n '__fish_seen_subcommand_from list activate deactivate renew extend scheduled cancel status tenants presets' -s t -l tenant -r -d 'Tenant GUID or domain'
-    complete -c pimento -n '__fish_seen_subcommand_from list activate deactivate renew extend scheduled cancel status tenants presets' -l json -d 'Machine-readable output'
-    complete -c pimento -n '__fish_seen_subcommand_from list activate deactivate renew extend scheduled cancel status tenants presets' -s h -l help -d 'Show help'
+    complete -c pimento -n '__fish_seen_subcommand_from list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets' -s t -l tenant -r -d 'Tenant GUID or domain'
+    complete -c pimento -n '__fish_seen_subcommand_from list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets' -l json -d 'Machine-readable output'
+    complete -c pimento -n '__fish_seen_subcommand_from list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets' -s h -l help -d 'Show help'
     complete -c pimento -n '__fish_seen_subcommand_from list activate deactivate renew extend cancel presets' -l role -r -d 'Role name, * as wildcard'
     complete -c pimento -n '__fish_seen_subcommand_from list' -l active -d 'Only active roles'
     complete -c pimento -n '__fish_seen_subcommand_from list' -l eligible -d 'Only roles that are not active'
@@ -526,16 +655,18 @@ public enum CLIHelp {
     complete -c pimento -n '__fish_seen_subcommand_from activate renew' -l ticket -r -d 'Ticket number'
     complete -c pimento -n '__fish_seen_subcommand_from activate renew presets' -l ticket-system -r -d 'Ticket system'
     complete -c pimento -n '__fish_seen_subcommand_from extend' -l days -x -a '7 30 90 180 365' -d 'Days to extend by'
-    complete -c pimento -n '__fish_seen_subcommand_from activate deactivate renew extend presets' -s j -l justification -r -d 'Justification'
+    complete -c pimento -n '__fish_seen_subcommand_from activate deactivate renew extend approve deny presets' -s j -l justification -r -d 'Justification'
     complete -c pimento -n '__fish_seen_subcommand_from activate renew presets' -l hours -x -a 'max 1 2 4 8 12 24' -d 'Duration in hours, or max'
     complete -c pimento -n '__fish_seen_subcommand_from activate deactivate renew' -l preset -r -d 'Saved preset'
     complete -c pimento -n '__fish_seen_subcommand_from presets; and not __fish_seen_subcommand_from list show save delete' -a 'list show save delete'
     complete -c pimento -n '__fish_seen_subcommand_from presets' -l exact -d 'Store the matching roles, not the filters'
     complete -c pimento -n '__fish_seen_subcommand_from presets' -s f -l force -d 'Replace a preset with the same name'
-    complete -c pimento -n '__fish_seen_subcommand_from activate deactivate renew extend cancel' -s y -l yes -d 'Do not ask for confirmation'
-    complete -c pimento -n '__fish_seen_subcommand_from activate deactivate renew extend cancel' -l dry-run -d 'Print the requests, send nothing'
+    complete -c pimento -n '__fish_seen_subcommand_from activate deactivate renew extend cancel approve deny' -s y -l yes -d 'Do not ask for confirmation'
+    complete -c pimento -n '__fish_seen_subcommand_from activate deactivate renew extend cancel approve deny' -l dry-run -d 'Print the requests, send nothing'
+    complete -c pimento -n '__fish_seen_subcommand_from wait' -l all -d 'Every request waiting for approval'
+    complete -c pimento -n '__fish_seen_subcommand_from wait' -l timeout -x -a '10m 30m 1h 2h' -d 'Give up after'
     complete -c pimento -n '__fish_seen_subcommand_from activate deactivate renew' -l max-parallel -x -d 'Requests in flight at once'
     complete -c pimento -n '__fish_seen_subcommand_from completions' -a 'zsh bash fish'
-    complete -c pimento -n '__fish_seen_subcommand_from help' -a 'list activate deactivate renew extend scheduled cancel status tenants presets completions version'
+    complete -c pimento -n '__fish_seen_subcommand_from help' -a 'list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets completions version'
     """#
 }

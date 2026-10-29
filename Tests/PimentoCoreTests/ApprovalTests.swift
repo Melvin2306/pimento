@@ -316,10 +316,8 @@ struct ApprovalTrackerTests {
         let pending = ScheduledRequestParser.pending(try Fixture.decode("schedule-requests", as: ARMList<AssignmentScheduleRequestItem>.self).value,
                                                      principalId: Fixture.userOID, now: Fixture.now)
         let waiting = try #require(pending.first { $0.kind == .awaitingApproval })
-        #expect(waiting.expiresAt == nil)  // the fixture has no createdOn
-        let created = ScheduledRequestParser.pending([requestItem(name, status: "PendingApproval", createdOn: "2026-10-29T11:00:00Z")],
-                                                     principalId: Fixture.userOID, now: Fixture.now)
-        #expect(created.first?.expiresAt == AzureDate.parse("2026-10-30T11:00:00Z"))
+        #expect(waiting.expiresAt == AzureDate.parse("2026-10-30T11:50:00.4Z"))
+        #expect(waiting.approvalId == "/providers/Microsoft.Authorization/roleAssignmentApprovals/7a1b2c3d-0000-4000-8000-000000000002")
         #expect(pending.first { $0.kind == .scheduled }?.expiresAt == nil)
     }
 }

@@ -709,7 +709,7 @@ extension PIMService {
 
     /// What the approver of a decided request said, if the requester may read it.
     public func review(approvalId: String?) async -> ReviewInfo? {
-        guard let approvalId, let stages = try? await approvalStages(approvalId: approvalId) else { return nil }
+        guard let id = approvalId.map(RoleMatcher.lastPathComponent), let stages = try? await approvalStages(approvalId: id) else { return nil }
         return ReviewInfo(stages: stages)
     }
 

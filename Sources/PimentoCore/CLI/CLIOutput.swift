@@ -277,6 +277,8 @@ public enum CLIJSON {
         public let possibleAt: String?
         /// A scheduled activation: when it starts (also for a planned one).
         public let start: String?
+        /// A request waiting for approval: its id (for `pimento wait`).
+        public let requestId: String?
 
         public init(role: EligibleRole, outcome: ActivationOutcome?, plan: PlannedRequest?,
                     followUp: PlannedRequest? = nil, skipReason: String = "already active") {
@@ -336,6 +338,7 @@ public enum CLIJSON {
                 until = u.map(AzureDate.format)
             }
             self.start = start
+            requestId = outcome?.isAwaitingApproval == true ? plan?.requestId : nil
             self.possibleAt = possibleAt
             self.status = status
             self.until = until

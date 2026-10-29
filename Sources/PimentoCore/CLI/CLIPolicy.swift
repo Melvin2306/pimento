@@ -11,6 +11,8 @@ public enum CLIExit: Int32, Sendable {
     case usage = 2
     /// az is missing, not signed in, or ARM rejected the token.
     case auth = 3
+    /// `pimento wait` gave up: still no decision when `--timeout` ran out.
+    case timeout = 4
 
     public static func code(for error: Error) -> CLIExit {
         switch error {
@@ -48,7 +50,7 @@ public enum CLIExit: Int32, Sendable {
 /// Thrown when a command that changes roles would have to ask, but stdin is
 /// not a terminal.
 public struct ConfirmationRequired: Error, LocalizedError, Equatable {
-    /// `activate`, `deactivate`, `renew`, `extend` or `cancel`.
+    /// `activate`, `deactivate`, `renew`, `extend`, `cancel`, `approve` or `deny`.
     public var command = "activate"
 
     public init(command: String = "activate") { self.command = command }
