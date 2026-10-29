@@ -10,6 +10,10 @@ struct CLIParserTests {
         #expect(try CLIParser.parse([]) == CLIInvocation(.help(topic: nil)))
         #expect(try command("help") == .help(topic: nil))
         #expect(try command("--help") == .help(topic: nil))
+        // `--help COMMAND` like `help COMMAND`.
+        #expect(try command("--help", "activate") == .help(topic: "activate"))
+        #expect(try command("-h", "wait") == .help(topic: "wait"))
+        #expect(throws: CLIParseError.unknownCommand("bogus")) { try command("--help", "bogus") }
         #expect(try command("help", "activate") == .help(topic: "activate"))
         #expect(try command("activate", "--help") == .help(topic: "activate"))
         #expect(try command("list", "-h") == .help(topic: "list"))

@@ -656,7 +656,9 @@ public enum CLIParser {
 
     static func parseCommand(_ args: [String]) throws -> CLIInvocation {
         guard let first = args.first else { return CLIInvocation(.help(topic: nil)) }
-        if !CLICommand.names.contains(first), let legacy = try parseLegacy(args) { return legacy }
+        // `--help` / `-h` first take a topic like `help` (`pimento --help wait`);
+        // elsewhere on a 0.1-style line they still mean help.
+        if !CLICommand.names.contains(first), first != "--help", first != "-h", let legacy = try parseLegacy(args) { return legacy }
         let rest = Array(args.dropFirst())
         switch first {
         case "help", "--help", "-h":
