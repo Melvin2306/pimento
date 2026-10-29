@@ -259,7 +259,7 @@ private struct MenuBarHeader: View {
         if let tenantError = model.tenantError { return tenantError }
         switch model.loadState {
         case .failed(let message, let needsLogin):
-            return needsLogin ? "Signed out: run \(model.loginCommand)" : message
+            return needsLogin ? model.signedOutHint : message
         case .idle where model.awaitingManualRefresh:
             return "\(model.tenantLabel) · not loaded yet"
         default:

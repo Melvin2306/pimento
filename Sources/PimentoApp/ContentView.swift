@@ -27,6 +27,9 @@ struct ContentView: View {
             if model.loadState == .idle && !model.awaitingManualRefresh { await model.refresh() }
         }
         .sheet(isPresented: $model.showDryRunSheet) { DryRunSheet(plans: model.dryRunPlans) }
+        .sheet(isPresented: Binding(
+            get: { model.showDeviceCodeSheet && model.deviceCodeInMainWindow },
+            set: { if !$0 { model.cancelSignIn() } })) { DeviceCodeSheet() }
         .sheet(isPresented: $model.showTenantSheet) { TenantSheet() }
         .sheet(isPresented: $model.showSavePresetSheet) { SavePresetSheet() }
         .sheet(isPresented: $model.showManagePresets) { ManagePresetsSheet() }
@@ -843,22 +846,10 @@ struct LoadErrorView: View {
                 .textSelection(.enabled)
                 .lineLimit(8)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: 620)
             if needsLogin {
-                Text("Run this in a terminal, then press Retry:")
-                HStack {
-                    Text(model.loginCommand)
-                        .font(.body.monospaced())
-                        .textSelection(.enabled)
-                        .padding(.horizontal, 10).padding(.vertical, 6)
-                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
-                    Button("Copy") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(model.loginCommand, forType: .string)
-                    }
-                    .themedButton(.secondary)
-                    .accessibilityLabel("Copy login command")
-                }
+                SignInChoices()
             }
             HStack {
                 Button("Choose Tenant…") { model.openTenantPicker() }

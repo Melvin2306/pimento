@@ -4,16 +4,26 @@ import SwiftUI
 
 /// The Settings window (⌘,). Every change is saved and applied right away.
 struct SettingsView: View {
+    @Environment(AppModel.self) private var model
+
     var body: some View {
-        TabView {
+        @Bindable var model = model
+        TabView(selection: $model.settingsTab) {
             GeneralSettings()
                 .tabItem { Label("General", systemImage: "gearshape") }
+                .tag(AppModel.SettingsTab.general)
+            AccountSettings()
+                .tabItem { Label("Account", systemImage: "person.crop.circle") }
+                .tag(AppModel.SettingsTab.account)
             ActivationSettings()
                 .tabItem { Label("Activation", systemImage: "bolt.shield") }
+                .tag(AppModel.SettingsTab.activation)
             NotificationSettings()
                 .tabItem { Label("Notifications", systemImage: "bell.badge") }
+                .tag(AppModel.SettingsTab.notifications)
             HistorySettingsView()
                 .tabItem { Label("History", systemImage: "clock.arrow.circlepath") }
+                .tag(AppModel.SettingsTab.history)
         }
         .frame(width: 500)
         .themedSettingsToolbar()

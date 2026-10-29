@@ -191,6 +191,42 @@ final class AppModel {
     var showTenantSheet = false
     var tenantDraft = ""
 
+    // Account (Settings › Account): where tokens come from, and Pimento's own sign-in.
+    /// `auth.json`, shared with the CLI.
+    let authSettingsStore: AuthSettingsStore
+    /// Pimento sign-in: refresh tokens in the store (Keychain), access tokens in memory.
+    let broker: TokenBroker
+    /// Saved on every change.
+    var authSettings: AuthSettings {
+        didSet { if authSettings != oldValue { try? authSettingsStore.save(authSettings) } }
+    }
+    /// The auth source in use (`$PIMENTO_AUTH` overrides the setting).
+    var authSelection: AuthSelection
+    /// Accounts of Pimento sign-in (no secrets read).
+    var signedInAccounts: [SignedInAccount] = []
+    /// The client ID field in Settings › Account.
+    var clientIdDraft = ""
+    var signInState: SignInState = .idle
+    /// The device-code sheet, in the Settings window or the main window.
+    var showDeviceCodeSheet = false
+    var deviceCodeInMainWindow = false
+    @ObservationIgnored var signInTask: Task<Void, Never>?
+    /// The Settings window's tab (so the main window can open Account).
+    var settingsTab: SettingsTab = .general
+
+    enum SettingsTab: Hashable { case general, account, activation, notifications, history }
+
+    enum SignInState: Equatable {
+        case idle
+        /// Waiting for the browser (authorization code with PKCE).
+        case browser
+        /// Asking Microsoft for a device code.
+        case requestingCode
+        /// Waiting for the user to enter the code.
+        case deviceCode(DeviceCodeChallenge)
+        case failed(String)
+    }
+
     // Menu bar extra
     /// The inline confirmation or question the menu bar popover shows (its
     /// panel cannot host the main window's alerts).
@@ -231,10 +267,22 @@ final class AppModel {
 
     static let shared = AppModel(commandLineTenant: LaunchArguments.tenant(in: Array(CommandLine.arguments.dropFirst())))
 
+    /// Tokens for `tenantId` from the current auth source.
+    func tokens(tenantId: String?) -> TokenProvider { authContext.tokens(tenantId: tenantId) }
+
+    var authContext: AuthContext {
+        AuthContext(selection: authSelection, broker: broker, accountId: authSettings.accountId)
+    }
+
+    var authSource: AuthSource { authSelection.source }
+
     private var service: PIMService
     private var tenantGeneration = 0
 
-    init(commandLineTenant: String?) {
+    /// `tokenStore` / `authSettingsStore` / `signInTransport`: the Keychain,
+    /// `auth.json` and the network unless given.
+    init(commandLineTenant: String?, tokenStore: TokenStore? = nil, authSettingsStore: AuthSettingsStore? = nil,
+         signInTransport: HTTPTransport? = nil) {
         // 0.1.0 persisted a dry-run mode; activation is now always real (the
         // preview is a separate action), so the stale setting is dropped.
         let defaults = UserDefaults.standard
@@ -267,14 +315,27 @@ final class AppModel {
             tenantError = error.localizedDescription
         }
         tenant = selection
+        let authStore = authSettingsStore ?? AuthSettingsStore()
+        self.authSettingsStore = authStore
+        let auth = authStore.load()
+        authSettings = auth
+        clientIdDraft = auth.clientId ?? ""
+        let selectedAuth = (try? AuthSourceResolver.resolve(commandLine: nil, environment: ProcessInfo.processInfo.environment, saved: auth.source))
+            ?? AuthSelection(source: auth.source ?? .az, origin: auth.source == nil ? .default : .saved)
+        authSelection = selectedAuth
+        let broker = TokenBroker(store: tokenStore ?? TokenStores.standard(), transport: signInTransport ?? URLSessionTransport())
+        self.broker = broker
         let recorder = HistoryRecorder(store: historyStore, source: .app)
         historyRecorder = recorder
         historySettings = historyStore.loadSettings()
-        service = PIMService(tokens: AzureCLITokenProvider(tenantId: selection.tenantId), history: recorder)
+        service = PIMService(
+            tokens: AuthContext(selection: selectedAuth, broker: broker, accountId: auth.accountId).tokens(tenantId: selection.tenantId),
+            history: recorder)
         restartAutoRefresh()
         observeClockChanges()
         scheduleAppearanceChange(after: Date())
         reloadPresets()
+        Task { await reloadAccounts() }
         // Old records go once per launch (the CLI and later writes prune too).
         let store = historyStore, retention = historySettings.retention
         Task.detached(priority: .utility) { _ = try? store.prune(retention: retention) }
@@ -328,6 +389,21 @@ final class AppModel {
     }
 
     var loginCommand: String { AzureCLIError.loginCommand(tenant: effectiveTenantId) }
+
+    /// What the menu bar says when signed out.
+    var signedOutHint: String {
+        authSource == .az ? "Signed out: run \(loginCommand)" : "Signed out: sign in under Settings › Account"
+    }
+
+    /// True when signing in (az, or Pimento's sign-in) would fix `error`.
+    static func needsLogin(_ error: Error) -> Bool {
+        switch error {
+        case let e as AzureCLIError: e.needsLogin || e == .notFound
+        case let e as SignInError: e.needsLogin
+        case let e as PIMServiceError: CLIExit.code(for: e) == .auth
+        default: false
+        }
+    }
 
     var canActivate: Bool {
         !isActivating && !checkedRoles.isEmpty && !trimmedJustification.isEmpty && identity != nil
@@ -426,7 +502,7 @@ final class AppModel {
             if !decided.isEmpty { Task { await self.announce(decided) } }
         } catch {
             guard generation == tenantGeneration else { return }
-            scheduledLoadState = .failed(message: error.localizedDescription, needsLogin: (error as? AzureCLIError)?.needsLogin ?? false)
+            scheduledLoadState = .failed(message: error.localizedDescription, needsLogin: Self.needsLogin(error))
         }
     }
 
@@ -546,7 +622,7 @@ final class AppModel {
             if let notice = ApprovalNotice.arrivals(arrivals) { Notifier.approvalsArrived(notice, prefs: prefs) }
         } catch {
             guard generation == tenantGeneration else { return }
-            approvalsLoadState = .failed(message: error.localizedDescription, needsLogin: (error as? AzureCLIError)?.needsLogin ?? false)
+            approvalsLoadState = .failed(message: error.localizedDescription, needsLogin: Self.needsLogin(error))
         }
     }
 
@@ -698,12 +774,10 @@ final class AppModel {
             loadPolicies(retryFailures: true)
             Task { await loadScheduled() }
             Task { await loadApprovals() }
-        } catch let error as AzureCLIError {
-            guard generation == tenantGeneration else { return }
-            loadState = .failed(message: error.localizedDescription, needsLogin: error.needsLogin)
         } catch {
             guard generation == tenantGeneration else { return }
-            loadState = .failed(message: error.localizedDescription, needsLogin: false)
+            if let claims = (error as? SignInError)?.claims { authSettings.claimsChallenge = claims }
+            loadState = .failed(message: error.localizedDescription, needsLogin: Self.needsLogin(error))
         }
     }
 
@@ -744,9 +818,14 @@ final class AppModel {
         guard !isLoadingTenants else { return }
         isLoadingTenants = true
         defer { isLoadingTenants = false }
-        if let tenants = try? await TenantDirectory.load(preferredTenant: tenant.tenantId), !tenants.isEmpty {
-            knownTenants = tenants
+        let loaded: [TenantInfo]?
+        switch authSource {
+        case .az: loaded = try? await TenantDirectory.load(preferredTenant: tenant.tenantId)
+        case .pimento:
+            // ARM's /tenants lists every tenant of the signed-in account.
+            loaded = (try? await TenantDirectory.fetchARM(tokens: tokens(tenantId: tenant.tenantId))).map(TenantDirectory.sorted)
         }
+        if let tenants = loaded, !tenants.isEmpty { knownTenants = tenants }
     }
 
     func setHidden(_ tenant: TenantInfo, _ hidden: Bool) {
@@ -782,7 +861,13 @@ final class AppModel {
             UserDefaults.standard.removeObject(forKey: Keys.tenant)
             tenant = TenantSelection(tenantId: nil, source: .azDefault)
         }
-        service = PIMService(tokens: AzureCLITokenProvider(tenantId: tenant.tenantId), history: historyRecorder)
+        restartSession()
+    }
+
+    /// A new service for the current tenant and auth source; forgets everything
+    /// loaded with the previous one and reloads.
+    func restartSession() {
+        service = PIMService(tokens: tokens(tenantId: tenant.tenantId), history: historyRecorder)
         tenantGeneration += 1
         roles = []
         identity = nil
@@ -949,6 +1034,7 @@ final class AppModel {
                 break
             }
         }
+        noteClaimsChallenge(in: outcomes)
         // Back to "now" once everything was scheduled, so the next batch is not scheduled by accident.
         if scheduling, failed == 0 { scheduleStart = nil }
         isActivating = false
@@ -1510,7 +1596,7 @@ final class AppModel {
             historyMessage = Banner(kind: .success, text: text + ".")
             reloadHistory()
         } catch {
-            historyImportState = .failed(message: error.localizedDescription, needsLogin: (error as? AzureCLIError)?.needsLogin ?? false)
+            historyImportState = .failed(message: error.localizedDescription, needsLogin: Self.needsLogin(error))
             historyMessage = Banner(kind: .error, text: "Import from Azure failed: \(error.localizedDescription)")
         }
     }
