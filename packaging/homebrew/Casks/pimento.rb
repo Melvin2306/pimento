@@ -1,27 +1,43 @@
-# Template for a Homebrew tap, NOT published yet (future work, once the
-# repository is public). For each release: set `version`, and `sha256` from the
-# release's SHA256SUMS.txt (line for Pimento-<version>.zip).
+# Template for the tap Melvin2306/homebrew-pimento (not published yet).
+# scripts/update-homebrew.sh VERSION fills in the version and the sha256 of
+# Pimento-<version>.zip and writes the result to build/homebrew/Casks/pimento.rb.
 cask "pimento" do
   version "0.0.0"
   sha256 "0000000000000000000000000000000000000000000000000000000000000000"
 
-  url "https://github.com/melvin2306/pimento/releases/download/v#{version}/Pimento-#{version}.zip"
+  url "https://github.com/Melvin2306/pimento/releases/download/v#{version}/Pimento-#{version}.zip"
   name "Pimento"
-  desc "Bulk-activate your Azure PIM roles from a native Mac app"
-  homepage "https://github.com/melvin2306/pimento"
+  desc "Bulk-activate Azure PIM role assignments"
+  homepage "https://github.com/Melvin2306/pimento"
 
-  depends_on macos: ">= :sonoma"
-  # The app contains the CLI; don't install both.
+  livecheck do
+    url :url
+    strategy :github_latest
+  end
+
+  # The app contains the CLI: install one or the other.
   conflicts_with formula: "pimento"
+  depends_on macos: :sonoma
 
   app "Pimento.app"
   binary "#{appdir}/Pimento.app/Contents/Helpers/pimento"
 
-  zap trash: "~/Library/Preferences/io.github.melvin2306.pimento.plist"
+  zap trash: [
+    "~/.config/pimento",
+    "~/Library/Application Support/Pimento",
+    "~/Library/Preferences/io.github.melvin2306.pimento.plist",
+    "~/Library/Saved Application State/io.github.melvin2306.pimento.savedState",
+  ]
 
   caveats <<~EOS
     Pimento is ad-hoc signed, not notarized. If macOS refuses to open it:
       xattr -dr com.apple.quarantine "#{appdir}/Pimento.app"
-    It uses your Azure CLI session: brew install azure-cli && az login
+
+    It signs in with your Azure CLI session (brew install azure-cli && az login),
+    or with its own sign-in (Settings › Account).
+
+    `brew uninstall --zap` does not remove Pimento sign-in's refresh tokens from
+    the Keychain. Sign out first (Settings › Account, or `pimento logout --all`),
+    or delete the items of service io.github.melvin2306.pimento in Keychain Access.
   EOS
 end
