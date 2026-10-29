@@ -1,0 +1,37 @@
+.github/workflows/ci.yml
+  s_4884204a812fec::t_877d835ecaeebf 126-132
+.github/workflows/release.yml
+  s_4884204a812fec::t_0835291a1654ec 73
+CHANGELOG.md
+  s_4884204a812fec::t_ae25134bc8d913 219-220
+Sources/PimentoCore/HistoryStore.swift
+  s_4884204a812fec::t_219d166c3d99a0 91-93
+scripts/package-cli.sh
+  s_4884204a812fec::t_6af1ac0ac010c8 6,8-10,45,50-54,74-86,117-118
+README.md
+  s_293161a7e16f84::t_f9196cfc628f40 110,162-164
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "96deda8e51f97780170aada311b9abce7ba9b442",
+  "prompts": {},
+  "sessions": {
+    "s_293161a7e16f84": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a9cfb3aa90d97f2aa",
+        "model": "unknown"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    },
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
