@@ -33,7 +33,7 @@ extension CLIRunner {
             }
         }
         let wasSource = settings.source
-        try? env.signIn.settings?.update {
+        _ = try? env.signIn.settings?.update {
             $0.source = .pimento
             $0.clientId = clientId
             $0.accountId = account.id
