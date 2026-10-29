@@ -392,7 +392,7 @@ struct RoleTable: View {
             .customizationID(AppModel.Column.condition.rawValue)
 
             TableColumn("Duration") { role in
-                DurationCell(role: role, checked: model.isChecked(role))
+                DurationCell(model: model, role: role, checked: model.isChecked(role))
                     .themedCell(checked: model.isChecked(role))
             }
             .width(min: 100, ideal: 130)
@@ -547,8 +547,14 @@ struct StatusCell: View {
 
 /// The policy maximum of a role, and for checked rows the duration it will
 /// be requested for: `8 h (max 8 h)`, orange when capped.
+///
+/// Takes the model as a value: a table cell must not read `AppModel` from the
+/// environment. When filtering removes rows, SwiftUI can update a cell that
+/// has already left the table, without the window's environment, and
+/// `@Environment(AppModel.self)` then traps ("No Observable object of type
+/// AppModel found").
 struct DurationCell: View {
-    @Environment(AppModel.self) private var model
+    let model: AppModel
     @Environment(\.appTheme) private var theme
     @Environment(\.colorScheme) private var scheme
     let role: EligibleRole
