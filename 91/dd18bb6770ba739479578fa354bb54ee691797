@@ -1,0 +1,37 @@
+scripts/update-homebrew.sh
+  s_4884204a812fec::t_15b2240b574ff6 1-116
+packaging/homebrew/README.md
+  s_4884204a812fec::t_93d8657260fd59 1-87
+.github/workflows/release.yml
+  s_4884204a812fec::t_ca481ea3b0f942 11-12,31-92,96-97,101,104-107,109,113,115-118,120-122,128
+CHANGELOG.md
+  s_4884204a812fec::t_1ad5814afde2d0 215-233,265-266
+README.md
+  s_4884204a812fec::t_991be7bf816081 15,93-95,98-99,109-110,112-114,141-163,173-179,195-197,361-362,364-365,552,555-556,873-890,969-970,1031-1035,1075-1079,1095,1105-1106,1108
+Tests/PimentoCoreTests/CLIRunnerTests.swift
+  s_4884204a812fec::t_e333fc4a612d52 556-558
+Tests/PimentoCoreTests/HistoryTests.swift
+  s_4884204a812fec::t_072410cc9842ac 251-256
+packaging/homebrew/Casks/pimento.rb
+  s_4884204a812fec::t_9e8a7f8600c1af 1-3,8,10-11,13-18,20,25-30,35-41
+packaging/homebrew/Formula/pimento.rb
+  s_4884204a812fec::t_2ba454a593496f 1-3,5-6,9-21,23-25,30,36-37,42-43
+scripts/package-cli.sh
+  s_4884204a812fec::t_05156d0eaf6b40 61-63
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "91dd18bb6770ba739479578fa354bb54ee691797",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
