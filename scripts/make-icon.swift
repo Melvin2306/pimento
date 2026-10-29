@@ -5,7 +5,8 @@
 //
 //   swift scripts/make-icon.swift
 //
-// Output: Assets/AppIcon.iconset/*.png and Assets/AppIcon.icns
+// Output: Assets/AppIcon.iconset/*.png and Assets/AppIcon.icns, plus the menu
+// bar glyph Assets/MenuBarIcon.png and MenuBarIcon@2x.png (18 pt).
 //
 // Design: a Big Sur-style squircle with a warm pimento-red gradient, a white
 // shield with an upward arrow cut out of it (elevated privilege), inside a
@@ -194,13 +195,33 @@ func drawIcon(in ctx: CGContext, pixels: Int) {
     ctx.restoreGState()
 }
 
-func render(pixels: Int) -> CGImage {
+/// The menu bar glyph: the same shield and arrow, black on transparent (macOS
+/// tints template images for the menu bar), the arrow cut out. No squircle and
+/// no ring: at 18 pt only the silhouette reads.
+func drawMenuBarGlyph(in ctx: CGContext, pixels: Int) {
+    ctx.scaleBy(x: CGFloat(pixels) / 1024, y: CGFloat(pixels) / 1024)
+    let center = CGPoint(x: 512, y: 500)
+    let shieldPath = shield(center: center, width: 760, height: 900)
+    ctx.addPath(shieldPath)
+    ctx.setFillColor(rgb(0x000000))
+    ctx.fillPath()
+    ctx.addPath(shieldPath)
+    ctx.setLineJoin(.round)
+    ctx.setLineWidth(40)
+    ctx.setStrokeColor(rgb(0x000000))
+    ctx.strokePath()
+    ctx.setBlendMode(.clear)
+    ctx.addPath(upArrow(center: CGPoint(x: center.x, y: center.y + 40), width: 470, height: 540, stem: 170))
+    ctx.fillPath()
+}
+
+func render(pixels: Int, draw: (CGContext, Int) -> Void = { drawIcon(in: $0, pixels: $1) }) -> CGImage {
     let ctx = CGContext(
         data: nil, width: pixels, height: pixels, bitsPerComponent: 8, bytesPerRow: 0,
         space: colorSpace, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
     ctx.interpolationQuality = .high
     ctx.setShouldAntialias(true)
-    drawIcon(in: ctx, pixels: pixels)
+    draw(ctx, pixels)
     return ctx.makeImage()!
 }
 
@@ -233,4 +254,8 @@ iconutil.arguments = ["-c", "icns", iconset.path, "-o", assets.appendingPathComp
 try iconutil.run()
 iconutil.waitUntilExit()
 guard iconutil.terminationStatus == 0 else { fatalError("iconutil failed") }
-print("Wrote \(iconset.path) and AppIcon.icns")
+
+for (name, pixels) in [("MenuBarIcon.png", 18), ("MenuBarIcon@2x.png", 36)] {
+    try writePNG(render(pixels: pixels) { drawMenuBarGlyph(in: $0, pixels: $1) }, to: assets.appendingPathComponent(name))
+}
+print("Wrote \(iconset.path), AppIcon.icns and MenuBarIcon.png")

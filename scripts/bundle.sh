@@ -18,7 +18,7 @@ BUILD_NUMBER="$(git rev-list --count HEAD 2>/dev/null || echo 1)"
 APP="build/${APP_NAME}.app"
 
 [[ -n "$VERSION" ]] || { echo "could not read the version from AppInfo.swift" >&2; exit 1; }
-[[ -f Assets/AppIcon.icns ]] || { echo "Assets/AppIcon.icns missing; run: swift scripts/make-icon.swift" >&2; exit 1; }
+[[ -f Assets/AppIcon.icns && -f Assets/MenuBarIcon.png ]] || { echo "Assets/AppIcon.icns or MenuBarIcon.png missing; run: swift scripts/make-icon.swift" >&2; exit 1; }
 
 swift build -c release --product "$APP_PRODUCT"
 swift build -c release --product "$CLI_PRODUCT"
@@ -29,6 +29,8 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Helpers" "$APP/Contents/Resources"
 cp "$BIN_DIR/$APP_PRODUCT" "$APP/Contents/MacOS/$EXECUTABLE"
 cp "$BIN_DIR/$CLI_PRODUCT" "$APP/Contents/Helpers/$CLI_PRODUCT"
 cp Assets/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+# The menu bar glyph (template image), from scripts/make-icon.swift.
+cp Assets/MenuBarIcon.png Assets/MenuBarIcon@2x.png "$APP/Contents/Resources/"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
