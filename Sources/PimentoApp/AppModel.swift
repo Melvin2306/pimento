@@ -156,8 +156,12 @@ final class AppModel {
         didSet { preferencesChanged(from: oldValue) }
     }
     /// The appearance that applies now (`prefs.resolvedAppearance`), for
-    /// `AppAppearance` and the themed views. Updated with `prefs`.
+    /// `AppAppearance` and the themed views. Updated with `prefs` and, in
+    /// the time-of-day mode, at each boundary of the schedule.
     private(set) var appearance: ResolvedAppearance = .system
+    /// Fires at the schedule's next boundary (time-of-day mode only).
+    @ObservationIgnored private var appearanceTimer: Timer?
+    @ObservationIgnored private var clockObservers: [(NotificationCenter, NSObjectProtocol)] = []
     /// Most recent first; kept only while `prefs.rememberJustifications` is on.
     private(set) var recentJustifications: [String] = []
     var columnCustomization = TableColumnCustomization<EligibleRole>() {
@@ -259,6 +263,8 @@ final class AppModel {
         historySettings = historyStore.loadSettings()
         service = PIMService(tokens: AzureCLITokenProvider(tenantId: selection.tenantId), history: recorder)
         restartAutoRefresh()
+        observeClockChanges()
+        scheduleAppearanceChange(after: Date())
         reloadPresets()
         // Old records go once per launch (the CLI and later writes prune too).
         let store = historyStore, retention = historySettings.retention
@@ -1621,12 +1627,48 @@ final class AppModel {
         }
     }
 
-    /// Applies `prefs.resolvedAppearance()` if it changed.
+    /// Applies `prefs.resolvedAppearance()` if it changed, and arms the
+    /// timer for the next change of the time-of-day schedule.
     func updateAppearance() {
-        let now = prefs.resolvedAppearance()
-        guard now != appearance else { return }
-        appearance = now
-        AppAppearance.apply(now)
+        let date = Date()
+        let resolved = prefs.resolvedAppearance(at: date)
+        if resolved != appearance {
+            appearance = resolved
+            AppAppearance.apply(resolved)
+        }
+        scheduleAppearanceChange(after: date)
+    }
+
+    /// One timer for the next boundary, none outside the time-of-day mode.
+    /// Timers do not count time asleep and ignore clock changes, hence
+    /// `observeClockChanges`. A timer firing a little early re-arms for the
+    /// same boundary.
+    private func scheduleAppearanceChange(after date: Date) {
+        appearanceTimer?.invalidate()
+        appearanceTimer = nil
+        guard let next = prefs.nextAppearanceChange(after: date) else { return }
+        let timer = Timer(fire: next, interval: 0, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated { self?.updateAppearance() }
+        }
+        timer.tolerance = 1
+        RunLoop.main.add(timer, forMode: .common)
+        appearanceTimer = timer
+    }
+
+    /// Re-checks the appearance after sleep, a clock change and a time-zone
+    /// change: the schedule is in local wall-clock time.
+    private func observeClockChanges() {
+        let workspace = NSWorkspace.shared.notificationCenter, center = NotificationCenter.default
+        let names: [(NotificationCenter, Notification.Name)] = [
+            (workspace, NSWorkspace.didWakeNotification),
+            (center, .NSSystemClockDidChange),
+            (center, .NSSystemTimeZoneDidChange),
+        ]
+        clockObservers = names.map { center, name in
+            (center, center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.updateAppearance() }
+            })
+        }
     }
 
     /// Back to the defaults. Hidden tenants and the remembered tenant stay.

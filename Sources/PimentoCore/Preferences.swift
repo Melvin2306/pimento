@@ -45,6 +45,8 @@ public enum AppearanceMode: String, Codable, CaseIterable, Sendable {
     case dark
     /// Dark with pure black backgrounds, for OLED screens and dark rooms.
     case ultraDark
+    /// Light, dark or ultra dark by the clock (`Preferences.appearanceSchedule`).
+    case timeOfDay
 
     public var title: String {
         switch self {
@@ -52,6 +54,7 @@ public enum AppearanceMode: String, Codable, CaseIterable, Sendable {
         case .light: "Light"
         case .dark: "Dark"
         case .ultraDark: "Ultra dark"
+        case .timeOfDay: "By time of day"
         }
     }
 
@@ -126,6 +129,8 @@ public struct Preferences: Equatable, Sendable {
     /// Light, dark or the system's. The stored choice is kept while a
     /// light-only theme is selected; `effectiveAppearance` is what applies.
     public var appearanceMode: AppearanceMode = .system
+    /// When light, dark and ultra dark apply in `.timeOfDay` mode.
+    public var appearanceSchedule = AppearanceSchedule()
 
     public static let reminderLeadOptions = [5, 10, 15, 30]
     public static let autoRefreshOptions = [0, 1, 5, 15]
@@ -150,7 +155,14 @@ public struct Preferences: Equatable, Sendable {
         case .light: .light
         case .dark: .dark
         case .ultraDark: .ultraDark
+        case .timeOfDay: appearanceSchedule.mode(at: date, calendar: calendar)
         }
+    }
+
+    /// When `resolvedAppearance` changes next on its own: the schedule's next
+    /// boundary in `.timeOfDay` mode, nil otherwise (and for light-only themes).
+    public func nextAppearanceChange(after date: Date, calendar: Calendar = .autoupdatingCurrent) -> Date? {
+        effectiveAppearance == .timeOfDay ? appearanceSchedule.nextBoundary(after: date, calendar: calendar) : nil
     }
 
     /// Clamps numbers into range and snaps choices to the offered options.
@@ -205,12 +217,13 @@ public struct Preferences: Equatable, Sendable {
         static let autoRefreshMinutes = "general.autoRefreshMinutes"
         static let theme = "general.theme"
         static let appearanceMode = "general.appearanceMode"
+        static let appearanceSchedule = "general.appearanceSchedule"
 
         static let all = [
             notifyOnCompletion, notifyOnlyOnFailure, playSound, expiryReminders, reminderLeadMinutes, notifyScheduledStart,
             notifyApprovalDecisions, notifyNewApprovals,
             defaultHours, rememberJustifications, prefillLastJustification, confirmOwnerRoles, maxParallelRequests,
-            launchTenant, refreshOnLaunch, autoRefreshMinutes, theme, appearanceMode,
+            launchTenant, refreshOnLaunch, autoRefreshMinutes, theme, appearanceMode, appearanceSchedule,
         ]
     }
 
@@ -241,6 +254,7 @@ public struct Preferences: Equatable, Sendable {
         int(Key.autoRefreshMinutes, &p.autoRefreshMinutes)
         p.theme = AppTheme(storedValue: store.object(forKey: Key.theme) as? String)
         p.appearanceMode = AppearanceMode(storedValue: store.object(forKey: Key.appearanceMode) as? String)
+        p.appearanceSchedule = AppearanceSchedule(storedValue: store.object(forKey: Key.appearanceSchedule))
         return p.validated()
     }
 
@@ -269,6 +283,7 @@ public struct Preferences: Equatable, Sendable {
         store.set(p.autoRefreshMinutes, forKey: Key.autoRefreshMinutes)
         store.set(p.theme.rawValue, forKey: Key.theme)
         store.set(p.appearanceMode.rawValue, forKey: Key.appearanceMode)
+        store.set(p.appearanceSchedule.storedValue, forKey: Key.appearanceSchedule)
     }
 
     /// Removes every stored setting, so the defaults apply again.

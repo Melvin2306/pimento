@@ -72,13 +72,17 @@ private struct GeneralSettings: View {
                     }
                 }
                 Picker("Mode", selection: appearanceMode) {
-                    ForEach(AppearanceMode.allCases, id: \.self) { mode in
+                    ForEach(AppearanceMode.allCases.filter { $0 != .timeOfDay }, id: \.self) { mode in
                         Text(mode.title).tag(mode)
                     }
+                    Divider()
+                    Text(AppearanceMode.timeOfDay.title).tag(AppearanceMode.timeOfDay)
                 }
-                .pickerStyle(.segmented)
                 .disabled(!model.prefs.theme.supportsDarkMode)
-                .help("Light, dark, ultra dark (pure black), or follow the system's appearance")
+                .help("Light, dark, ultra dark (pure black), by time of day, or follow the system's appearance")
+                if model.prefs.effectiveAppearance == .timeOfDay {
+                    TimeOfDayFields()
+                }
                 if !model.prefs.theme.supportsDarkMode {
                     Text(lightOnlyCaption)
                         .font(.caption).foregroundStyle(.secondary)
@@ -131,6 +135,9 @@ private struct GeneralSettings: View {
     private var lightOnlyCaption: String {
         let mode = model.prefs.appearanceMode
         guard mode != .light, mode != .system else { return "Windows XP-style is light-only." }
+        if mode == .timeOfDay {
+            return "Windows XP-style is light-only, also by time of day. The schedule applies again with another theme."
+        }
         return "Windows XP-style is light-only. \(mode.title) applies again with another theme."
     }
 
@@ -169,6 +176,80 @@ private struct GeneralSettings: View {
                 default: .specific(value)
                 }
             })
+    }
+}
+
+/// Settings › General › Appearance, by time of day: when light, dark and
+/// ultra dark start, and what applies now. The rules are on `AppearanceSchedule`.
+private struct TimeOfDayFields: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        timePicker("Light from", \.lightFrom)
+        timePicker("Dark from", \.darkFrom)
+        LabeledContent {
+            DatePicker("Ultra dark from", selection: time(\.ultraDarkFrom), displayedComponents: .hourAndMinute)
+                .labelsHidden()
+                .disabled(!model.prefs.appearanceSchedule.ultraDarkEnabled)
+        } label: {
+            Toggle("Ultra dark from", isOn: Binding(
+                get: { model.prefs.appearanceSchedule.ultraDarkEnabled },
+                set: { model.prefs.appearanceSchedule.ultraDarkEnabled = $0 }))
+                .toggleStyle(.checkbox)
+        }
+        VStack(alignment: .leading, spacing: 2) {
+            Text(nowText)
+            if let note {
+                Text(note).font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func timePicker(_ title: String, _ keyPath: WritableKeyPath<AppearanceSchedule, ClockTime>) -> some View {
+        DatePicker(title, selection: time(keyPath), displayedComponents: .hourAndMinute)
+    }
+
+    /// A clock time as today's date at that time, for `DatePicker`.
+    private func time(_ keyPath: WritableKeyPath<AppearanceSchedule, ClockTime>) -> Binding<Date> {
+        Binding(
+            get: {
+                let t = model.prefs.appearanceSchedule[keyPath: keyPath]
+                return Calendar.current.date(bySettingHour: t.hour, minute: t.minute, second: 0, of: Date()) ?? Date()
+            },
+            set: { date in
+                let parts = Calendar.current.dateComponents([.hour, .minute], from: date)
+                model.prefs.appearanceSchedule[keyPath: keyPath] = ClockTime(hour: parts.hour ?? 0, minute: parts.minute ?? 0)
+            })
+    }
+
+    /// Two-digit hours like the time fields: `07:00` (or `07:00 AM`).
+    private static let timeStyle = Date.FormatStyle().hour(.twoDigits(amPM: .abbreviated)).minute(.twoDigits)
+
+    private static func label(_ time: ClockTime) -> String {
+        let date = Calendar.current.date(bySettingHour: time.hour, minute: time.minute, second: 0, of: Date()) ?? Date()
+        return date.formatted(timeStyle)
+    }
+
+    /// "Now: Dark until 23:00". Reads `model.appearance`, which changes at
+    /// each boundary, so the text follows the clock.
+    private var nowText: String {
+        _ = model.appearance
+        let status = model.prefs.appearanceSchedule.status(at: Date(), calendar: .autoupdatingCurrent)
+        guard let until = status.until else { return "Now: \(status.mode.title), all day" }
+        return "Now: \(status.mode.title) until \(until.formatted(Self.timeStyle))"
+    }
+
+    private var note: String? {
+        let schedule = model.prefs.appearanceSchedule
+        switch schedule.adjustment {
+        case .noLightPeriod?:
+            return "Light and Dark start at the same time, so it is dark all day."
+        case .ultraDarkStartsWithDark?:
+            return "Ultra dark cannot start while it is light, so it starts with Dark at \(Self.label(schedule.darkFrom))."
+        case nil:
+            return nil
+        }
     }
 }
 

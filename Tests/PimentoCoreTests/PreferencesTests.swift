@@ -133,7 +133,7 @@ struct PreferencesTests {
             #expect(store.values["general.appearanceMode"] as? String == mode.rawValue)
             #expect(Preferences.load(from: store).appearanceMode == mode)
         }
-        #expect(AppearanceMode.allCases.map(\.title) == ["System", "Light", "Dark", "Ultra dark"])
+        #expect(AppearanceMode.allCases.map(\.title) == ["System", "Light", "Dark", "Ultra dark", "By time of day"])
         #expect(AppearanceMode(storedValue: "ultraDark") == .ultraDark)
     }
 
