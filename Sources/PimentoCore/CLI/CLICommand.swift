@@ -37,6 +37,12 @@ public struct RoleCriteria: Equatable, Sendable {
 
     public func apply(_ roles: [EligibleRole]) -> [EligibleRole] { roles.filter(matches) }
 
+    /// Filters and `--role` for an admin-assigned assignment (always active).
+    public func matches(_ assignment: ActiveAssignment) -> Bool {
+        if state == .eligible { return false }
+        return matches(assignment.asRole)
+    }
+
     static func filter(_ filter: String, matches role: EligibleRole) -> Bool {
         if filter.hasPrefix("/") {
             let wanted = RoleMatcher.key(scope: filter, roleDefinitionId: "").scope
@@ -90,6 +96,37 @@ public struct ActivateOptions: Equatable, Sendable {
     public var assumeYes = false
     public var dryRun = false
     public var maxParallel = 8
+    public init() {}
+}
+
+/// `pimento deactivate` and `pimento renew`: act on active roles.
+public struct LifecycleOptions: Equatable, Sendable {
+    public var tenant: String?
+    public var json = false
+    public var criteria = RoleCriteria(state: .active)
+    /// Every active role (filters and `--role` still narrow it).
+    public var all = false
+    public var preset: String?
+    /// Deactivate: optional (a default is sent). Renew: required unless the preset has one.
+    public var justification = ""
+    /// Renew only: nil = the preset's duration, else the default (8 hours).
+    public var duration: RequestedDuration?
+    public var assumeYes = false
+    public var dryRun = false
+    public var maxParallel = 8
+    public init() {}
+}
+
+/// `pimento extend`: ask an administrator to extend time-bound assignments.
+public struct ExtendOptions: Equatable, Sendable {
+    public var tenant: String?
+    public var json = false
+    public var criteria = RoleCriteria(state: .active)
+    public var all = false
+    public var justification = ""
+    public var days = ExtendOptionsRange.defaultDays
+    public var assumeYes = false
+    public var dryRun = false
     public init() {}
 }
 
@@ -153,12 +190,15 @@ public enum CLICommand: Equatable, Sendable {
     case version
     case list(ListOptions)
     case activate(ActivateOptions)
+    case deactivate(LifecycleOptions)
+    case renew(LifecycleOptions)
+    case extend(ExtendOptions)
     case status(StatusOptions)
     case tenants(TenantsOptions)
     case presets(PresetsCommand)
     case completions(CompletionShell)
 
-    public static let names = ["list", "activate", "status", "tenants", "presets", "completions", "version", "help"]
+    public static let names = ["list", "activate", "deactivate", "renew", "extend", "status", "tenants", "presets", "completions", "version", "help"]
 }
 
 /// A parsed command line, plus a note when it used a deprecated spelling.
@@ -186,7 +226,9 @@ public enum CLIParseError: Error, Equatable, LocalizedError {
     case outOfRange(flag: String, value: Int, range: ClosedRange<Int>)
     case conflicting(String, String)
     case missingJustification
+    case missingJustificationFor(String)
     case noSelection
+    case noActiveSelection(String)
     case missingShell
     case unknownShell(String)
 
@@ -207,6 +249,9 @@ public enum CLIParseError: Error, Equatable, LocalizedError {
             "\(flag) must be between \(range.lowerBound) and \(range.upperBound), got \(value)."
         case .conflicting(let a, let b): "Use either \(a) or \(b), not both."
         case .missingJustification: "activate needs a justification: -j \"TEXT\"."
+        case .missingJustificationFor(let c): "\(c) needs a justification: -j \"TEXT\"."
+        case .noActiveSelection(let c):
+            "Say which active roles to \(c): resource filters, --role NAME\(c == "extend" ? "" : ", --preset NAME"), or --all."
         case .noSelection:
             "Say which roles to activate: resource filters, --role NAME, --preset NAME, or --all for every eligible role."
         case .missingShell: "Name a shell: pimento completions zsh|bash|fish."
@@ -244,6 +289,33 @@ public enum CLIParser {
         "--preset": Flag(key: "preset", takesValue: true),
     ]) { a, _ in a }
 
+    private static let deactivateFlags = tenant.merging(json) { a, _ in a }.merging([
+        "--role": Flag(key: "role", takesValue: true),
+        "--all": Flag(key: "all", takesValue: false),
+        "--justification": Flag(key: "justification", takesValue: true),
+        "-j": Flag(key: "justification", takesValue: true),
+        "--yes": Flag(key: "yes", takesValue: false),
+        "-y": Flag(key: "yes", takesValue: false),
+        "--dry-run": Flag(key: "dry-run", takesValue: false),
+        "--max-parallel": Flag(key: "max-parallel", takesValue: true),
+        "--preset": Flag(key: "preset", takesValue: true),
+    ]) { a, _ in a }
+
+    private static let renewFlags = deactivateFlags.merging([
+        "--hours": Flag(key: "hours", takesValue: true),
+    ]) { a, _ in a }
+
+    private static let extendFlags = tenant.merging(json) { a, _ in a }.merging([
+        "--role": Flag(key: "role", takesValue: true),
+        "--all": Flag(key: "all", takesValue: false),
+        "--justification": Flag(key: "justification", takesValue: true),
+        "-j": Flag(key: "justification", takesValue: true),
+        "--days": Flag(key: "days", takesValue: true),
+        "--yes": Flag(key: "yes", takesValue: false),
+        "-y": Flag(key: "yes", takesValue: false),
+        "--dry-run": Flag(key: "dry-run", takesValue: false),
+    ]) { a, _ in a }
+
     private static let presetSaveFlags = tenant.merging(json) { a, _ in a }.merging([
         "--role": Flag(key: "role", takesValue: true),
         "--exact": Flag(key: "exact", takesValue: false),
@@ -273,6 +345,8 @@ public enum CLIParser {
             return CLIInvocation(.version)
         case "list": return try CLIInvocation(parseList(rest))
         case "activate": return try CLIInvocation(parseActivate(rest))
+        case "deactivate", "renew": return try CLIInvocation(parseLifecycle(rest, command: first))
+        case "extend": return try CLIInvocation(parseExtend(rest))
         case "status":
             let scan = try scan(rest, command: first, flags: plainFlags, positionals: false)
             if scan.help { return CLIInvocation(.help(topic: first)) }
@@ -342,6 +416,55 @@ public enum CLIParser {
         guard o.criteria.hasSelection || o.all else { throw CLIParseError.noSelection }
         guard !o.justification.isEmpty else { throw CLIParseError.missingJustification }
         return .activate(o)
+    }
+
+    /// `deactivate` / `renew`: selection among active roles.
+    static func parseLifecycle(_ args: [String], command: String) throws -> CLICommand {
+        let renew = command == "renew"
+        let scan = try scan(args, command: command, flags: renew ? renewFlags : deactivateFlags, positionals: true)
+        if scan.help { return .help(topic: command) }
+        var o = LifecycleOptions()
+        o.tenant = scan.values["tenant"]?.last
+        o.json = scan.values["json"] != nil
+        o.criteria.filters = scan.positionals
+        o.criteria.roles = scan.values["role"] ?? []
+        o.all = scan.values["all"] != nil
+        o.assumeYes = scan.values["yes"] != nil
+        o.dryRun = scan.values["dry-run"] != nil
+        o.preset = scan.values["preset"]?.last?.trimmingCharacters(in: .whitespaces)
+        o.justification = (scan.values["justification"]?.last ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if let raw = scan.values["hours"]?.last { o.duration = try hours(raw) }
+        if let raw = scan.values["max-parallel"]?.last {
+            o.maxParallel = try number(raw, flag: "--max-parallel", range: ActivateOptions.maxParallelRange)
+        }
+        if o.preset != nil {
+            if o.criteria.hasSelection || o.all { throw CLIParseError.conflicting("--preset", "filters, --role or --all") }
+            return renew ? .renew(o) : .deactivate(o)
+        }
+        guard o.criteria.hasSelection || o.all else { throw CLIParseError.noActiveSelection(command) }
+        if renew {
+            guard !o.justification.isEmpty else { throw CLIParseError.missingJustificationFor(command) }
+            return .renew(o)
+        }
+        return .deactivate(o)
+    }
+
+    static func parseExtend(_ args: [String]) throws -> CLICommand {
+        let scan = try scan(args, command: "extend", flags: extendFlags, positionals: true)
+        if scan.help { return .help(topic: "extend") }
+        var o = ExtendOptions()
+        o.tenant = scan.values["tenant"]?.last
+        o.json = scan.values["json"] != nil
+        o.criteria.filters = scan.positionals
+        o.criteria.roles = scan.values["role"] ?? []
+        o.all = scan.values["all"] != nil
+        o.assumeYes = scan.values["yes"] != nil
+        o.dryRun = scan.values["dry-run"] != nil
+        o.justification = (scan.values["justification"]?.last ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if let raw = scan.values["days"]?.last { o.days = try number(raw, flag: "--days", range: ExtendOptionsRange.days) }
+        guard o.criteria.hasSelection || o.all else { throw CLIParseError.noActiveSelection("extend") }
+        guard !o.justification.isEmpty else { throw CLIParseError.missingJustificationFor("extend") }
+        return .extend(o)
     }
 
     /// `--hours N` (1-24) or `--hours max`.

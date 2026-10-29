@@ -45,11 +45,17 @@ public enum CLIExit: Int32, Sendable {
     }
 }
 
-/// Thrown when `activate` would have to ask, but stdin is not a terminal.
+/// Thrown when a command that changes roles would have to ask, but stdin is
+/// not a terminal.
 public struct ConfirmationRequired: Error, LocalizedError, Equatable {
+    /// `activate`, `deactivate`, `renew` or `extend`.
+    public var command = "activate"
+
+    public init(command: String = "activate") { self.command = command }
+
     public var errorDescription: String? {
-        "Refusing to activate without confirmation: stdin is not a terminal. "
-            + "Add --yes to activate non-interactively, or --dry-run to only print the requests."
+        "Refusing to \(command) without confirmation: stdin is not a terminal. "
+            + "Add --yes to \(command) non-interactively, or --dry-run to only print the requests."
     }
 }
 
