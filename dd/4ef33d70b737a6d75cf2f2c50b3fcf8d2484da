@@ -1,0 +1,62 @@
+Sources/PimentoCore/CLI/CLIRunner.swift
+  s_4884204a812fec::t_ba445b4de763c6 1-29,31-273,276-399
+  s_4884204a812fec::t_ddfc5eb3d1bc0a 30,274-275
+Sources/PimentoCore/LaunchArguments.swift
+  s_4884204a812fec::t_2dcd22082c3c82 1-28
+Sources/PimentoCore/CLI/CLIHelp.swift
+  s_4884204a812fec::t_2f196fbe8df154 1-253
+Tests/PimentoCoreTests/TenantTests.swift
+  s_4884204a812fec::t_62dcc7c24579fc 1-164
+Tests/PimentoCoreTests/CLIParserTests.swift
+  s_4884204a812fec::t_bdde727552bdfe 112
+  s_4884204a812fec::t_24b64c3b59b7d4 1-111,113-226
+Package.swift
+  s_4884204a812fec::t_5307b2cee35fbd 8-14,17,19
+Tests/PimentoCoreTests/CLIRunnerTests.swift
+  s_4884204a812fec::t_9448f869494354 1-152,154-393,395-416
+  s_4884204a812fec::t_bdde727552bdfe 153,394
+Sources/PimentoCore/PIMService.swift
+  s_4884204a812fec::t_004d4e8a5b7991 2-4
+Sources/pimento/main.swift
+  s_4884204a812fec::t_5307b2cee35fbd 1-46
+Sources/PimentoApp/AppModel.swift
+  s_4884204a812fec::t_4b406cf9247fc7 102
+scripts/bundle.sh
+  s_4884204a812fec::t_0350cef8a70782 60-61
+  s_4884204a812fec::t_f00babe3566b3c 2-4,12-14,23-25,28-30,58-59,62-63
+Sources/PimentoApp/main.swift
+  s_4884204a812fec::t_4b406cf9247fc7 6-12,14
+.github/workflows/ci.yml
+  s_4884204a812fec::t_f00babe3566b3c 27,36-40
+Sources/PimentoApp/CommandLineTool.swift
+  s_4884204a812fec::t_d5fb9d5dfc3db1 1-4,6-12,14-18,20-34
+  s_4884204a812fec::t_e2905edb55a705 5,13,19
+Sources/PimentoCore/ActivationOutcome.swift
+  s_4884204a812fec::t_004d4e8a5b7991 2-4
+  s_4884204a812fec::t_243b6b344b6f6d 22-33,38,53-54,73
+Sources/PimentoCore/CLI/CLICommand.swift
+  s_4884204a812fec::t_c65128a065db11 134,150,211,236,284-287
+  s_4884204a812fec::t_a90157a5b8fb62 1-133,135-149,151-210,212-235,237-283,288-372
+Sources/PimentoCore/CLI/CLIOutput.swift
+  s_4884204a812fec::t_3b3617e3c30a39 1-303
+Sources/PimentoCore/CLI/CLIPolicy.swift
+  s_4884204a812fec::t_9fbe41c8a1332b 1-67
+Sources/PimentoCore/Tenant.swift
+  s_4884204a812fec::t_004d4e8a5b7991 2-4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "dd4ef33d70b737a6d75cf2f2c50b3fcf8d2484da",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
