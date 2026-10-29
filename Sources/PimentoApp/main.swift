@@ -43,6 +43,10 @@ struct PimentoApp: App {
             CommandGroup(replacing: .appInfo) {
                 Button("About \(AppInfo.name)") { showAboutPanel() }
             }
+            CommandGroup(after: .appSettings) {
+                Button("Install Command Line Tool…") { CommandLineTool.install() }
+                Button("Uninstall Command Line Tool…") { CommandLineTool.uninstall() }
+            }
             CommandGroup(replacing: .newItem) {}
             CommandGroup(after: .toolbar) {
                 Button("Refresh") { Task { await model.refresh() } }

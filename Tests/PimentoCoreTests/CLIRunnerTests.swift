@@ -414,3 +414,65 @@ struct CLIPolicyTests {
         #expect(CLIFormat.plural(3, "role") == "3 roles")
     }
 }
+
+@Suite("Command-line tool install paths")
+struct CLIInstallTests {
+    let home = "/Users/ada"
+    let source = "/Applications/Pimento.app/Contents/Helpers/pimento"
+
+    @Test func locations() {
+        #expect(CLIInstallLocation.system.linkPath(home: home) == "/usr/local/bin/pimento")
+        #expect(CLIInstallLocation.user.linkPath(home: home) == "/Users/ada/.local/bin/pimento")
+        #expect(CLIInstallLocation.user.linkPath(home: home + "/") == "/Users/ada/.local/bin/pimento")
+        #expect(CLIInstallLocation.user.displayDirectory(home: home) == "~/.local/bin")
+    }
+
+    @Test func installDecisions() {
+        let link = "/usr/local/bin/pimento"
+        #expect(CLIInstaller.installAction(source: source, linkPath: link, state: .missing) == .create)
+        #expect(CLIInstaller.installAction(source: source, linkPath: link, state: .symlink(source)) == .upToDate)
+        #expect(CLIInstaller.installAction(source: source, linkPath: link,
+                                           state: .symlink("../../../Applications/Pimento.app/Contents/Helpers/pimento")) == .upToDate)
+        let old = "/Users/ada/Downloads/Pimento.app/Contents/Helpers/pimento"
+        #expect(CLIInstaller.installAction(source: source, linkPath: link, state: .symlink(old)) == .replace(previous: old))
+        #expect(CLIInstaller.installAction(source: source, linkPath: link, state: .symlink("../Cellar/pimento/0.2.0/bin/pimento"))
+            == .conflict("/usr/local/Cellar/pimento/0.2.0/bin/pimento"))
+        #expect(CLIInstaller.installAction(source: source, linkPath: link, state: .other) == .blocked)
+    }
+
+    @Test func uninstallOnlyRemovesPimentoLinks() {
+        let link = "/Users/ada/.local/bin/pimento"
+        #expect(CLIInstaller.uninstallAction(source: source, linkPath: link, state: .missing) == .notInstalled)
+        #expect(CLIInstaller.uninstallAction(source: source, linkPath: link, state: .symlink(source)) == .remove)
+        #expect(CLIInstaller.uninstallAction(source: nil, linkPath: link,
+                                             state: .symlink("/Volumes/x/Pimento.app/Contents/Helpers/pimento")) == .remove)
+        #expect(CLIInstaller.uninstallAction(source: source, linkPath: link, state: .symlink("/opt/tools/pimento"))
+            == .notOurs("/opt/tools/pimento"))
+        #expect(CLIInstaller.uninstallAction(source: source, linkPath: link, state: .other) == .notOurs(link))
+        #expect(!CLIInstaller.isBundledTool("/Contents/Helpers/pimento"))
+        #expect(!CLIInstaller.isBundledTool("/x/Pimento/Contents/Helpers/pimento"))
+    }
+
+    @Test func commandsAreQuotedForShellAndAppleScript() {
+        #expect(CLIInstaller.shellQuote("it's") == #"'it'\''s'"#)
+        let cmd = CLIInstaller.installCommand(source: "/Applications/My \"Apps\"/Pimento.app/Contents/Helpers/pimento",
+                                              linkPath: "/usr/local/bin/pimento")
+        #expect(cmd == #"/bin/mkdir -p '/usr/local/bin' && /bin/ln -sfn '/Applications/My "Apps"/Pimento.app/Contents/Helpers/pimento' '/usr/local/bin/pimento'"#)
+        #expect(CLIInstaller.uninstallCommand(linkPath: "/usr/local/bin/pimento") == "/bin/rm -f '/usr/local/bin/pimento'")
+        let script = CLIInstaller.adminAppleScript(#"echo "a\b""#, prompt: "Pimento")
+        #expect(script == #"do shell script "echo \"a\\b\"" with prompt "Pimento" with administrator privileges"#)
+    }
+
+    @Test func readsLinkStateFromDisk() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("pimento-install-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let link = dir.appendingPathComponent("pimento").path
+        #expect(CLIInstaller.state(at: link) == .missing)
+        try FileManager.default.createSymbolicLink(atPath: link, withDestinationPath: source)
+        #expect(CLIInstaller.state(at: link) == .symlink(source))
+        let file = dir.appendingPathComponent("file").path
+        FileManager.default.createFile(atPath: file, contents: Data())
+        #expect(CLIInstaller.state(at: file) == .other)
+    }
+}
