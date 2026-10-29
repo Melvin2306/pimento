@@ -1,0 +1,38 @@
+Sources/PimentoCore/CLI/CLILifecycle.swift
+  s_4884204a812fec::t_d5ada5fd053b26 230-231
+  s_4884204a812fec::t_6a3629ee95d9b0 86-89,221-226,228-229,233,243-246,250,271,291-295
+Sources/PimentoApp/AppModel.swift
+  s_4884204a812fec::t_d5ada5fd053b26 808-809
+  s_4884204a812fec::t_ba3c0e534a025f 70-71,346,348,350,352,796-807,879-880,882,885-888,906-910,951
+Sources/PimentoApp/ContentView.swift
+  s_4884204a812fec::t_34dcb7337c4323 86-91,121
+  s_4884204a812fec::t_ba3c0e534a025f 79-82
+Tests/PimentoCoreTests/CLIRunnerTests.swift
+  s_4884204a812fec::t_f537b3f0651535 41-46,67
+Sources/PimentoCore/CLI/CLIHelp.swift
+  s_4884204a812fec::t_6a3629ee95d9b0 236-239,247-250,424-425,485,526-527
+Tests/PimentoCoreTests/RenewTicketTests.swift
+  s_4884204a812fec::t_d5ada5fd053b26 49
+  s_4884204a812fec::t_59039ada8c1875 1-48,50-111
+Sources/PimentoCore/RoleLifecycle.swift
+  s_4884204a812fec::t_b9fa21e8f80e6f 45-46,48,51-52,75-76,92-106,114-116,129-130,172,184,192,197,200
+  s_4884204a812fec::t_d5ada5fd053b26 55
+Sources/PimentoCore/CLI/CLICommand.swift
+  s_4884204a812fec::t_6a3629ee95d9b0 143-146,367-368,515-516
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8e4228773841d39bfca441850ad7dae1eda77002",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
