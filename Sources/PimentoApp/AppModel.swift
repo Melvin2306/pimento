@@ -416,6 +416,7 @@ final class AppModel {
         }
         guard prefs != old else { return }
         prefs.save(to: UserDefaults.standard)
+        if prefs.effectiveAppearance != old.effectiveAppearance { AppAppearance.apply(prefs) }
         if prefs.defaultHours != old.defaultHours, !isActivating { hours = prefs.defaultHours }
         if prefs.autoRefreshMinutes != old.autoRefreshMinutes { restartAutoRefresh() }
         if !prefs.rememberJustifications, old.rememberJustifications { clearRecentJustifications() }

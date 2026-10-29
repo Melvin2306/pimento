@@ -32,6 +32,30 @@ public enum AppTheme: String, Codable, CaseIterable, Sendable {
     public init(storedValue: String?) {
         self = storedValue.flatMap(AppTheme.init(rawValue:)) ?? .native
     }
+
+    /// Whether the theme has a dark variant. Windows XP-style is light-only.
+    public var supportsDarkMode: Bool { self != .windowsXP }
+}
+
+/// Light or dark (Settings › General › Appearance), for every window.
+public enum AppearanceMode: String, Codable, CaseIterable, Sendable {
+    /// Follow the system's light or dark mode.
+    case system
+    case light
+    case dark
+
+    public var title: String {
+        switch self {
+        case .system: "System"
+        case .light: "Light"
+        case .dark: "Dark"
+        }
+    }
+
+    /// The stored value, or `.system` for anything unknown.
+    public init(storedValue: String?) {
+        self = storedValue.flatMap(AppearanceMode.init(rawValue:)) ?? .system
+    }
 }
 
 /// The user's settings (Settings window, ⌘,). A plain value: loading clamps
@@ -70,6 +94,9 @@ public struct Preferences: Equatable, Sendable {
     /// 0 = off.
     public var autoRefreshMinutes = 0
     public var theme: AppTheme = .native
+    /// Light, dark or the system's. The stored choice is kept while a
+    /// light-only theme is selected; `effectiveAppearance` is what applies.
+    public var appearanceMode: AppearanceMode = .system
 
     public static let reminderLeadOptions = [5, 10, 15, 30]
     public static let autoRefreshOptions = [0, 1, 5, 15]
@@ -80,6 +107,12 @@ public struct Preferences: Equatable, Sendable {
     public init() {}
 
     public var reminderLead: TimeInterval { TimeInterval(reminderLeadMinutes * 60) }
+
+    /// The appearance the app's windows get: always light for a light-only
+    /// theme, the chosen mode otherwise.
+    public var effectiveAppearance: AppearanceMode {
+        theme.supportsDarkMode ? appearanceMode : .light
+    }
 
     /// Clamps numbers into range and snaps choices to the offered options.
     public func validated() -> Preferences {
@@ -129,11 +162,12 @@ public struct Preferences: Equatable, Sendable {
         static let refreshOnLaunch = "general.refreshOnLaunch"
         static let autoRefreshMinutes = "general.autoRefreshMinutes"
         static let theme = "general.theme"
+        static let appearanceMode = "general.appearanceMode"
 
         static let all = [
             notifyOnCompletion, notifyOnlyOnFailure, playSound, expiryReminders, reminderLeadMinutes,
             defaultHours, rememberJustifications, prefillLastJustification, confirmOwnerRoles, maxParallelRequests,
-            launchTenant, refreshOnLaunch, autoRefreshMinutes, theme,
+            launchTenant, refreshOnLaunch, autoRefreshMinutes, theme, appearanceMode,
         ]
     }
 
@@ -160,6 +194,7 @@ public struct Preferences: Equatable, Sendable {
         bool(Key.refreshOnLaunch, &p.refreshOnLaunch)
         int(Key.autoRefreshMinutes, &p.autoRefreshMinutes)
         p.theme = AppTheme(storedValue: store.object(forKey: Key.theme) as? String)
+        p.appearanceMode = AppearanceMode(storedValue: store.object(forKey: Key.appearanceMode) as? String)
         return p.validated()
     }
 
@@ -184,6 +219,7 @@ public struct Preferences: Equatable, Sendable {
         store.set(p.refreshOnLaunch, forKey: Key.refreshOnLaunch)
         store.set(p.autoRefreshMinutes, forKey: Key.autoRefreshMinutes)
         store.set(p.theme.rawValue, forKey: Key.theme)
+        store.set(p.appearanceMode.rawValue, forKey: Key.appearanceMode)
     }
 
     /// Removes every stored setting, so the defaults apply again.

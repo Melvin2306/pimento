@@ -68,6 +68,18 @@ private struct GeneralSettings: View {
                         Text(theme.title).tag(theme)
                     }
                 }
+                Picker("Mode", selection: appearanceMode) {
+                    ForEach(AppearanceMode.allCases, id: \.self) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .disabled(!model.prefs.theme.supportsDarkMode)
+                .help("Light, dark, or follow the system's appearance")
+                if !model.prefs.theme.supportsDarkMode {
+                    Text("Windows XP-style is light-only.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
             } header: {
                 Text("Appearance")
             } footer: {
@@ -105,11 +117,19 @@ private struct GeneralSettings: View {
         }
     }
 
+    /// Shows Light while a light-only theme is selected; the stored choice
+    /// applies again after switching back.
+    private var appearanceMode: Binding<AppearanceMode> {
+        Binding(
+            get: { model.prefs.effectiveAppearance },
+            set: { model.prefs.appearanceMode = $0 })
+    }
+
     private var themeFooter: String {
         let base = switch model.prefs.theme {
-        case .native: "The standard macOS look, light or dark with the system."
-        case .azure: "Flat and blue, light or dark with the system."
-        case .windowsXP: "Beige and glossy blue, always light. Uses Tahoma if this Mac has it."
+        case .native: "The standard macOS look."
+        case .azure: "Flat, with a dark portal-style top bar."
+        case .windowsXP: "Beige with a glossy blue title bar. Uses Tahoma if this Mac has it."
         }
         return base + " Azure-style and Windows XP-style are inspired by those designs; Pimento is not affiliated with Microsoft."
     }

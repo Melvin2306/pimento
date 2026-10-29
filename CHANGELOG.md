@@ -30,12 +30,18 @@ All notable changes to this project are documented here. The format follows
   Windows XP-style (always light). Styling only; controls and shortcuts are the same. Uses Segoe UI
   or Tahoma only if installed; no Microsoft fonts or artwork are bundled, and Pimento is not
   affiliated with Microsoft.
+- Appearance mode (Settings › General › Appearance): System (default), Light or Dark, applied
+  live to every window, sheet and popover. Windows XP-style stays light-only; the stored choice
+  comes back when switching to another theme.
 
 ### Changed
 
 - **Activate** always sends for real; the dry-run mode switch is gone. **Preview** (⌥⌘↩, also in the
   View menu) shows the requests without sending them. The Owner confirmation is unchanged.
 - The tenant picker in the toolbar no longer looks disabled.
+- Azure-style and Windows XP-style colour the window's title bar and toolbar as one bar (near-black
+  for Azure, glossy blue for XP) instead of adding a second title strip below the toolbar; the
+  title and role counts appear once, in the toolbar.
 - Tenant names come from ARM's `GET /tenants` first, so tenants without a subscription show their
   name instead of a bare GUID (`--tenants` too). Tenants nobody names read "Unnamed tenant" plus a
   short ID and sort last.
@@ -48,6 +54,9 @@ All notable changes to this project are documented here. The format follows
   Azure lists a new activation only after a few seconds. It now shows as active right away
   (with the expiry Azure returned), leaves the selection, and the list is re-checked 20 s
   later.
+- Windows XP-style under a dark system: the toolbar stayed dark above the light window. Light and
+  dark are now set app-wide instead of per window, so switching themes or modes never leaves a
+  window stuck in a forced appearance.
 
 ## [0.1.0] - 2026-10-29
 

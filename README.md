@@ -144,13 +144,18 @@ control, shortcut and accessibility label works the same in each theme.
 
 | Theme | Look |
 | --- | --- |
-| Native (default) | The standard macOS look, light or dark with the system. |
-| Azure-style | Flat and blue: a dark top bar with the app name and the signed-in user, a page title, the table on a white card with light-blue checked rows, portal-style status badges, square blue buttons. Light and dark. Uses Segoe UI if the Mac has it, otherwise the system font. |
-| Windows XP-style | Beige window, a glossy blue title-bar strip, a white list box with blue checked rows, light rounded buttons and a green **Activate** button (orange with Owner roles). Always light, since XP had no dark mode. Uses Tahoma if the Mac has it (macOS ships it), otherwise the system font. |
+| Native (default) | The standard macOS look. |
+| Azure-style | Flat and blue: the title bar and toolbar form one near-black portal-style top bar, with a "My roles" page title below it, the table on a white card with light-blue checked rows, portal-style status badges, square blue buttons. Light and dark. Uses Segoe UI if the Mac has it, otherwise the system font. |
+| Windows XP-style | Beige window under a glossy blue title bar (the toolbar itself), a white list box with blue checked rows, light rounded buttons and a green **Activate** button (orange with Owner roles). Light only. Uses Tahoma if the Mac has it (macOS ships it), otherwise the system font. |
 
-The native window toolbar (tenant, Refresh, Settings, search, selection buttons) and system alerts
-such as the Owner confirmation keep the macOS look in every theme; the themed header is drawn
-below the toolbar. No fonts, logos, icons, wallpapers or sounds are bundled.
+**Mode** next to the theme picks *System* (default, follows macOS), *Light* or *Dark* for every
+Pimento window at once. Windows XP-style is light-only: while it is selected the mode shows
+*Light* and is disabled, and your choice applies again when you switch to another theme.
+
+In the themed looks the window's title bar and toolbar are coloured as one bar, with white title,
+icons and toolbar controls; the controls themselves (tenant, Refresh, Settings, Select All
+Eligible, Clear, search) stay the standard macOS ones. System alerts such as the Owner
+confirmation keep the macOS look. No fonts, logos, icons, wallpapers or sounds are bundled.
 
 The Azure-style and Windows XP-style themes are inspired by those designs. Pimento is not
 affiliated with or endorsed by Microsoft.

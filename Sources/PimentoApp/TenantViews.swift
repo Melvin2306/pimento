@@ -15,7 +15,8 @@ struct TenantToolbarButton: View {
             // Primary colour on purpose: a secondary label reads as disabled.
             HStack(spacing: 6) {
                 Image(systemName: model.tenant.isOverride ? "lock.fill" : "building.2.fill")
-                    .foregroundStyle(Color.accentColor)
+                    // White on the blue XP title bar, where the accent would vanish.
+                    .foregroundStyle(theme == .windowsXP ? Color.white : Color.accentColor)
                 Text(model.tenantLabel)
                     .fontWeight(.medium)
                     .foregroundStyle(.primary)
@@ -35,6 +36,7 @@ struct TenantToolbarButton: View {
             TenantPicker()
                 .environment(model)
                 .appTheme(theme)
+                .appAppearanceInPopover()
         }
     }
 

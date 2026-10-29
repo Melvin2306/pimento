@@ -45,7 +45,7 @@ struct ThemePalette {
 
     init(_ theme: AppTheme, _ scheme: ColorScheme) {
         self.theme = theme
-        // XP had no dark mode: its windows are forced to the light appearance.
+        // XP is light-only: `AppAppearance` keeps the app light while it is selected.
         isDark = scheme == .dark && theme == .azure
     }
 
@@ -83,7 +83,7 @@ struct ThemePalette {
     var neutralFill: Color { pick(azure: 0xF3F2F1, 0x3B3A39, xp: 0xF1EFE2) }
     var infoFill: Color { pick(azure: 0xF3F2F1, 0x323130, xp: 0xFFFFE1) }
 
-    /// The Azure top strip.
+    /// The Azure top bar (title bar and toolbar).
     var headerBackground: Color { pick(azure: 0x1B1A19, 0x0B0A0A, xp: 0x0058EE) }
 
     var cornerRadius: CGFloat { theme == .windowsXP ? 3 : 2 }
@@ -136,8 +136,8 @@ struct AppThemed<Content: View>: View {
 }
 
 extension View {
-    /// Puts `theme` into the environment, with its font, accent and window
-    /// appearance (XP is always light). For a window's root view.
+    /// Puts `theme` into the environment, with its font and accent. For a
+    /// window's root view. Light / dark is app-wide: see `AppAppearance`.
     func appTheme(_ theme: AppTheme) -> some View {
         modifier(ThemeRoot(theme: theme))
     }
@@ -154,9 +154,7 @@ struct ThemeRoot: ViewModifier {
     func body(content: Content) -> some View {
         content
             .modifier(ThemeFontAndTint())
-            .modifier(ForceLight(enabled: theme == .windowsXP))
             .environment(\.appTheme, theme)
-            .background(WindowAppearance(forceLight: theme == .windowsXP))
     }
 }
 
@@ -176,16 +174,6 @@ private struct ThemeFontAndTint: ViewModifier {
     }
 }
 
-/// XP has no dark mode: SwiftUI views resolve light at once, while
-/// `WindowAppearance` turns the window's AppKit controls light.
-private struct ForceLight: ViewModifier {
-    let enabled: Bool
-
-    func body(content: Content) -> some View {
-        if enabled { content.environment(\.colorScheme, .light) } else { content }
-    }
-}
-
 private struct PageBackground: ViewModifier {
     @Environment(\.appTheme) private var theme
     @Environment(\.colorScheme) private var scheme
@@ -199,167 +187,159 @@ private struct PageBackground: ViewModifier {
     }
 }
 
-/// Sets the hosting window's appearance: light for XP, the system's otherwise.
-/// (`preferredColorScheme(nil)` does not reliably hand a window back to the
-/// system appearance, so this sets `NSWindow.appearance` directly.)
-private struct WindowAppearance: NSViewRepresentable {
-    let forceLight: Bool
+// MARK: - Light / dark
 
-    func makeNSView(context: Context) -> AppearanceView { AppearanceView() }
+/// Light, dark or the system's, for every window, sheet and popover at once.
+/// Set on `NSApp` rather than on single windows: SwiftUI resets a window's
+/// own `appearance` when it updates the scene, which left the toolbar dark
+/// under a forced-light XP window. `nil` hands control back to the system, so
+/// switching themes or modes never leaves a stale forced appearance.
+@MainActor
+enum AppAppearance {
+    static func apply(_ prefs: Preferences) {
+        let name: NSAppearance.Name? = switch prefs.effectiveAppearance {
+        case .system: nil
+        case .light: .aqua
+        case .dark: .darkAqua
+        }
+        guard NSApp.appearance?.name != name else { return }
+        NSApp.appearance = name.flatMap(NSAppearance.init(named:))
+    }
+}
 
-    func updateNSView(_ view: AppearanceView, context: Context) {
-        view.forceLight = forceLight
+// MARK: - Toolbar
+
+extension View {
+    /// Colours the main window's title bar and toolbar for the Azure and XP
+    /// themes: one bar holding the traffic lights, the toolbar items and the
+    /// window title. Nothing for the native look.
+    func themedToolbar() -> some View { modifier(ToolbarChrome()) }
+}
+
+private struct ToolbarChrome: ViewModifier {
+    @Environment(\.appTheme) private var theme
+    @Environment(\.colorScheme) private var scheme
+
+    func body(content: Content) -> some View {
+        switch theme {
+        case .native:
+            content.background(TitlebarAppearance(dark: false))
+        case .azure:
+            // The portal's top bar is near-black in light and dark mode.
+            content
+                .toolbarBackground(ThemePalette(theme, scheme).headerBackground, for: .windowToolbar)
+                .toolbarBackground(.visible, for: .windowToolbar)
+                .background(TitlebarAppearance(dark: true))
+        case .windowsXP:
+            content
+                .toolbarBackground(XPTitleBar.gradient, for: .windowToolbar)
+                .toolbarBackground(.visible, for: .windowToolbar)
+                .background(TitlebarAppearance(dark: true))
+        }
+    }
+}
+
+/// Gives the title bar (traffic lights, toolbar items, search field, window
+/// title) the dark appearance, for white text and icons on a coloured bar.
+/// `toolbarColorScheme(_:for:)` has no effect on macOS, so this sets the
+/// appearance of the title bar's AppKit container. The content keeps the
+/// app's light or dark appearance.
+private struct TitlebarAppearance: NSViewRepresentable {
+    let dark: Bool
+
+    func makeNSView(context: Context) -> Probe { Probe() }
+
+    func updateNSView(_ view: Probe, context: Context) {
+        view.dark = dark
+        view.apply()
     }
 
-    final class AppearanceView: NSView {
-        var forceLight = false {
-            didSet { if forceLight != oldValue { apply() } }
-        }
+    final class Probe: NSView {
+        var dark = false
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
             apply()
         }
 
-        /// Whether this view set the window's appearance (and so must undo it).
-        private var forced = false
-
-        private func apply() {
-            guard let window, forceLight || forced else { return }
-            forced = forceLight
-            let appearance = forceLight ? NSAppearance(named: .aqua) : nil
-            // Not during SwiftUI's update pass: the change re-renders the window.
-            DispatchQueue.main.async { window.appearance = appearance }
+        func apply() {
+            let appearance = dark ? NSAppearance(named: .darkAqua) : nil
+            // After SwiftUI's update pass, which may rebuild the toolbar.
+            DispatchQueue.main.async { [weak self] in
+                guard let frameView = self?.window?.contentView?.superview else { return }
+                for view in frameView.subviews where String(describing: type(of: view)).contains("Titlebar") {
+                    if view.appearance?.name != appearance?.name { view.appearance = appearance }
+                }
+            }
         }
     }
 }
 
-// MARK: - Header strip
-
-/// The strip at the top of the main window: a dark portal-style top bar for
-/// Azure, a glossy blue title bar for XP, nothing for the native look (the
-/// native toolbar stays in every theme).
-struct ThemeHeader: View {
-    @Environment(AppModel.self) private var model
-    @Environment(\.appTheme) private var theme
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        switch theme {
-        case .native: EmptyView()
-        case .azure: azure(ThemePalette(theme, scheme))
-        case .windowsXP: xp(ThemePalette(theme, scheme))
-        }
+extension View {
+    /// For a popover opened from the themed title bar: takes the app's light
+    /// or dark appearance instead of the bar's forced dark one.
+    func appAppearanceInPopover() -> some View {
+        background(PopoverAppearance())
     }
+}
 
-    private var counts: String {
-        "\(model.roles.count) eligible · \(model.activeCount) active"
-    }
+private struct PopoverAppearance: NSViewRepresentable {
+    func makeNSView(context: Context) -> Probe { Probe() }
+    func updateNSView(_ view: Probe, context: Context) {}
 
-    private func azure(_ palette: ThemePalette) -> some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                Image(systemName: "line.3.horizontal")
-                    .font(.system(size: 14, weight: .regular))
-                    .accessibilityHidden(true)
-                Text(AppInfo.name)
-                    .font(palette.font(15, weight: .semibold))
-                Rectangle().fill(.white.opacity(0.25)).frame(width: 1, height: 16)
-                Text("Privileged access")
-                    .font(palette.font(13))
-                    .opacity(0.85)
-                Spacer(minLength: 12)
-                if let identity = model.identity {
-                    VStack(alignment: .trailing, spacing: 0) {
-                        Text(identity.displayName)
-                            .font(palette.font(12))
-                            .lineLimit(1)
-                        Text(model.tenantLabel.uppercased())
-                            .font(palette.font(10))
-                            .opacity(0.75)
-                            .lineLimit(1)
-                    }
-                    Image(systemName: "person.crop.circle")
-                        .font(.system(size: 20, weight: .light))
-                        .accessibilityHidden(true)
-                }
-            }
-            .foregroundStyle(.white)
-            .padding(.horizontal, 14)
-            .frame(height: 40)
-            .background(palette.headerBackground)
-
-            // Page title, as on a portal blade.
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Text("My roles")
-                    .font(palette.font(20, weight: .semibold))
-                    .foregroundStyle(palette.text)
-                Text("Azure resources")
-                    .font(palette.font(13))
-                    .foregroundStyle(palette.secondaryText)
-                Spacer()
-                if model.identity != nil {
-                    Text(counts)
-                        .font(palette.font(12))
-                        .foregroundStyle(palette.secondaryText)
-                        .monospacedDigit()
-                }
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 14)
-            .padding(.bottom, 10)
+    final class Probe: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            // NSApp.effectiveAppearance: the forced mode, or the system's.
+            window?.appearance = NSApp.effectiveAppearance
         }
-        .accessibilityElement(children: .combine)
-    }
-
-    private func xp(_ palette: ThemePalette) -> some View {
-        HStack(spacing: 7) {
-            Image(nsImage: NSApp.applicationIconImage)
-                .resizable()
-                .frame(width: 18, height: 18)
-                .shadow(color: .black.opacity(0.35), radius: 0.5, x: 1, y: 1)
-                .accessibilityHidden(true)
-            Text(model.identity == nil ? AppInfo.name : "\(AppInfo.name) - \(model.tenantLabel)")
-                .font(palette.font(13, weight: .bold))
-                .foregroundStyle(.white)
-                .shadow(color: Color(hex: 0x0A1F6E).opacity(0.9), radius: 0, x: 1, y: 1)
-                .lineLimit(1)
-            Spacer(minLength: 12)
-            if model.identity != nil {
-                Text(counts)
-                    .font(palette.font(11, weight: .bold))
-                    .foregroundStyle(.white)
-                    .shadow(color: Color(hex: 0x0A1F6E).opacity(0.8), radius: 0, x: 1, y: 1)
-                    .monospacedDigit()
-            }
-        }
-        .padding(.horizontal, 8)
-        .frame(height: 30)
-        .background(XPTitleBarBackground())
-        .accessibilityElement(children: .combine)
     }
 }
 
 /// The Luna title bar: a glossy blue band, lighter near the top, with a
-/// highlight line along the top edge and a darker one at the bottom.
-struct XPTitleBarBackground: View {
+/// highlight along the top edge and a darker line at the bottom.
+enum XPTitleBar {
+    static let gradient = LinearGradient(
+        stops: [
+            .init(color: Color(hex: 0x0A5FE8), location: 0),
+            .init(color: Color(hex: 0x6AAEFF), location: 0.03),
+            .init(color: Color(hex: 0x3A93FF), location: 0.1),
+            .init(color: Color(hex: 0x2A7DF5), location: 0.3),
+            .init(color: Color(hex: 0x0058EE), location: 0.55),
+            .init(color: Color(hex: 0x0053E0), location: 0.88),
+            .init(color: Color(hex: 0x0047D6), location: 0.97),
+            .init(color: Color(hex: 0x00309C), location: 1),
+        ],
+        startPoint: .top, endPoint: .bottom)
+}
+
+// MARK: - Page header
+
+/// The Azure page title under the top bar, as on a portal blade ("My roles ·
+/// Azure resources"). Title and counts stay in the toolbar; XP and the native
+/// look have no page header.
+struct ThemeHeader: View {
+    @Environment(\.appTheme) private var theme
+    @Environment(\.colorScheme) private var scheme
+
     var body: some View {
-        LinearGradient(
-            stops: [
-                .init(color: Color(hex: 0x0A5FE8), location: 0),
-                .init(color: Color(hex: 0x3A93FF), location: 0.12),
-                .init(color: Color(hex: 0x2A7DF5), location: 0.3),
-                .init(color: Color(hex: 0x0058EE), location: 0.55),
-                .init(color: Color(hex: 0x0053E0), location: 0.85),
-                .init(color: Color(hex: 0x0047D6), location: 1),
-            ],
-            startPoint: .top, endPoint: .bottom)
-            .overlay(alignment: .top) {
-                Rectangle().fill(Color.white.opacity(0.45)).frame(height: 1)
+        if theme == .azure {
+            let palette = ThemePalette(theme, scheme)
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text("My roles")
+                    .font(palette.font(20, weight: .semibold))
+                    .foregroundStyle(palette.text)
+                    .accessibilityAddTraits(.isHeader)
+                Text("Azure resources")
+                    .font(palette.font(13))
+                    .foregroundStyle(palette.secondaryText)
+                Spacer()
             }
-            .overlay(alignment: .bottom) {
-                Rectangle().fill(Color(hex: 0x00309C)).frame(height: 1)
-            }
+            .padding(.horizontal, 20)
+            .padding(.top, 14)
+            .padding(.bottom, 10)
+            .accessibilityElement(children: .combine)
+        }
     }
 }
 

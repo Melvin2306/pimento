@@ -24,6 +24,8 @@ struct PreferencesTests {
         #expect(p.refreshOnLaunch)
         #expect(p.autoRefreshMinutes == 0)
         #expect(p.theme == .native)
+        #expect(p.appearanceMode == .system)
+        #expect(p.effectiveAppearance == .system)
     }
 
     @Test func roundTripsThroughTheStore() {
@@ -37,6 +39,7 @@ struct PreferencesTests {
         p.launchTenant = .specific("contoso.onmicrosoft.com")
         p.autoRefreshMinutes = 5
         p.theme = .windowsXP
+        p.appearanceMode = .dark
         let store = MemoryStore()
         p.save(to: store)
         #expect(Preferences.load(from: store) == p)
@@ -114,6 +117,50 @@ struct PreferencesTests {
         #expect(String(decoding: data, as: UTF8.self) == #"["azure","windowsXP","native"]"#)
         #expect(try JSONDecoder().decode([AppTheme].self, from: data) == [.azure, .windowsXP, .native])
         #expect(AppTheme.allCases.map(\.title) == ["Native", "Azure-style", "Windows XP-style"])
+    }
+
+    @Test func appearanceModeIsStoredByName() {
+        let store = MemoryStore()
+        for mode in AppearanceMode.allCases {
+            var p = Preferences()
+            p.appearanceMode = mode
+            p.save(to: store)
+            #expect(store.values["general.appearanceMode"] as? String == mode.rawValue)
+            #expect(Preferences.load(from: store).appearanceMode == mode)
+        }
+        #expect(AppearanceMode.allCases.map(\.title) == ["System", "Light", "Dark"])
+    }
+
+    @Test func unknownOrMistypedAppearanceModeFallsBackToSystem() {
+        let store = MemoryStore()
+        for value: Any in ["sepia", "", "Dark", 1, false] {
+            store.values["general.appearanceMode"] = value
+            #expect(Preferences.load(from: store).appearanceMode == .system, "\(value)")
+        }
+        #expect(AppearanceMode(storedValue: nil) == .system)
+        #expect(AppearanceMode(storedValue: "light") == .light)
+    }
+
+    @Test func lightOnlyThemeForcesLightButKeepsTheChoice() {
+        var p = Preferences()
+        p.appearanceMode = .dark
+        #expect(p.effectiveAppearance == .dark)
+        p.theme = .windowsXP
+        #expect(!AppTheme.windowsXP.supportsDarkMode)
+        #expect(p.effectiveAppearance == .light, "XP is light-only")
+        #expect(p.appearanceMode == .dark, "the choice survives a detour through XP")
+        p.theme = .azure
+        #expect(p.effectiveAppearance == .dark)
+        p.appearanceMode = .system
+        p.theme = .native
+        #expect(p.effectiveAppearance == .system, "back to following the system, nothing stays forced")
+        for theme in AppTheme.allCases where theme.supportsDarkMode {
+            for mode in AppearanceMode.allCases {
+                p.theme = theme
+                p.appearanceMode = mode
+                #expect(p.effectiveAppearance == mode)
+            }
+        }
     }
 
     @Test func startupTenant() {

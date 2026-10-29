@@ -17,6 +17,7 @@ struct ContentView: View {
             ActivationBar()
         }
         .themedPageBackground()
+        .themedToolbar()
         .searchable(text: $model.search, placement: .toolbar, prompt: "Filter roles, resources, groups")
         .toolbar { toolbar }
         .navigationTitle(AppInfo.name)
