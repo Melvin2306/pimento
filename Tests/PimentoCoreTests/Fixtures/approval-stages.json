@@ -1,0 +1,9 @@
+{
+  "value": [
+    {
+      "id": "/providers/Microsoft.Authorization/roleAssignmentApprovals/b2b2b2b2-0000-4000-8000-000000000012/stages/6b6b6b6b-0000-4000-8000-000000000022",
+      "name": "6b6b6b6b-0000-4000-8000-000000000022",
+      "properties": { "displayName": "Approval stage", "assignedToMe": true, "status": "InProgress", "reviewResult": "NotReviewed" }
+    }
+  ]
+}

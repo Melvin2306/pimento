@@ -35,12 +35,14 @@ public struct ScheduledRequest: Identifiable, Hashable, Sendable {
     public let createdOn: Date?
     public let linkedRoleEligibilityScheduleId: String?
     public let kind: Kind
+    /// The approval a request waiting for one belongs to, when ARM names it.
+    public let approvalId: String?
 
     public init(
         id: String, name: String, scope: String, roleDefinitionId: String, roleName: String, scopeName: String,
         scopeType: String, status: String, requestType: String = RequestAction.activate.requestType, start: Date, end: Date?,
         justification: String? = nil, ticketNumber: String? = nil, ticketSystem: String? = nil, createdOn: Date? = nil,
-        linkedRoleEligibilityScheduleId: String? = nil, kind: Kind = .scheduled
+        linkedRoleEligibilityScheduleId: String? = nil, kind: Kind = .scheduled, approvalId: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -59,6 +61,18 @@ public struct ScheduledRequest: Identifiable, Hashable, Sendable {
         self.createdOn = createdOn
         self.linkedRoleEligibilityScheduleId = linkedRoleEligibilityScheduleId
         self.kind = kind
+        self.approvalId = approvalId
+    }
+
+    /// Approvers have this long to decide; then PIM lets the request expire
+    /// (`TimedOut`). Not configurable.
+    public static let approvalWindow: TimeInterval = 24 * 3600
+
+    /// When a request waiting for approval expires (creation + 24 hours);
+    /// nil for scheduled ones or when the creation time is unknown.
+    public var expiresAt: Date? {
+        guard kind == .awaitingApproval, let createdOn else { return nil }
+        return createdOn.addingTimeInterval(Self.approvalWindow)
     }
 
     /// Scope + role, to find the eligibility row it belongs to.
@@ -145,6 +159,13 @@ public struct AssignmentScheduleRequestItem: Decodable, Sendable {
         public let ticketInfo: TicketInfo?
         public let createdOn: String?
         public let linkedRoleEligibilityScheduleId: String?
+        /// The approval of a request that needs one (`roleAssignmentApprovals/{id}`).
+        public let approvalId: String?
+        /// Who made the request (the requester; the principal for `SelfActivate`).
+        public let requestorId: String?
+        /// The assignment schedule the request created (its last path component
+        /// is the request's name).
+        public let targetRoleAssignmentScheduleId: String?
         public let expandedProperties: ExpandedProperties?
     }
 
@@ -183,7 +204,8 @@ public enum ScheduledRequestParser {
                 justification: p.justification?.nonEmpty,
                 ticketNumber: p.ticketInfo?.ticketNumber?.nonEmpty, ticketSystem: p.ticketInfo?.ticketSystem?.nonEmpty,
                 createdOn: AzureDate.parse(p.createdOn),
-                linkedRoleEligibilityScheduleId: p.linkedRoleEligibilityScheduleId, kind: kind)
+                linkedRoleEligibilityScheduleId: p.linkedRoleEligibilityScheduleId, kind: kind,
+                approvalId: p.approvalId?.nonEmpty)
         }
         return requests.sorted { ($0.start, $0.scopeName.lowercased(), $0.roleName) < ($1.start, $1.scopeName.lowercased(), $1.roleName) }
     }
@@ -236,13 +258,64 @@ extension ARM {
     }
 }
 
+/// Your requests as `asTarget()` lists them: the pending ones, plus the
+/// history Pimento reads tickets and decisions from.
+public struct RequestHistory: Sendable {
+    public let identity: Identity
+    /// Your requests (any status, any type).
+    public let items: [AssignmentScheduleRequestItem]
+    /// Scheduled or waiting for approval.
+    public let pending: [ScheduledRequest]
+
+    public init(identity: Identity, items: [AssignmentScheduleRequestItem], now: Date) {
+        self.identity = identity
+        self.items = items.filter { item in
+            guard let mine = item.properties?.principalId else { return true }
+            return mine.caseInsensitiveCompare(identity.objectId) == .orderedSame
+        }
+        pending = ScheduledRequestParser.pending(self.items, principalId: identity.objectId, now: now)
+    }
+
+    /// The ticket of each request, by lower-cased request name. A request's
+    /// name is the last segment of the assignment schedule it creates, so an
+    /// active role's `activeScheduleId` finds the request behind it.
+    public var activationTickets: [String: TicketInfo] {
+        var result: [String: TicketInfo] = [:]
+        for item in items {
+            guard let name = (item.name ?? item.id.map(RoleMatcher.lastPathComponent))?.lowercased(),
+                  let t = TicketInfo.make(number: item.properties?.ticketInfo?.ticketNumber, system: item.properties?.ticketInfo?.ticketSystem)
+            else { continue }
+            result[name] = t
+        }
+        return result
+    }
+
+    /// The ticket the activation of `role` was requested with, if any.
+    public static func ticket(for role: EligibleRole, in tickets: [String: TicketInfo]) -> TicketInfo? {
+        guard role.isActive, let schedule = role.activeScheduleId else { return nil }
+        return tickets[RoleMatcher.lastPathComponent(schedule).lowercased()]
+    }
+
+    /// Your requests whose name starts with `prefix`.
+    public func items(matching prefix: String) -> [AssignmentScheduleRequestItem] {
+        let p = prefix.lowercased()
+        return items.filter { ($0.name ?? $0.id.map(RoleMatcher.lastPathComponent) ?? "").lowercased().hasPrefix(p) }
+    }
+}
+
 extension PIMService {
     /// Your pending activation requests (scheduled or awaiting approval). Read-only.
     public func loadScheduledRequests(now: Date = Date()) async throws -> (identity: Identity, requests: [ScheduledRequest]) {
+        let history = try await loadRequestHistory(now: now)
+        return (history.identity, history.pending)
+    }
+
+    /// Every request that targets you (`asTarget()`), pending and past. Read-only.
+    public func loadRequestHistory(now: Date = Date()) async throws -> RequestHistory {
         let token = try await tokens.accessToken()
         guard let identity = JWT.identity(fromToken: token) else { throw PIMServiceError.noIdentity }
         let items: [AssignmentScheduleRequestItem] = try await listAll(ARM.assignmentRequestsURL, token: token)
-        return (identity, ScheduledRequestParser.pending(items, principalId: identity.objectId, now: now))
+        return RequestHistory(identity: identity, items: items, now: now)
     }
 
     /// Cancels `requests` (POST …/cancel), a few at a time.

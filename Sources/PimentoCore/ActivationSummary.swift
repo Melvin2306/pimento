@@ -61,6 +61,7 @@ public struct ActivationSummary: Equatable, Sendable {
         timeZone: TimeZone = .current
     ) {
         var activated: [(role: EligibleRole, until: Date?)] = []
+        var awaiting: [EligibleRole] = []
         var scheduled: [(role: EligibleRole, start: Date)] = []
         var ended: [EligibleRole] = []
         var skipped = 0
@@ -68,6 +69,7 @@ public struct ActivationSummary: Equatable, Sendable {
         for role in roles {
             guard let outcome = outcomes[role.id] else { continue }
             switch outcome {
+            case .activated where operation != .extend && outcome.isAwaitingApproval: awaiting.append(role)
             case .activated(_, let until), .renewed(let until): activated.append((role, until))
             case .alreadyActive, .notActive: skipped += 1
             case .deactivated: ended.append(role)
@@ -75,7 +77,7 @@ public struct ActivationSummary: Equatable, Sendable {
             case .policyViolation, .failed, .tooSoon: failed.append((role, outcome))
             }
         }
-        guard !activated.isEmpty || !scheduled.isEmpty || !ended.isEmpty || skipped > 0 || !failed.isEmpty else { return nil }
+        guard !activated.isEmpty || !awaiting.isEmpty || !scheduled.isEmpty || !ended.isEmpty || skipped > 0 || !failed.isEmpty else { return nil }
 
         let time = Date.FormatStyle(date: .omitted, time: .shortened, timeZone: timeZone)
         func line(_ role: EligibleRole) -> String { "\(role.roleName) · \(role.scopeName)" }
@@ -96,7 +98,9 @@ public struct ActivationSummary: Equatable, Sendable {
         case .extend: (activated.count, "requested", "Extension request", "not active")
         case .deactivate: (ended.count, "deactivated", "Deactivation", "not active")
         }
-        if failed.isEmpty {
+        if failed.isEmpty, done == 0, !awaiting.isEmpty {
+            title = "\(plural(awaiting.count, "role")) awaiting approval"
+        } else if failed.isEmpty {
             title = done == 0
                 ? "\(plural(skipped, "role")) \(skippedText)"
                 : operation == .extend ? "Extension requested for \(plural(done, "role"))" : "\(plural(done, "role")) \(verb)"
@@ -123,6 +127,10 @@ public struct ActivationSummary: Equatable, Sendable {
                 parts.append(span)
             }
             parts.append(list(activated.map(\.role)))
+        }
+        if !awaiting.isEmpty {
+            parts.append("Awaiting approval (an approver has 24 hours to decide)")
+            parts.append(list(awaiting))
         }
         if !scheduled.isEmpty {
             let starts = Set(scheduled.map { ScheduleTime.label($0.start, now: now, timeZone: timeZone) }).sorted()

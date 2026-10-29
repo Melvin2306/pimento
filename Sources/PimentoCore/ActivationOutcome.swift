@@ -42,6 +42,12 @@ public enum ActivationOutcome: Equatable, Sendable {
         }
     }
 
+    /// Accepted, but waiting for an approver (`PendingApproval`).
+    public var isAwaitingApproval: Bool {
+        guard case .activated(let status, _) = self else { return false }
+        return ApprovalParser.decidableStatuses.contains(status.lowercased())
+    }
+
     /// True for a request status that means the role is active now; anything
     /// else (`PendingApproval`, …) was only submitted.
     public static func isGranted(status: String) -> Bool {
@@ -58,6 +64,7 @@ public enum ActivationOutcome: Equatable, Sendable {
     public var summary: String {
         switch self {
         case .activated(let status, let until):
+            if isAwaitingApproval { return "Awaiting approval" }
             if !Self.isGranted(status: status) { return "Submitted (\(status))" }
             if let until { return "Activated until \(until.formatted(date: .omitted, time: .shortened))" }
             return "Activated"
@@ -144,7 +151,7 @@ public enum ActivationResponseMapper {
     static func error(statusCode: Int, data: Data) -> (code: String, message: String) {
         let envelope = try? JSONDecoder().decode(ARMErrorEnvelope.self, from: data)
         let code = envelope?.error?.code ?? "HTTP \(statusCode)"
-        let message = envelope?.error?.message
+        let message = envelope?.error?.message ?? envelope?.topLevelMessage
             ?? (data.isEmpty ? HTTPURLResponse.localizedString(forStatusCode: statusCode) : String(decoding: data.prefix(500), as: UTF8.self))
         return (code, message)
     }

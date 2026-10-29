@@ -1,0 +1,84 @@
+{
+  "value": [
+    {
+      "id": "/subscriptions/bbbbbbbb-0000-0000-0000-00000000000b/providers/Microsoft.Authorization/roleAssignmentScheduleRequests/a1a1a1a1-0000-4000-8000-000000000011",
+      "name": "a1a1a1a1-0000-4000-8000-000000000011",
+      "type": "Microsoft.Authorization/RoleAssignmentScheduleRequests",
+      "properties": {
+        "scope": "/subscriptions/bbbbbbbb-0000-0000-0000-00000000000b",
+        "roleDefinitionId": "/subscriptions/bbbbbbbb-0000-0000-0000-00000000000b/providers/Microsoft.Authorization/roleDefinitions/b24988ac-6180-42a0-ab88-20f7382dd24c",
+        "principalId": "22222222-0000-4000-8000-000000000001",
+        "principalType": "User",
+        "requestType": "SelfActivate",
+        "status": "PendingApproval",
+        "approvalId": "/providers/Microsoft.Authorization/roleAssignmentApprovals/a1a1a1a1-0000-4000-8000-000000000011",
+        "scheduleInfo": { "startDateTime": "2026-10-29T11:20:00Z", "expiration": { "type": "AfterDuration", "duration": "PT4H" } },
+        "ticketInfo": { "ticketNumber": "CHG-2002", "ticketSystem": "ServiceNow" },
+        "justification": "release 2.4 hotfix",
+        "requestorId": "22222222-0000-4000-8000-000000000001",
+        "createdOn": "2026-10-29T11:20:00.5Z",
+        "expandedProperties": {
+          "scope": { "id": "/subscriptions/bbbbbbbb-0000-0000-0000-00000000000b", "displayName": "Contoso Staging", "type": "subscription" },
+          "roleDefinition": { "displayName": "Contributor", "type": "BuiltInRole" },
+          "principal": { "id": "22222222-0000-4000-8000-000000000001", "displayName": "Megan Bowen", "email": "megan@contoso.example", "type": "User" }
+        }
+      }
+    },
+    {
+      "id": "/subscriptions/eeeeeeee-0000-0000-0000-00000000000e/providers/Microsoft.Authorization/roleAssignmentScheduleRequests/b2b2b2b2-0000-4000-8000-000000000012",
+      "name": "b2b2b2b2-0000-4000-8000-000000000012",
+      "properties": {
+        "scope": "/subscriptions/eeeeeeee-0000-0000-0000-00000000000e",
+        "roleDefinitionId": "/subscriptions/eeeeeeee-0000-0000-0000-00000000000e/providers/Microsoft.Authorization/roleDefinitions/8e3af657-a8ff-443c-a75c-2fe8c4bcb635",
+        "principalId": "33333333-0000-4000-8000-000000000002",
+        "requestType": "SelfActivate",
+        "status": "PendingApproval",
+        "approvalId": "b2b2b2b2-0000-4000-8000-000000000012",
+        "scheduleInfo": { "startDateTime": "2026-10-29T09:00:00Z", "expiration": { "type": "AfterDuration", "duration": "PT2H" } },
+        "justification": "INC-77 outage",
+        "createdOn": "2026-10-29T09:00:00Z",
+        "expandedProperties": {
+          "scope": { "displayName": "Fabrikam Production", "type": "subscription" },
+          "roleDefinition": { "displayName": "Owner" },
+          "principal": { "displayName": "Lee Gu", "email": "lee@fabrikam.example" }
+        }
+      }
+    },
+    {
+      "id": "/subscriptions/aaaaaaaa-0000-0000-0000-00000000000a/providers/Microsoft.Authorization/roleAssignmentScheduleRequests/c3c3c3c3-0000-4000-8000-000000000013",
+      "name": "c3c3c3c3-0000-4000-8000-000000000013",
+      "properties": {
+        "scope": "/subscriptions/aaaaaaaa-0000-0000-0000-00000000000a",
+        "roleDefinitionId": "/subscriptions/aaaaaaaa-0000-0000-0000-00000000000a/providers/Microsoft.Authorization/roleDefinitions/acdd72a7-3385-48ef-bd42-f606fba81ae7",
+        "principalId": "22222222-0000-4000-8000-000000000001",
+        "requestType": "SelfActivate",
+        "status": "Provisioned",
+        "scheduleInfo": { "startDateTime": "2026-10-29T08:00:00Z", "expiration": { "type": "AfterDuration", "duration": "PT8H" } }
+      }
+    },
+    {
+      "id": "/subscriptions/bbbbbbbb-0000-0000-0000-00000000000b/providers/Microsoft.Authorization/roleAssignmentScheduleRequests/d4d4d4d4-0000-4000-8000-000000000014",
+      "name": "d4d4d4d4-0000-4000-8000-000000000014",
+      "properties": {
+        "scope": "/subscriptions/bbbbbbbb-0000-0000-0000-00000000000b",
+        "roleDefinitionId": "/subscriptions/bbbbbbbb-0000-0000-0000-00000000000b/providers/Microsoft.Authorization/roleDefinitions/b24988ac-6180-42a0-ab88-20f7382dd24c",
+        "principalId": "11111111-2222-3333-4444-555555555555",
+        "requestType": "SelfActivate",
+        "status": "PendingApproval",
+        "scheduleInfo": { "startDateTime": "2026-10-29T11:50:00Z", "expiration": { "type": "AfterDuration", "duration": "PT4H" } }
+      }
+    },
+    {
+      "id": "/subscriptions/dddddddd-0000-0000-0000-00000000000d/providers/Microsoft.Authorization/roleAssignmentScheduleRequests/e5e5e5e5-0000-4000-8000-000000000015",
+      "name": "e5e5e5e5-0000-4000-8000-000000000015",
+      "properties": {
+        "scope": "/subscriptions/dddddddd-0000-0000-0000-00000000000d",
+        "roleDefinitionId": "/subscriptions/dddddddd-0000-0000-0000-00000000000d/providers/Microsoft.Authorization/roleDefinitions/acdd72a7-3385-48ef-bd42-f606fba81ae7",
+        "principalId": "22222222-0000-4000-8000-000000000001",
+        "requestType": "SelfExtend",
+        "status": "PendingAdminDecision",
+        "scheduleInfo": { "startDateTime": "2026-10-01T08:00:00Z", "expiration": { "type": "AfterDateTime", "endDateTime": "2026-12-05T12:00:00Z" } }
+      }
+    }
+  ]
+}

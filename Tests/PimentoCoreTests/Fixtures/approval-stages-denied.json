@@ -1,0 +1,17 @@
+{
+  "value": [
+    {
+      "id": "/providers/Microsoft.Authorization/roleAssignmentApprovals/7a1b2c3d-0000-4000-8000-000000000002/stages/7c7c7c7c-0000-4000-8000-000000000023",
+      "name": "7c7c7c7c-0000-4000-8000-000000000023",
+      "properties": {
+        "displayName": "Approval stage",
+        "assignedToMe": false,
+        "status": "Completed",
+        "reviewResult": "Deny",
+        "justification": "Use the staging subscription",
+        "reviewedBy": { "principalType": "user", "principalId": "44444444-0000-4000-8000-000000000003", "principalName": "Nestor Wilke", "userPrincipalName": "nestor@contoso.example" },
+        "reviewedDateTime": "2026-10-29T12:05:00Z"
+      }
+    }
+  ]
+}

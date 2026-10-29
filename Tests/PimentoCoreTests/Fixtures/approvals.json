@@ -1,0 +1,28 @@
+{
+  "value": [
+    {
+      "id": "/providers/Microsoft.Authorization/roleAssignmentApprovals/a1a1a1a1-0000-4000-8000-000000000011",
+      "type": "Microsoft.Authorization/roleAssignmentApprovals",
+      "name": "a1a1a1a1-0000-4000-8000-000000000011",
+      "properties": {
+        "stages": [
+          {
+            "id": "/providers/Microsoft.Authorization/roleAssignmentApprovals/a1a1a1a1-0000-4000-8000-000000000011/stages/5a5a5a5a-0000-4000-8000-000000000021",
+            "type": "Microsoft.Authorization/roleAssignmentApprovals/stages",
+            "name": "9f9f9f9f-0000-4000-8000-000000000099",
+            "properties": {
+              "displayName": "Approval stage",
+              "assignedToMe": true,
+              "status": "InProgress",
+              "reviewedBy": null,
+              "reviewedDateTime": null,
+              "reviewResult": "NotReviewed",
+              "justification": ""
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "nextLink": null
+}

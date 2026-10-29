@@ -55,9 +55,10 @@ struct OutcomeMappingTests {
         #expect(o.summary.hasPrefix("Activated until"))
     }
 
-    @Test func pendingApprovalIsReportedAsSubmitted() {
+    @Test func pendingApprovalIsReportedAsAwaitingApproval() {
         let o = ActivationOutcome.activated(status: "PendingApproval", until: nil)
-        #expect(o.summary == "Submitted (PendingApproval)")
+        #expect(o.summary == "Awaiting approval")
+        #expect(o.isAwaitingApproval)
     }
 
     @Test func ruleExtractionIgnoresProse() {

@@ -28,6 +28,8 @@ public struct ExpandedProperties: Decodable, Sendable, Hashable {
         public let id: String?
         public let displayName: String?
         public let type: String?
+        /// The principal's e-mail (requests list it for the requester).
+        public let email: String?
     }
 
     public let principal: Entity?
@@ -77,7 +79,9 @@ public struct AssignmentScheduleInstance: Decodable, Sendable {
     public let properties: Properties
 }
 
-/// ARM error envelope: `{"error": {"code": "...", "message": "..."}}`.
+/// ARM error envelope: `{"error": {"code": "...", "message": "..."}}`. The
+/// approvals endpoints (`roleAssignmentApprovals`) answer `{"Message": "..."}`
+/// instead; that ends up in `topLevelMessage`.
 public struct ARMErrorEnvelope: Decodable, Sendable {
     public struct Body: Decodable, Sendable {
         public let code: String?
@@ -85,4 +89,23 @@ public struct ARMErrorEnvelope: Decodable, Sendable {
     }
 
     public let error: Body?
+    public let topLevelMessage: String?
+
+    enum CodingKeys: String, CodingKey {
+        case error, upperMessage = "Message", message
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        error = try? c.decodeIfPresent(Body.self, forKey: .error)
+        topLevelMessage = (try? c.decodeIfPresent(String.self, forKey: .upperMessage))
+            ?? (try? c.decodeIfPresent(String.self, forKey: .message))
+    }
+
+    /// `code: message` of an error answer, or nil when `data` holds neither.
+    public static func describe(_ data: Data) -> String? {
+        guard let env = try? JSONDecoder().decode(ARMErrorEnvelope.self, from: data) else { return nil }
+        let parts = [env.error?.code, env.error?.message ?? env.topLevelMessage].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: ": ")
+    }
 }

@@ -109,9 +109,7 @@ public final class PIMService: Sendable {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
             let (data, status) = try await transport.send(request)
             guard status == 200 else {
-                let env = try? JSONDecoder().decode(ARMErrorEnvelope.self, from: data)
-                let msg = [env?.error?.code, env?.error?.message].compactMap { $0 }.joined(separator: ": ")
-                throw PIMServiceError.http(status, msg.isEmpty ? String(decoding: data.prefix(300), as: UTF8.self) : msg)
+                throw PIMServiceError.http(status, ARMErrorEnvelope.describe(data) ?? String(decoding: data.prefix(300), as: UTF8.self))
             }
             let page = try JSONDecoder().decode(ARMList<Item>.self, from: data)
             items += page.value
