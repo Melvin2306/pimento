@@ -8,6 +8,27 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Presets: named sets of roles with an optional justification and duration, per tenant.
+  - App: a Presets toolbar menu and menu-bar menu. Picking a preset (⌘1–⌘9) checks exactly its
+    roles and fills in its justification and duration; *Activate Preset* also activates (Owner
+    confirmation unchanged). *Save Selection as Preset…* (⇧⌘S) and *Manage Presets…* (rename, edit
+    justification/duration/roles including active ones, remove missing roles, delete).
+  - CLI: `pimento activate --preset NAME` (preset justification and duration unless `-j`/`--hours`),
+    `pimento presets list|show|save|delete`. `presets save NAME FILTER… [--role …]` stores a rule
+    resolved at activation time; `--exact` stores the roles that match now.
+  - Roles are identified by scope + role definition GUID (case-insensitive). Roles you are no longer
+    eligible for are reported as missing and the rest is activated.
+  - Shared file `~/Library/Application Support/Pimento/presets.json` (versioned JSON, mode 600);
+    `PIMENTO_PRESETS` points the CLI (or a terminal-launched app) at another file.
+- Each role's PIM policy is read (`roleManagementPolicyAssignments`, end-user activation rules:
+  maximum duration, justification, ticket, MFA, approval, authentication context), a few requests at
+  a time and cached for the session. Requests use `min(asked, policy maximum)`, so `ExpirationRule`
+  failures no longer happen when the policy is readable; if it is not, the asked duration is used.
+  - App: a Duration column (`max 8 h`; for checked rows `8 h (max 8 h)`, orange when capped; the
+    tooltip lists the policy's requirements) and *Maximum allowed* in the duration picker.
+  - CLI: `--hours max`, a DURATION column and a note for capped roles in the activation plan, a MAX
+    column in `list`; `list --json` adds `maxDuration` and `policy`; `activate --json` adds
+    `duration`, `maxDuration` and `capped` per result plus `duration`, `preset` and `missing`.
 - `pimento`, a standalone command-line tool (its own binary, Foundation only, no AppKit/SwiftUI):
   - `pimento list [FILTER…] [--role NAME] [--active|--eligible]`, `pimento status` (active roles,
     soonest-expiring first, time left), `pimento tenants`, `pimento version`, `pimento help [COMMAND]`.

@@ -31,6 +31,13 @@ does the whole list in one go, as you, using the Azure CLI session you already h
   pick a duration, press <kbd>⌘</kbd><kbd>↩</kbd>. Requests run in parallel (8 at a time by default).
 - **Per-row results**: *Activated until 17:42*, *Skipped (already active)*, or the exact policy rule
   that failed (`ExpirationRule`, `JustificationRule`, `MfaRule`, ...). Hover for the full ARM message.
+- **Presets**: save a set of roles as "On-call" or "Deploy staging", with an optional justification
+  and duration, then select or activate it in one click (<kbd>⌘</kbd><kbd>1</kbd>…<kbd>⌘</kbd><kbd>9</kbd>) or with
+  `pimento activate --preset On-call`. Presets belong to a tenant; roles you are no longer eligible
+  for are reported, the rest is activated.
+- **Each role's policy maximum**: Pimento reads every role's PIM policy and never asks for more
+  than it allows. Pick a duration or *Maximum allowed*; the Duration column shows what each role
+  gets (*8 h (max 8 h)*, or a warning when it is capped).
 - **Preview (dry run)**: shows the exact `PUT` URLs and JSON bodies without sending anything (<kbd>⌥</kbd><kbd>⌘</kbd><kbd>↩</kbd>).
 - **Notifications**: a macOS notification when a batch finishes, and a reminder before activated roles
   expire (10 minutes by default; adjustable in Settings).
@@ -129,8 +136,9 @@ open build/Pimento.app
 2. Open Pimento. It loads your eligible roles for the selected tenant.
 3. Filter with the search field, check rows, or press <kbd>⇧</kbd><kbd>⌘</kbd><kbd>A</kbd> to select every
    role that is not active yet (within the current filter). Active rows cannot be checked.
-4. Enter a **justification** and a **duration** (1 to 24 hours, default 8; each role's PIM policy
-   sets its own maximum).
+4. Enter a **justification** and a **duration**: 1 to 24 hours (default 8), or *Maximum allowed*.
+   Each role is requested for at most its PIM policy's maximum; the **Duration** column shows the
+   maximum of every role and, for checked rows, the duration it will get.
 5. Press **Activate** (<kbd>⌘</kbd><kbd>↩</kbd>) to send the requests; Owner roles ask for confirmation
    first (a setting, on by default). **Preview** (<kbd>⌥</kbd><kbd>⌘</kbd><kbd>↩</kbd>) shows the request bodies instead, with
    *Copy All*, and sends nothing. The list refreshes afterwards.
@@ -142,8 +150,29 @@ open build/Pimento.app
 | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>D</kbd> | Clear selection |
 | <kbd>⌘</kbd><kbd>K</kbd> | Clear results |
 | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>T</kbd> | Choose tenant |
+| <kbd>⌘</kbd><kbd>1</kbd> … <kbd>⌘</kbd><kbd>9</kbd> | Select the roles of the first nine presets |
+| <kbd>⇧</kbd><kbd>⌘</kbd><kbd>S</kbd> | Save selection as preset |
 | <kbd>⌘</kbd><kbd>↩</kbd> | Preview / activate |
 | <kbd>⌘</kbd><kbd>F</kbd> | Filter |
+
+### Presets
+
+A preset is a named set of eligibilities, with an optional justification and duration. Use the
+**Presets** button in the toolbar or the **Presets** menu:
+
+- **Save Selection as Preset…** (<kbd>⇧</kbd><kbd>⌘</kbd><kbd>S</kbd>) saves the checked roles, and
+  optionally the justification and duration.
+- Picking a preset (<kbd>⌘</kbd><kbd>1</kbd>…<kbd>⌘</kbd><kbd>9</kbd>) checks exactly its roles and fills in its
+  justification and duration. A banner says which of its roles are already active and which you are
+  no longer eligible for. **Activate Preset** does the same and activates right away; Owner roles
+  still ask first when that setting is on.
+- **Manage Presets…** renames, edits and deletes presets: tick roles in the list of your current
+  eligibilities (active ones too), remove roles that no longer exist, or replace the roles with
+  the checked ones.
+
+Presets are saved per tenant; the menu shows the presets of the tenant you are looking at.
+A role is identified by its scope and role definition, so a preset keeps working after renames.
+The app and the `pimento` CLI share one file (see [Preset file](#preset-file)).
 
 ### Choosing the tenant
 
@@ -172,7 +201,7 @@ is under General.
 
 | Tab | Options |
 | --- | --- |
-| General | tenant to open with (last used, az's current, or a specific one); load roles on launch; refresh automatically (off, 1, 5 or 15 minutes); theme (see below); show or hide the Type, Membership and Condition columns (also via right-click on a column header); unhide hidden tenants |
+| General | tenant to open with (last used, az's current, or a specific one); load roles on launch; refresh automatically (off, 1, 5 or 15 minutes); theme (see below); show or hide the Type, Membership, Condition and Duration columns (also via right-click on a column header); unhide hidden tenants |
 | Activation | default duration; parallel requests (1 to 16, default 8); confirm before activating Owner roles (on by default); remember recent justifications and offer them from the clock button next to the field; start with the last one filled in |
 | Notifications | macOS permission state, with a shortcut to System Settings when it is off; send a test notification; notify when activations finish, or only when something fails; expiry reminders and how long before (5, 10, 15 or 30 minutes); sound |
 
@@ -220,14 +249,22 @@ pimento activate prod staging --role Reader -j "INC-1234 look at logs" --hours 2
 pimento activate --all -j "on-call" --dry-run
 # From a script: --yes is required when stdin is not a terminal
 pimento activate contoso-dev --role Contributor -j "deploy" --yes --json | jq .summary
+# The longest each role's PIM policy allows
+pimento activate prod --role Owner -j "INC-1234" --hours max
+
+# Presets (shared with the app)
+pimento presets save On-call prod --role Owner -j "on-call" --hours max
+pimento activate --preset On-call
+pimento presets list
 ```
 
 | Command | What it does |
 | --- | --- |
 | `pimento list [FILTER…] [--role NAME] [--active \| --eligible]` | Table of your eligible roles, with status and expiry |
-| `pimento activate (FILTER… \| --role NAME \| --all) -j TEXT [--hours N] [--yes] [--dry-run] [--max-parallel N]` | Activates the matching roles that are not active yet, in parallel (8 at a time by default) |
+| `pimento activate (FILTER… \| --role NAME \| --all \| --preset NAME) -j TEXT [--hours N\|max] [--yes] [--dry-run] [--max-parallel N]` | Activates the matching roles that are not active yet, in parallel (8 at a time by default) |
 | `pimento status` | Active roles with the time left, soonest-expiring first |
 | `pimento tenants` | Tenants by ID, name and domain |
+| `pimento presets [list] \| show NAME \| save NAME FILTER… [--role NAME] [--exact] [-j TEXT] [--hours N\|max] [--force] \| delete NAME` | Saved presets (see below) |
 | `pimento completions zsh\|bash\|fish` | Prints a shell completion script |
 | `pimento version`, `pimento help [COMMAND]` | Version; help for a command (also `COMMAND --help`) |
 
@@ -238,7 +275,60 @@ pimento activate contoso-dev --role Contributor -j "deploy" --yes --json | jq .s
 filters are OR-ed. A filter starting with `/` is an ARM scope and matches it and everything below
 it. `--role` matches the whole role name, case-insensitively, with `*` as a wildcard:
 `--role owner` is Owner only, `--role '*owner'` also matches Storage Blob Data Owner. Repeat
-`--role` for several roles. `activate` needs at least one FILTER, `--role` or `--all`.
+`--role` for several roles. `activate` needs at least one FILTER, `--role`, `--all` or `--preset`.
+
+**Duration.** `--hours N` (1 to 24, default 8) or `--hours max`. Before activating, `pimento` reads
+each role's PIM policy (`roleManagementPolicyAssignments`) and requests at most its maximum: the
+plan has a DURATION column and a note when a role was capped. When a policy cannot be read, the
+asked duration is used (8 hours for `max`). `pimento list` shows the maximum in a MAX column.
+
+**Presets.** `pimento activate --preset NAME` activates the roles of a preset saved in the app or
+with `pimento presets save`. The preset's justification and duration apply unless you pass `-j` or
+`--hours`. Roles you are no longer eligible for are listed as *missing* and left out; the rest is
+activated (exit code 1 only when none is left). A preset belongs to a tenant: without `--tenant`,
+a preset name that exists in one tenant only uses that tenant.
+
+`pimento presets save NAME FILTER… [--role NAME]` stores the filters as a *rule*, resolved each
+time you activate, so new eligibilities that match are included; with `--exact` it stores the roles
+that match now. It reads your roles (read-only) to find the tenant and shows what matches.
+`--force` replaces a preset of the same name. `presets list`, `show` and `delete` work offline.
+
+##### Preset file
+
+The app and the CLI share `~/Library/Application Support/Pimento/presets.json`. Set
+`PIMENTO_PRESETS` to use another file (for the CLI, or the app started from a terminal). It is
+written atomically, readable only by you, and contains no secrets:
+
+```json
+{
+  "version": 1,
+  "presets": [
+    {
+      "id": "6f9619ff-8b86-d011-b42d-00c04fc964ff",
+      "name": "On-call",
+      "tenantId": "11111111-2222-4333-8444-555555555555",
+      "roles": [
+        {
+          "scope": "/subscriptions/aaaaaaaa-0000-0000-0000-00000000000a",
+          "roleDefinitionId": "/subscriptions/aaaaaaaa-0000-0000-0000-00000000000a/providers/Microsoft.Authorization/roleDefinitions/8e3af657-a8ff-443c-a75c-2fe8c4bcb635",
+          "roleName": "Owner",
+          "scopeName": "Contoso Production"
+        }
+      ],
+      "match": [{ "filters": ["prod"], "roles": ["Owner"] }],
+      "justification": "on-call",
+      "duration": "max",
+      "createdAt": "2026-10-29T12:00:00Z",
+      "updatedAt": "2026-10-29T12:00:00Z"
+    }
+  ]
+}
+```
+
+`roles` are matched by scope and role definition GUID, case-insensitively; the names are only for
+display. `match` holds rules (`filters` and `roles` as on the command line). `duration` is `max` or
+whole hours (`PT4H`); `tenantId` may be left out for a preset that applies to every tenant. Unknown
+keys are ignored. A file with a higher `version` is refused rather than overwritten.
 
 **Safety.** `activate` lists what it will send, marks Owner roles, and asks for confirmation on a
 terminal. When stdin is not a terminal it refuses unless you pass `--yes`. Roles that are already
@@ -251,9 +341,10 @@ exactly one JSON document (the plan and progress of `activate` go to stderr):
 
 | Command | JSON |
 | --- | --- |
-| `list`, `status` | `{tenantId, user: {objectId, name, upn}, roles: [{id, roleName, roleDefinitionId, scope, scopeName, scopeType, membership, group, isOwner, hasCondition, isActive, activeUntil, eligibilityScheduleId, secondsLeft}]}` (`membership` is `direct` or `group`; `secondsLeft` only in `status`) |
+| `list`, `status` | `{tenantId, user: {objectId, name, upn}, roles: [{id, roleName, roleDefinitionId, scope, scopeName, scopeType, membership, group, isOwner, hasCondition, isActive, activeUntil, eligibilityScheduleId, secondsLeft, maxDuration, policy}]}` (`membership` is `direct` or `group`; `secondsLeft` only in `status`; `maxDuration` (ISO 8601, e.g. `PT8H`) and `policy: {status, maxDuration, requiresJustification, requiresTicket, requiresMfa, requiresApproval, authenticationContext, error}` only in `list`) |
 | `tenants` | `{tenants: [{id, displayName, defaultDomain, category}]}` |
-| `activate` | `{dryRun, tenantId, user, hours, justification, results: [{outcome, role, status, until, code, message, rules, request}], summary: {activated, submitted, skipped, failed, planned}}` (`outcome` is `activated`, `submitted` (pending approval), `skipped`, `failed` or `planned`; `request` only in a dry run) |
+| `activate` | `{dryRun, tenantId, user, hours, duration, preset, justification, results: [{outcome, role, status, until, code, message, rules, request, duration, maxDuration, capped}], missing: [{scope, roleDefinitionId, roleName, scopeName}], summary: {activated, submitted, skipped, failed, planned}}` (`outcome` is `activated`, `submitted` (pending approval), `skipped`, `failed` or `planned`; `request` only in a dry run; `duration` at the top is `max` or the asked ISO duration, `hours` only for a number; per result, `duration` is what was requested for that role) |
+| `presets list`, `presets show` | `{file, presets: [{id, name, tenantId, roles, match, justification, duration, createdAt, updatedAt}]}`; `show` prints one preset |
 
 Times are ISO 8601 in UTC. Keys without a value are left out.
 
@@ -262,7 +353,7 @@ Times are ISO 8601 in UTC. Keys without a value are left out.
 | Code | Meaning |
 | --- | --- |
 | 0 | Success, including "nothing to do" (everything already active) |
-| 1 | An activation or request failed, no role matched, or you answered no |
+| 1 | An activation or request failed, no role matched (or none of a preset's roles is eligible), or you answered no |
 | 2 | Usage error: unknown option, no justification or selection, invalid tenant, or `activate` without `--yes` when stdin is not a terminal |
 | 3 | az is missing or not signed in, or ARM rejected the token (run the `az login` command it prints) |
 
@@ -300,14 +391,20 @@ directly with the PIM APIs (`api-version=2020-10-01`):
 3. **List active.** The same call for `roleAssignmentScheduleInstances`. An eligibility counts as
    active when an `Activated`, not-yet-expired instance exists for the same scope and role
    definition.
-4. **Activate.** For each selected role:
+4. **Policy.** For each role, `GET {scope}/providers/Microsoft.Authorization/roleManagementPolicyAssignments?$filter=roleDefinitionId eq '…'`
+   (a few at a time, cached for the session). Of its `effectiveRules`, Pimento reads the end-user
+   activation rules: `Expiration_EndUser_Assignment.maximumDuration` (the longest activation),
+   which of justification, ticket and MFA `Enablement_EndUser_Assignment` requires, whether
+   `Approval_EndUser_Assignment` needs approval, and the authentication context.
+5. **Activate.** For each selected role:
    `PUT {scope}/providers/Microsoft.Authorization/roleAssignmentScheduleRequests/{new-guid}`
    with `requestType: SelfActivate`, `principalId` = you (also for group-inherited roles),
    `linkedRoleEligibilityScheduleId`, the justification and
-   `scheduleInfo.expiration = {type: AfterDuration, duration: PT<n>H}`. If the eligibility
+   `scheduleInfo.expiration = {type: AfterDuration, duration: PT<n>H}` (at most the role's
+   maximum, so it can also be `PT1H30M`). If the eligibility
    carries an ABAC `condition`, it is copied verbatim together with `conditionVersion`;
    without it, ARM rejects the request.
-5. **Results.** `RoleAssignmentExists` becomes *Skipped (already active)*;
+6. **Results.** `RoleAssignmentExists` becomes *Skipped (already active)*;
    `RoleAssignmentRequestPolicyValidationFailed` lists the failing rules; token errors point
    to `az login`.
 
@@ -323,7 +420,10 @@ directly with the PIM APIs (`api-version=2020-10-01`):
 - The only write call is the activation `PUT`. It runs after you press Activate in the app (and
   confirm, for Owner roles), or when `pimento activate` has your confirmation (or `--yes`).
   **Preview** in the app and `pimento activate --dry-run` show the requests without sending them.
-- The `pimento` CLI keeps no state at all: no settings, no history, no token cache.
+- Presets are kept in `~/Library/Application Support/Pimento/presets.json` (mode 600): names,
+  ARM scopes and role definition IDs, and the justification and duration you chose to save.
+- The `pimento` CLI keeps no other state: no settings, no history, no token cache. It only writes
+  the presets file, with `pimento presets save` and `delete`.
 - No analytics, no update checks, no third-party dependencies (the CLI's argument parser is
   hand-written, so the build needs no package downloads).
 
@@ -339,7 +439,9 @@ See [SECURITY.md](SECURITY.md) for how to report a vulnerability.
   an approver acts.
 - **Roles that require MFA or an authentication context** at activation fail with `MfaRule` /
   `AuthenticationContextRule` unless your az token already carries the required claims (see FAQ).
-- Durations are whole hours.
+- You choose whole hours (or *Maximum allowed*); a role whose policy allows less, such as 90
+  minutes, is requested for exactly its maximum.
+- Ticket information is not sent yet; roles whose policy requires a ticket fail with `TicketingRule`.
 - Not notarized (yet), so Gatekeeper asks before the first launch of a downloaded build.
 - The CLI is built and tested for macOS only. Its code avoids AppKit and imports
   `FoundationNetworking` where Linux needs it, but there is no Linux build in CI.
@@ -352,7 +454,9 @@ Run the command the app shows, usually `az login --tenant <tenant>`, then press 
 **I see no roles, or the wrong ones.** Check the tenant in the toolbar. Pimento shows the
 eligibilities of one tenant at a time; `pimento tenants` lists the ones az knows about.
 
-**`ExpirationRule` failed.** The duration exceeds the role's maximum activation time. Pick a
+**`ExpirationRule` failed.** The duration exceeds the role's maximum activation time. Pimento
+caps every request at the maximum it reads from the role's policy, so this only happens when the
+policy could not be read (the Duration column shows *max ?*; hover for the reason). Pick a
 shorter duration (8 hours is PIM's default maximum).
 
 **`JustificationRule` / `TicketingRule` failed.** The role's policy requires a justification or
