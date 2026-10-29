@@ -1,0 +1,27 @@
+Sources/PimentoCore/HistoryCSV.swift
+  s_4884204a812fec::t_15d755ac34ba1e 52-53
+Tests/PimentoCoreTests/PresetTests.swift
+  s_4884204a812fec::t_15d755ac34ba1e 199-201
+Tests/PimentoCoreTests/HistoryTests.swift
+  s_4884204a812fec::t_15d755ac34ba1e 149-151
+Sources/PimentoCore/Presets.swift
+  s_4884204a812fec::t_15d755ac34ba1e 364-365,367
+Sources/PimentoCore/HistoryStore.swift
+  s_4884204a812fec::t_15d755ac34ba1e 146,268-274
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "51c6e8ad7694bcaf453515690cf38a33a058c152",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
