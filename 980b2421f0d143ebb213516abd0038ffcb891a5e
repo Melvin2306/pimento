@@ -1,0 +1,27 @@
+Tests/PimentoCoreTests/Fixtures/eligibilities-page1.json
+  s_4884204a812fec::t_036e1faa2a351a 32
+README.md
+  s_4884204a812fec::t_036e1faa2a351a 38-39
+Sources/PimentoCore/ActivationRequest.swift
+  s_4884204a812fec::t_036e1faa2a351a 79-80
+Sources/PimentoCore/EligibleRole.swift
+  s_4884204a812fec::t_036e1faa2a351a 29
+Tests/PimentoCoreTests/Fixtures/eligibilities.json
+  s_4884204a812fec::t_036e1faa2a351a 32
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "980b2421f0d143ebb213516abd0038ffcb891a5e",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}

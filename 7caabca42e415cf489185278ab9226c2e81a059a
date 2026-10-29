@@ -1,0 +1,91 @@
+.editorconfig
+  s_4884204a812fec::t_f377e7ad2c28dd 1-15
+.gitignore
+  s_4884204a812fec::t_b205d22165e4ca 1-13
+Package.swift
+  s_4884204a812fec::t_a0edc1be94f61b 1-22
+Sources/PimentoApp/AppModel.swift
+  s_4884204a812fec::t_24c4645be582c9 1-263
+Sources/PimentoApp/ContentView.swift
+  s_4884204a812fec::t_30806fbda59268 1-445
+Sources/PimentoApp/TenantViews.swift
+  s_09f1a4703ee7dc::t_3b8515c80def80 1-134
+Sources/PimentoApp/main.swift
+  s_09f1a4703ee7dc::t_854cb05018301e 1-99
+Sources/PimentoCore/ActivationOutcome.swift
+  s_4884204a812fec::t_60c046aa30bf90 1-111
+Sources/PimentoCore/ActivationRequest.swift
+  s_4884204a812fec::t_e0b908b3a803bd 1-130
+Sources/PimentoCore/AppInfo.swift
+  s_4884204a812fec::t_fbfe64a9f9a7e0 1-10
+Sources/PimentoCore/CLIOptions.swift
+  s_4884204a812fec::t_7c0534f84d922b 1-86
+Sources/PimentoCore/Models.swift
+  s_4884204a812fec::t_218f38dc09601d 1-79
+Sources/PimentoCore/PIMService.swift
+  s_4884204a812fec::t_91ae1e6546a932 1-137
+Sources/PimentoCore/Tenant.swift
+  s_4884204a812fec::t_8116277749cff1 1-147
+Tests/PimentoCoreTests/ActivationRequestTests.swift
+  s_4884204a812fec::t_59de2a797266c1 1-102
+Tests/PimentoCoreTests/Fixtures/assignments.json
+  s_4884204a812fec::t_81ad5425912bf5 1-79
+Tests/PimentoCoreTests/Fixtures/az-account-list.json
+  s_4884204a812fec::t_6a5031120cd56c 1-33
+Tests/PimentoCoreTests/Fixtures/az-tenant-list.json
+  s_4884204a812fec::t_73baa450018e75 1-6
+Tests/PimentoCoreTests/Fixtures/eligibilities-page1.json
+  s_4884204a812fec::t_d5b553f984f3d9 1-75
+Tests/PimentoCoreTests/Fixtures/eligibilities-page2.json
+  s_4884204a812fec::t_332e968ce3bd32 1-72
+Tests/PimentoCoreTests/Fixtures/eligibilities.json
+  s_4884204a812fec::t_65bd323e81247e 1-142
+Tests/PimentoCoreTests/Fixtures/error-exists.json
+  s_4884204a812fec::t_cadf0f6a66c3c3 1-6
+Tests/PimentoCoreTests/Fixtures/error-policy.json
+  s_4884204a812fec::t_d9795b6d691dd7 1-6
+Tests/PimentoCoreTests/Fixtures/error-token.json
+  s_4884204a812fec::t_1d944c8765a48f 1-6
+Tests/PimentoCoreTests/Fixtures/success-response.json
+  s_4884204a812fec::t_d45468bfa40c46 1-19
+Tests/PimentoCoreTests/OutcomeAndServiceTests.swift
+  s_4884204a812fec::t_10a27b5a859121 1-221
+Tests/PimentoCoreTests/RoleMatcherTests.swift
+  s_4884204a812fec::t_93484abcbc5d06 1-110
+Tests/PimentoCoreTests/Support.swift
+  s_4884204a812fec::t_3961a905f0d855 1-87
+Tests/PimentoCoreTests/TenantAndCLITests.swift
+  s_4884204a812fec::t_9b526fe244eeeb 1-110
+Sources/PimentoApp/CLI.swift
+  s_4884204a812fec::t_f1ace3c3aa0d96 1-136
+Sources/PimentoCore/Auth.swift
+  s_4884204a812fec::t_42b548d0b90597 1-176
+Sources/PimentoCore/AzureDate.swift
+  s_4884204a812fec::t_c7d505df4760d8 1-39
+Sources/PimentoCore/EligibleRole.swift
+  s_4884204a812fec::t_d046b8cef46151 1-172
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7caabca42e415cf489185278ab9226c2e81a059a",
+  "prompts": {},
+  "sessions": {
+    "s_09f1a4703ee7dc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11fb5c13-050a-4db7-befc-028a1ca16b59",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    },
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
