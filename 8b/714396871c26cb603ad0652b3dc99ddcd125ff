@@ -1,0 +1,42 @@
+Sources/PimentoCore/ScheduledRequest.swift
+  s_4884204a812fec::t_c652000497fee0 1-285
+Sources/PimentoCore/ActivationSummary.swift
+  s_4884204a812fec::t_1aa7b8c09fc2a8 64,74,78,90-91,93,127-130
+  s_4884204a812fec::t_5715c97be759be 131
+Sources/PimentoCore/PIMService.swift
+  s_4884204a812fec::t_6e7a30d14c353d 164
+Sources/PimentoCore/CLI/CLIRunner.swift
+  s_4884204a812fec::t_443302aa1f19a3 468-470
+Sources/PimentoCore/ScheduleTime.swift
+  s_4884204a812fec::t_7f7e6267f0b9ae 1-69,72,74-91,94-272
+  s_4884204a812fec::t_f1a2786af51644 70-71,73,92-93
+Tests/PimentoCoreTests/ScheduleTests.swift
+  s_4884204a812fec::t_cdcf8812b79314 1-271
+Tests/PimentoCoreTests/Fixtures/schedule-requests.json
+  s_4884204a812fec::t_cca6176a3bcedf 1-110
+Sources/PimentoCore/ActivationRequest.swift
+  s_4884204a812fec::t_2e984ab46d213b 106-107,110,117,120-122,156-157,172-173,309,315,324-325,327-328
+Sources/PimentoCore/ActivationOutcome.swift
+  s_4884204a812fec::t_ee59bc3968cbaa 81-82
+  s_4884204a812fec::t_6e7a30d14c353d 24-26,40,104,106-107,111,169,173,176-184
+Sources/PimentoCore/CLI/CLIOutput.swift
+  s_4884204a812fec::t_443302aa1f19a3 257-259,278-279,297,332-336,338,357-358,371
+Sources/PimentoApp/ContentView.swift
+  s_4884204a812fec::t_01f735d95c8f7b 539,551,572,583-586
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8b714396871c26cb603ad0652b3dc99ddcd125ff",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
