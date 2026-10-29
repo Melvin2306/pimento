@@ -63,6 +63,18 @@ private struct GeneralSettings: View {
             }
 
             Section {
+                Picker("Theme", selection: $model.prefs.theme) {
+                    ForEach(AppTheme.allCases, id: \.self) { theme in
+                        Text(theme.title).tag(theme)
+                    }
+                }
+            } header: {
+                Text("Appearance")
+            } footer: {
+                Text(themeFooter).font(.caption).foregroundStyle(.secondary)
+            }
+
+            Section {
                 ForEach(AppModel.Column.allCases, id: \.self) { column in
                     Toggle(column.title, isOn: Binding(
                         get: { model.isColumnVisible(column) },
@@ -82,14 +94,24 @@ private struct GeneralSettings: View {
             }
         }
         .formStyle(.grouped)
+        .themedForm()
         .fixedSize(horizontal: false, vertical: true)
         .confirmationDialog("Reset all settings?", isPresented: $model.showResetConfirmation) {
             Button("Reset", role: .destructive) { model.resetPreferences() }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Notifications, activation defaults, refresh and columns go back to their defaults. "
+            Text("Notifications, activation defaults, refresh, appearance and columns go back to their defaults. "
                 + "Hidden tenants and recent justifications are kept.")
         }
+    }
+
+    private var themeFooter: String {
+        let base = switch model.prefs.theme {
+        case .native: "The standard macOS look, light or dark with the system."
+        case .azure: "Flat and blue, light or dark with the system."
+        case .windowsXP: "Beige and glossy blue, always light. Uses Tahoma if this Mac has it."
+        }
+        return base + " Azure-style and Windows XP-style are inspired by those designs; Pimento is not affiliated with Microsoft."
     }
 
     /// Known tenants plus a saved one az no longer lists.
@@ -167,6 +189,7 @@ private struct ActivationSettings: View {
             }
         }
         .formStyle(.grouped)
+        .themedForm()
         .fixedSize(horizontal: false, vertical: true)
     }
 }
@@ -228,6 +251,7 @@ private struct NotificationSettings: View {
             }
         }
         .formStyle(.grouped)
+        .themedForm()
         .fixedSize(horizontal: false, vertical: true)
         .task { await model.updateNotificationPermission() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in

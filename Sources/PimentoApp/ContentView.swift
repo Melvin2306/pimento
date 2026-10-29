@@ -8,13 +8,15 @@ struct ContentView: View {
     var body: some View {
         @Bindable var model = model
         VStack(spacing: 0) {
+            ThemeHeader()
             if let banner = model.banner {
                 BannerView(banner: banner) { model.banner = nil }
             }
             content
-            Divider()
+            ThemedDivider()
             ActivationBar()
         }
+        .themedPageBackground()
         .searchable(text: $model.search, placement: .toolbar, prompt: "Filter roles, resources, groups")
         .toolbar { toolbar }
         .navigationTitle(AppInfo.name)
@@ -53,6 +55,7 @@ struct ContentView: View {
                     Text("Loading on launch is off in Settings. Refresh to list your eligible roles in \(model.tenantLabel).")
                 } actions: {
                     Button("Refresh") { Task { await model.refresh() } }
+                        .themedButton(.primary())
                         .buttonStyle(.borderedProminent)
                 }
             case .loading where model.roles.isEmpty, .idle:
@@ -67,12 +70,14 @@ struct ContentView: View {
                             + "If you expected some, check that the right tenant is selected.")
                     } actions: {
                         Button("Choose Tenant…") { model.openTenantPicker() }
+                            .themedButton(.secondary)
                             .disabled(model.tenant.isOverride)
                     }
                 } else if model.visibleRoles.isEmpty {
                     ContentUnavailableView.search(text: model.search)
                 } else {
                     RoleTable()
+                        .themedListArea()
                 }
             }
         }
@@ -139,10 +144,20 @@ struct ContentView: View {
 
 struct RoleTable: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.appTheme) private var theme
 
     var body: some View {
+        switch theme {
+        // Bordered for XP: the grid and the boxed header read as a Luna list view.
+        case .windowsXP: table.tableStyle(.bordered(alternatesRowBackgrounds: false))
+        case .azure: table.tableStyle(.inset(alternatesRowBackgrounds: false))
+        case .native: table.tableStyle(.inset(alternatesRowBackgrounds: true))
+        }
+    }
+
+    private var table: some View {
         @Bindable var model = model
-        Table(model.visibleRoles, sortOrder: $model.sortOrder, columnCustomization: $model.columnCustomization) {
+        return Table(model.visibleRoles, sortOrder: $model.sortOrder, columnCustomization: $model.columnCustomization) {
             TableColumn("") { (role: EligibleRole) in
                 Toggle("", isOn: Binding(
                     get: { model.isChecked(role) },
@@ -152,6 +167,7 @@ struct RoleTable: View {
                 .disabled(role.isActive || model.isActivating)
                 .help(role.isActive ? "Already active" : "Select for activation")
                 .accessibilityLabel("Select \(role.roleName) on \(role.scopeName)")
+                .themedCell(checked: model.isChecked(role))
             }
             .width(24)
             .disabledCustomizationBehavior(.all)
@@ -168,6 +184,7 @@ struct RoleTable: View {
                             .accessibilityLabel("Owner role")
                     }
                 }
+                .themedCell(checked: model.isChecked(role))
             }
             .width(min: 90, ideal: 120)
             .customizationID("role")
@@ -179,6 +196,7 @@ struct RoleTable: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .help("\(role.scopeName)\n\(role.scope)")
+                    .themedCell(checked: model.isChecked(role))
             }
             .width(min: 160, ideal: 260)
             .customizationID("resource")
@@ -186,57 +204,105 @@ struct RoleTable: View {
 
             TableColumn("Type", value: \.scopeTypeLabel) { role in
                 Text(role.scopeTypeLabel).lineLimit(1)
+                    .themedCell(checked: model.isChecked(role))
             }
             .width(min: 80, ideal: 110)
             .customizationID(AppModel.Column.type.rawValue)
 
             TableColumn("Membership", value: \.membership.label) { role in
-                switch role.membership {
-                case .direct:
-                    Text("Direct")
-                case .group(let name):
-                    Label(name, systemImage: "person.3")
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .help("Inherited through group \(name)")
+                Group {
+                    switch role.membership {
+                    case .direct:
+                        Text("Direct")
+                    case .group(let name):
+                        Label(name, systemImage: "person.3")
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .help("Inherited through group \(name)")
+                    }
                 }
+                .themedCell(checked: model.isChecked(role))
             }
             .width(min: 80, ideal: 150)
             .customizationID(AppModel.Column.membership.rawValue)
 
             TableColumn("Cond.") { role in
-                if role.hasCondition {
-                    Image(systemName: "lock.shield")
-                        .foregroundStyle(.secondary)
-                        .help("ABAC condition (copied verbatim on activation):\n\(role.condition ?? "")")
-                        .accessibilityLabel("Has an ABAC condition")
+                Group {
+                    if role.hasCondition {
+                        Image(systemName: "lock.shield")
+                            .foregroundStyle(.secondary)
+                            .help("ABAC condition (copied verbatim on activation):\n\(role.condition ?? "")")
+                            .accessibilityLabel("Has an ABAC condition")
+                    }
                 }
+                .themedCell(checked: model.isChecked(role))
             }
             .width(44)
             .customizationID(AppModel.Column.condition.rawValue)
 
             TableColumn("Status", value: \.statusSortKey) { role in
-                StatusCell(role: role)
+                StatusCell(role: role, checked: model.isChecked(role))
+                    .themedCell(checked: model.isChecked(role))
             }
             .width(min: 110, ideal: 150)
             .customizationID("status")
             .disabledCustomizationBehavior(.visibility)
 
             TableColumn("Result") { role in
-                ResultCell(progress: model.progress[role.id])
+                ResultCell(progress: model.progress[role.id], checked: model.isChecked(role))
+                    .themedCell(checked: model.isChecked(role))
             }
             .width(min: 120, ideal: 260)
             .customizationID("result")
             .disabledCustomizationBehavior(.visibility)
         }
-        .tableStyle(.inset(alternatesRowBackgrounds: true))
     }
 }
 
 struct StatusCell: View {
     let role: EligibleRole
+    var checked = false
+    @Environment(\.appTheme) private var theme
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
+        if theme == .native {
+            native
+        } else {
+            themed(ThemePalette(theme, scheme))
+        }
+    }
+
+    private var activeText: String {
+        role.activeUntil.map { "Active until \(Self.format($0))" } ?? "Active"
+    }
+
+    /// A portal badge for Azure; a green check / plain text for XP.
+    @ViewBuilder private func themed(_ palette: ThemePalette) -> some View {
+        if role.isActive {
+            Group {
+                if theme == .azure {
+                    ThemeBadge(text: activeText, symbol: "checkmark.circle.fill",
+                               foreground: palette.success, fill: palette.successFill, font: palette.font(12))
+                } else {
+                    Label {
+                        Text(activeText)
+                    } icon: {
+                        Image(systemName: "checkmark.circle.fill").foregroundStyle(palette.success)
+                    }
+                }
+            }
+            .help(role.activeUntil.map { $0.formatted(date: .complete, time: .standard) } ?? "Active")
+        } else if theme == .azure {
+            ThemeBadge(text: "Eligible", symbol: nil,
+                       foreground: palette.secondaryText, fill: checked ? palette.surface.opacity(0.6) : palette.neutralFill,
+                       font: palette.font(12))
+        } else {
+            Text("Eligible").foregroundStyle(checked ? palette.selectionText : palette.secondaryText)
+        }
+    }
+
+    @ViewBuilder private var native: some View {
         if role.isActive {
             Label {
                 Text(role.activeUntil.map { "Active until \(Self.format($0))" } ?? "Active")
@@ -258,6 +324,9 @@ struct StatusCell: View {
 
 struct ResultCell: View {
     let progress: RowProgress?
+    var checked = false
+    @Environment(\.appTheme) private var theme
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         switch progress {
@@ -270,11 +339,21 @@ struct ResultCell: View {
                 ProgressView().controlSize(.small)
                 Text("Activating…").foregroundStyle(.secondary)
             }
+        case .done(let outcome) where theme == .azure:
+            let palette = ThemePalette(theme, scheme)
+            let (symbol, foreground, fill): (String, Color, Color) = switch outcome {
+            case .activated: ("checkmark.circle.fill", palette.success, palette.successFill)
+            case .alreadyActive: ("arrow.uturn.forward.circle", palette.secondaryText, palette.neutralFill)
+            case .policyViolation, .failed: ("xmark.octagon.fill", palette.danger, palette.dangerFill)
+            }
+            ThemeBadge(text: outcome.summary, symbol: symbol, foreground: foreground, fill: fill, font: palette.font(12))
+                .help(detail(outcome))
+                .textSelection(.enabled)
         case .done(let outcome):
             let (symbol, color): (String, Color) = switch outcome {
-            case .activated: ("checkmark.circle.fill", .green)
+            case .activated: ("checkmark.circle.fill", theme == .windowsXP ? ThemePalette(theme, scheme).success : .green)
             case .alreadyActive: ("arrow.uturn.forward.circle", .secondary)
-            case .policyViolation, .failed: ("xmark.octagon.fill", .red)
+            case .policyViolation, .failed: ("xmark.octagon.fill", theme == .windowsXP && !checked ? ThemePalette(theme, scheme).danger : .red)
             }
             Label {
                 Text(outcome.summary).lineLimit(1).truncationMode(.tail)
@@ -306,6 +385,7 @@ struct ActivationBar: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 4) {
                     TextField("Justification (required), e.g. INC-1234 investigate database latency", text: $model.justification)
+                        .themedTextField(focused: justificationFocused)
                         .textFieldStyle(.roundedBorder)
                         .focused($justificationFocused)
                         .accessibilityLabel("Justification")
@@ -346,6 +426,7 @@ struct ActivationBar: View {
             } label: {
                 Label("Preview", systemImage: "eye")
             }
+            .themedButton(.secondary)
             .buttonStyle(.borderless)
             .foregroundStyle(.secondary)
             .disabled(!model.canActivate)
@@ -364,6 +445,7 @@ struct ActivationBar: View {
                     Text(model.activateTitle)
                 }
             }
+            .themedButton(.primary(warning: !model.checkedOwnerRoles.isEmpty))
             .buttonStyle(.borderedProminent)
             .tint(model.checkedOwnerRoles.isEmpty ? .accentColor : .orange)
             .keyboardShortcut(.return, modifiers: .command)
@@ -371,6 +453,7 @@ struct ActivationBar: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
+        .themedBar()
         .background(.bar)
     }
 
@@ -390,6 +473,8 @@ struct ActivationBar: View {
 struct BannerView: View {
     let banner: AppModel.Banner
     let dismiss: () -> Void
+    @Environment(\.appTheme) private var theme
+    @Environment(\.colorScheme) private var scheme
 
     private var style: (symbol: String, color: Color) {
         switch banner.kind {
@@ -399,9 +484,19 @@ struct BannerView: View {
         }
     }
 
+    /// Portal message-bar / XP info-bar colours: (icon, fill).
+    private var themedStyle: (icon: Color, fill: Color) {
+        let palette = ThemePalette(theme, scheme)
+        return switch banner.kind {
+        case .info: (palette.accent, palette.infoFill)
+        case .success: (palette.success, palette.successFill)
+        case .error: (palette.danger, palette.dangerFill)
+        }
+    }
+
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: style.symbol).foregroundStyle(style.color)
+            Image(systemName: style.symbol).foregroundStyle(theme == .native ? style.color : themedStyle.icon)
             Text(banner.text).textSelection(.enabled)
             Spacer()
             Button(action: dismiss) { Image(systemName: "xmark") }
@@ -411,7 +506,7 @@ struct BannerView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .background(style.color.opacity(0.12))
+        .background(theme == .native ? style.color.opacity(0.12) : themedStyle.fill)
     }
 }
 
@@ -447,13 +542,16 @@ struct LoadErrorView: View {
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(model.loginCommand, forType: .string)
                     }
+                    .themedButton(.secondary)
                     .accessibilityLabel("Copy login command")
                 }
             }
             HStack {
                 Button("Choose Tenant…") { model.openTenantPicker() }
+                    .themedButton(.secondary)
                     .disabled(model.tenant.isOverride)
                 Button("Retry") { Task { await model.refresh() } }
+                    .themedButton(.primary())
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
             }
@@ -486,10 +584,13 @@ struct DryRunSheet: View {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(fullText, forType: .string)
                 }
-                Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+                .themedButton(.secondary)
+                Button("Done") { dismiss() }
+                    .themedButton(.primary())
+                    .keyboardShortcut(.defaultAction)
             }
             .padding(16)
-            Divider()
+            ThemedDivider()
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 18) {
                     ForEach(plans) { plan in
@@ -509,6 +610,7 @@ struct DryRunSheet: View {
                 .padding(16)
             }
         }
+        .themedPageBackground()
         .frame(minWidth: 720, idealWidth: 820, minHeight: 480, idealHeight: 640)
     }
 }

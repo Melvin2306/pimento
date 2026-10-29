@@ -5,6 +5,7 @@ import SwiftUI
 /// Toolbar button showing the current tenant; opens the searchable picker.
 struct TenantToolbarButton: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.appTheme) private var theme
 
     var body: some View {
         @Bindable var model = model
@@ -31,7 +32,9 @@ struct TenantToolbarButton: View {
         .help(help)
         .accessibilityLabel("Tenant: \(model.tenantLabel)")
         .popover(isPresented: $model.showTenantPicker, arrowEdge: .bottom) {
-            TenantPicker().environment(model)
+            TenantPicker()
+                .environment(model)
+                .appTheme(theme)
         }
     }
 
@@ -94,6 +97,7 @@ struct TenantPicker: View {
             footer.padding(.horizontal, 10).padding(.vertical, 8)
         }
         .frame(width: 400)
+        .themedPageBackground()
         .onAppear {
             searchFocused = true
             if model.knownTenants.isEmpty { Task { await model.loadTenants() } }
@@ -262,6 +266,8 @@ private struct TenantRow: View {
 /// `@State` macro needs full Xcode).
 private struct PickerRowButton<Content: View>: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.appTheme) private var theme
+    @Environment(\.colorScheme) private var scheme
     let id: String
     let disabled: Bool
     let action: () -> Void
@@ -274,8 +280,8 @@ private struct PickerRowButton<Content: View>: View {
                 .padding(.vertical, 5)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(model.hoveredTenantId == id && !disabled ? Color.accentColor.opacity(0.14) : .clear))
+                    RoundedRectangle(cornerRadius: theme == .native ? 6 : ThemePalette(theme, scheme).cornerRadius)
+                        .fill(model.hoveredTenantId == id && !disabled ? hoverFill : .clear))
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -283,6 +289,10 @@ private struct PickerRowButton<Content: View>: View {
         .onHover { inside in
             if inside { model.hoveredTenantId = id } else if model.hoveredTenantId == id { model.hoveredTenantId = nil }
         }
+    }
+
+    private var hoverFill: Color {
+        theme == .native ? Color.accentColor.opacity(0.14) : ThemePalette(theme, scheme).rowHover
     }
 }
 
@@ -305,6 +315,7 @@ struct TenantSheet: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             TextField("Tenant ID or domain, e.g. contoso.onmicrosoft.com", text: $model.tenantDraft)
+                .themedTextField()
                 .textFieldStyle(.roundedBorder)
                 .font(.body.monospaced())
                 .onSubmit(save)
@@ -315,14 +326,17 @@ struct TenantSheet: View {
             HStack {
                 Spacer()
                 Button("Cancel", role: .cancel) { dismiss() }
+                    .themedButton(.secondary)
                     .keyboardShortcut(.cancelAction)
                 Button("Use Tenant", action: save)
+                    .themedButton(.primary())
                     .keyboardShortcut(.defaultAction)
                     .disabled(!draftIsValid)
             }
         }
         .padding(20)
         .frame(width: 480)
+        .themedPageBackground()
         .onAppear { model.tenantDraft = model.tenant.tenantId ?? "" }
     }
 

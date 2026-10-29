@@ -43,7 +43,7 @@ struct PimentoApp: App {
 
     var body: some Scene {
         Window(AppInfo.name, id: "main") {
-            ContentView()
+            AppThemed { ContentView() }
                 .environment(model)
                 .frame(minWidth: 960, minHeight: 520)
         }
@@ -83,7 +83,7 @@ struct PimentoApp: App {
 
         // ⌘, opens it from the app menu.
         Settings {
-            SettingsView()
+            AppThemed { SettingsView() }
                 .environment(model)
         }
     }

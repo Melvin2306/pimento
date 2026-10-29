@@ -25,6 +25,11 @@ All notable changes to this project are documented here. The format follows
   checkmark on the current one, "Use az default", manual entry and reload. Tenants you never use can
   be hidden. With `--tenant`/`PIMENTO_TENANT` it opens locked with an explanation.
 - Table columns can be hidden by right-clicking a column header; the layout is remembered.
+- Themes (Settings › General › Appearance), applied live to the main window, its sheets, the
+  tenant picker and Settings: Native (default, unchanged), Azure-style (light and dark) and
+  Windows XP-style (always light). Styling only; controls and shortcuts are the same. Uses Segoe UI
+  or Tahoma only if installed; no Microsoft fonts or artwork are bundled, and Pimento is not
+  affiliated with Microsoft.
 
 ### Changed
 

@@ -40,6 +40,7 @@ does the whole list in one go, as you, using the Azure CLI session you already h
 - **Any tenant**: a searchable tenant picker in the toolbar shows every tenant by name, or pass
   `--tenant` / `PIMENTO_TENANT`. Hide the tenants you never use.
 - **Settings** (<kbd>⌘</kbd><kbd>,</kbd>) for notifications, activation defaults, refresh and table columns.
+- **Themes**: Native, Azure-style or, for fun, Windows XP-style (see [Themes](#themes)).
 - **Read-only CLI** in the same binary for scripting: `--list`, `--dry-run`, `--tenants`.
 - **No credentials of its own, no dependencies, no telemetry.**
 
@@ -131,9 +132,28 @@ is under General.
 
 | Tab | Options |
 | --- | --- |
-| General | tenant to open with (last used, az's current, or a specific one); load roles on launch; refresh automatically (off, 1, 5 or 15 minutes); show or hide the Type, Membership and Condition columns (also via right-click on a column header); unhide hidden tenants |
+| General | tenant to open with (last used, az's current, or a specific one); load roles on launch; refresh automatically (off, 1, 5 or 15 minutes); theme (see below); show or hide the Type, Membership and Condition columns (also via right-click on a column header); unhide hidden tenants |
 | Activation | default duration; parallel requests (1 to 16, default 8); confirm before activating Owner roles (on by default); remember recent justifications and offer them from the clock button next to the field; start with the last one filled in |
 | Notifications | macOS permission state, with a shortcut to System Settings when it is off; send a test notification; notify when activations finish, or only when something fails; expiry reminders and how long before (5, 10, 15 or 30 minutes); sound |
+
+### Themes
+
+*Settings › General › Appearance* switches the look of the main window, its sheets, the tenant
+picker and the Settings window. The change applies right away. Only the styling changes: every
+control, shortcut and accessibility label works the same in each theme.
+
+| Theme | Look |
+| --- | --- |
+| Native (default) | The standard macOS look, light or dark with the system. |
+| Azure-style | Flat and blue: a dark top bar with the app name and the signed-in user, a page title, the table on a white card with light-blue checked rows, portal-style status badges, square blue buttons. Light and dark. Uses Segoe UI if the Mac has it, otherwise the system font. |
+| Windows XP-style | Beige window, a glossy blue title-bar strip, a white list box with blue checked rows, light rounded buttons and a green **Activate** button (orange with Owner roles). Always light, since XP had no dark mode. Uses Tahoma if the Mac has it (macOS ships it), otherwise the system font. |
+
+The native window toolbar (tenant, Refresh, Settings, search, selection buttons) and system alerts
+such as the Owner confirmation keep the macOS look in every theme; the themed header is drawn
+below the toolbar. No fonts, logos, icons, wallpapers or sounds are bundled.
+
+The Azure-style and Windows XP-style themes are inspired by those designs. Pimento is not
+affiliated with or endorsed by Microsoft.
 
 ### The command line
 
