@@ -129,7 +129,7 @@ public final class PIMService: Sendable {
             let page = try JSONDecoder().decode(ARMList<Item>.self, from: data)
             items += page.value
             // Only follow pagination links back to ARM, never send the token elsewhere.
-            next = page.nextLink.flatMap(URL.init(string:)).flatMap { $0.host == ARM.host ? $0 : nil }
+            next = ARM.followableNextLink(page.nextLink)
         }
         return items
     }

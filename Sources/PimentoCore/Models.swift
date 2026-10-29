@@ -15,6 +15,14 @@ public enum ARM {
     public static var assignmentInstancesURL: URL {
         URL(string: "\(baseURL)/providers/Microsoft.Authorization/roleAssignmentScheduleInstances?api-version=\(apiVersion)&$filter=asTarget()")!
     }
+
+    /// A list response's `nextLink`, only when it points back to ARM over
+    /// HTTPS: the bearer token is never sent anywhere else, nor in the clear.
+    public static func followableNextLink(_ link: String?) -> URL? {
+        guard let url = link.flatMap(URL.init(string:)), url.scheme?.lowercased() == "https",
+              url.host?.lowercased() == host, url.port == nil || url.port == 443 else { return nil }
+        return url
+    }
 }
 
 /// One page of an ARM list response.

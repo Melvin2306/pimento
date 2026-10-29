@@ -170,7 +170,7 @@ public enum TenantDirectory {
                 id: id, displayName: realName(item.displayName),
                 defaultDomain: realName(item.defaultDomain), category: realName(item.tenantCategory))
         }
-        let next = page.nextLink.flatMap(URL.init(string:)).flatMap { $0.scheme == "https" && $0.host == ARM.host ? $0 : nil }
+        let next = ARM.followableNextLink(page.nextLink)
         return (tenants, next)
     }
 

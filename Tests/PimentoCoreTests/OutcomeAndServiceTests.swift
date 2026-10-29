@@ -172,6 +172,29 @@ struct PIMServiceTests {
         #expect(hosts == ["management.azure.com", "management.azure.com"])
     }
 
+    @Test(arguments: [
+        "http://management.azure.com/providers/x?$skiptoken=2",
+        "https://management.azure.com:8443/providers/x?$skiptoken=2",
+        "https://management.azure.com.evil.example/providers/x",
+        "not a url",
+    ])
+    func unsafeNextLinkIsNotFollowed(_ link: String) async throws {
+        let page = Data(#"{"value":[],"nextLink":"\#(link)"}"#.utf8)
+        let transport = RecordingTransport { _ in (page, 200) }
+        let service = PIMService(transport: transport, tokens: StaticTokenProvider())
+        _ = try await service.loadRoles()
+        // One request per listing (eligibilities, assignments): the link is dropped.
+        let urls = await transport.requests.compactMap { $0.url }
+        #expect(urls.count == 2 && urls.allSatisfy { $0.scheme == "https" && $0.port == nil })
+    }
+
+    @Test func nextLinkFilter() {
+        #expect(ARM.followableNextLink("https://management.azure.com/providers/x?$skiptoken=2") != nil)
+        #expect(ARM.followableNextLink("https://Management.Azure.com/tenants?$skiptoken=2") != nil)
+        #expect(ARM.followableNextLink("http://management.azure.com/tenants") == nil)
+        #expect(ARM.followableNextLink(nil) == nil)
+    }
+
     @Test func listingErrorSurfacesARMMessage() async throws {
         let transport = RecordingTransport { _ in
             (Data(#"{"error":{"code":"AuthorizationFailed","message":"no access"}}"#.utf8), 403)
