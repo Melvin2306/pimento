@@ -157,7 +157,10 @@ jobs:
           bin="$(ls build/cli-check/*/pimento.exe)"
           "$bin" version
           "$bin" help >/dev/null
-          "$bin" help login | grep -q "device code"
+          # Browser sign-in on Windows too, and the device code as the option.
+          "$bin" help login | grep -q "Opens your browser"
+          "$bin" help login | grep -q -- "--device-code"
+          if "$bin" help login | grep -q "no browser sign-in"; then exit 1; fi
           # PowerShell completions: printed by the CLI and shipped in the zip.
           "$bin" completions powershell | grep -q "Register-ArgumentCompleter -Native"
           grep -q "Register-ArgumentCompleter" "$(dirname "$bin")/completions/pimento.ps1"
