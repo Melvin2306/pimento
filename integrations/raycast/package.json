@@ -1,0 +1,88 @@
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "pimento",
+  "title": "Pimento",
+  "description": "Activate and deactivate your Azure PIM roles and presets with the pimento CLI.",
+  "icon": "icon.png",
+  "author": "melvin2306",
+  "license": "MIT",
+  "private": true,
+  "categories": [
+    "Developer Tools",
+    "Productivity"
+  ],
+  "platforms": [
+    "macOS"
+  ],
+  "commands": [
+    {
+      "name": "roles",
+      "title": "Search PIM Roles",
+      "subtitle": "Pimento",
+      "description": "Your eligible Azure PIM roles with their status: activate (justification and duration) or deactivate them.",
+      "mode": "view"
+    },
+    {
+      "name": "presets",
+      "title": "Activate PIM Preset",
+      "subtitle": "Pimento",
+      "description": "Your saved Pimento presets: activate one.",
+      "mode": "view"
+    },
+    {
+      "name": "active",
+      "title": "Active PIM Roles",
+      "subtitle": "Pimento",
+      "description": "The roles that are active now, with the time left.",
+      "mode": "view"
+    }
+  ],
+  "preferences": [
+    {
+      "name": "pimentoPath",
+      "title": "pimento Path",
+      "description": "The pimento CLI to run. Empty: ~/.local/bin/pimento, then PATH (and Homebrew), then /Applications/Pimento.app/Contents/Helpers/pimento.",
+      "type": "textfield",
+      "required": false,
+      "placeholder": "~/.local/bin/pimento"
+    },
+    {
+      "name": "tenant",
+      "title": "Tenant",
+      "description": "Tenant GUID or domain (pimento --tenant). Empty: $PIMENTO_TENANT, then the az or Pimento sign-in's tenant.",
+      "type": "textfield",
+      "required": false,
+      "placeholder": "contoso.onmicrosoft.com"
+    },
+    {
+      "name": "demoMode",
+      "title": "Demo Mode",
+      "label": "Use demo data (pimento --demo)",
+      "description": "A simulated Azure with synthetic data: offline, nothing is sent, none of your files are used.",
+      "type": "checkbox",
+      "required": false,
+      "default": false
+    }
+  ],
+  "dependencies": {
+    "@raycast/api": "~2.8.2",
+    "@raycast/utils": "^2.3.2"
+  },
+  "devDependencies": {
+    "@raycast/eslint-config": "^2.1.1",
+    "@types/node": "22.19.17",
+    "@types/react": "19.0.10",
+    "eslint": "^9.30.0",
+    "prettier": "^3.6.0",
+    "typescript": "^5.8.3"
+  },
+  "scripts": {
+    "build": "ray build",
+    "dev": "ray develop",
+    "lint": "ray lint",
+    "fix-lint": "ray lint --fix",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test test/*.test.mts",
+    "prepublishOnly": "echo 'This extension is not published to npm or the Raycast Store; see README.md.' && exit 1"
+  }
+}
