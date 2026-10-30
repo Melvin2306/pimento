@@ -392,6 +392,12 @@ All notable changes to this project are documented here. The format follows
   in a justification could overwrite the row shown just before `approve`'s `[y/N]`, and escape
   sequences could hide text, set the clipboard or fake links. `--json` keeps the exact values (DEL, C1
   and bidi characters are now written as `\uXXXX`); CSV on stdout is exact when piped.
+- The sign-in listener for `http://localhost:<port>` holds both 127.0.0.1 and ::1 on its port, or
+  none: when another program (another local user, for example) already listens on ::1 at that port,
+  Pimento tries another port (16 in all) and otherwise fails, instead of listening on 127.0.0.1 alone
+  while a browser that tries ::1 first sends the code and `state` to the other program. IPv4 alone is
+  used only where the system has no IPv6 loopback. The redirect URI stays `http://localhost`: Entra
+  documents the ignored port only for `localhost`, and `http://127.0.0.1` needs a manifest edit.
 
 ## [0.1.0] - 2026-10-29
 

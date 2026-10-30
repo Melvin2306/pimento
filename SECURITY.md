@@ -51,6 +51,12 @@ anything that requires an attacker to already control your user account or `az` 
   which other local users can read on Linux: macOS opens it through LaunchServices; Linux gives
   `xdg-open` only the path of a private redirect page (mode 600 in a new 700 folder), removed when
   the sign-in is over. The CLI also prints the URL to your terminal, for opening it by hand.
+- The sign-in redirect is `http://localhost:<random port>`. Pimento listens on both 127.0.0.1 and
+  ::1 on that port, never on one side only (unless the system has no IPv6 loopback), so another
+  local user's listener cannot receive the redirect. It takes the first request with the right
+  `state` and closes. `http://127.0.0.1` would avoid the question of which address `localhost`
+  resolves to, but Entra documents the ignored port only for `localhost` redirect URIs and accepts
+  `http://127.0.0.1` only through a manifest edit, so Pimento keeps `localhost`.
 - Every line the CLI writes to a terminal goes through one sanitiser: control characters, escape
   sequences other than its own colour codes, and bidi overrides in text from Azure, Entra or other
   people are shown as visible escapes, so a justification or a name cannot rewrite what a `[y/N]`

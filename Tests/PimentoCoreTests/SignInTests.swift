@@ -1012,3 +1012,51 @@ struct BrowserLaunchTests {
         #expect(text.contains("redirectPages.removeAll()"))
     }
 }
+
+#if !os(Windows)
+@Suite("Sign-in: the loopback listener owns both sides of localhost")
+struct LoopbackDualStackTests {
+    /// Another program's listener on [::1] (IPv6 only), on a port of the
+    /// kernel's choosing; nil when this system has no IPv6 loopback.
+    static func squatter() -> (fd: Int32, port: UInt16)? {
+        guard case .bound(let fd) = LoopbackListener.bindIPv6Loopback(port: 0) else { return nil }
+        var addr = sockaddr_in6()
+        var length = socklen_t(MemoryLayout<sockaddr_in6>.size)
+        _ = withUnsafeMutablePointer(to: &addr) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { getsockname(fd, $0, &length) }
+        }
+        return (fd, UInt16(bigEndian: addr.sin6_port))
+    }
+
+    static var hasIPv6Loopback: Bool {
+        guard let s = squatter() else { return false }
+        close(s.fd)
+        return true
+    }
+
+    @Test(.enabled(if: hasIPv6Loopback, "no IPv6 loopback here"))
+    func aPortWhoseIPv6SideIsTakenIsNeverUsed() throws {
+        let squat = try #require(Self.squatter())
+        defer { close(squat.fd) }
+        #expect(LoopbackListener.bindIPv6Loopback(port: squat.port) == .taken)
+        // Only that port to try: sign-in fails rather than leaving ::1 to the squatter.
+        #expect(throws: SignInError.self) { _ = try LoopbackListener(connectionTimeout: 5, ports: [squat.port]) }
+        // With more tries it moves to a port where both sides are its own.
+        let listener = try LoopbackListener(connectionTimeout: 5, ports: [squat.port, 0, 0])
+        defer { listener.close() }
+        #expect(listener.port != squat.port)
+        #expect(LoopbackListener.bindIPv6Loopback(port: listener.port) == .taken)
+        #expect(listener.redirectURI == "http://localhost:\(listener.port)")
+    }
+
+    @Test func theListenerAlwaysHoldsTheIPv6SideWhenThereIsOne() throws {
+        for _ in 0..<5 {
+            let listener = try LoopbackListener()
+            defer { listener.close() }
+            if Self.hasIPv6Loopback { #expect(LoopbackListener.bindIPv6Loopback(port: listener.port) == .taken) }
+        }
+        #expect(LoopbackListener.meansNoIPv6(EAFNOSUPPORT) && LoopbackListener.meansNoIPv6(EADDRNOTAVAIL))
+        #expect(!LoopbackListener.meansNoIPv6(EADDRINUSE) && !LoopbackListener.meansNoIPv6(EACCES))
+    }
+}
+#endif

@@ -479,8 +479,10 @@ own client IDs.
    directory only* for one tenant, or *Accounts in any organizational directory (Multitenant)* if you
    want to use Pimento in other tenants too (as a guest, for example).
 3. **Redirect URI**: platform **Public client/native (mobile & desktop)**, value `http://localhost`.
-   Press **Register**. (Pimento listens on `http://localhost:<random port>`; Entra ignores the port
-   of a `localhost` redirect URI.)
+   Press **Register**. (Pimento listens on `http://localhost:<random port>`, on both 127.0.0.1 and
+   ::1, and picks another port when another program holds either side; Entra ignores the port of a
+   `localhost` redirect URI. `http://127.0.0.1` is not used: Entra documents the ignored port only
+   for `localhost`, and an `http://127.0.0.1` URI can be added only by editing the manifest.)
 4. **Authentication**: check that the platform **Mobile and desktop applications** lists
    `http://localhost` (if not: *Add a platform* › *Mobile and desktop applications* › custom redirect
    URI `http://localhost` › *Configure*). Under **Advanced settings**, set **Allow public client

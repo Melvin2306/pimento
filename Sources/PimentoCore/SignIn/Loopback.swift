@@ -94,34 +94,37 @@ public final class LoopbackListener: @unchecked Sendable {
 
     public convenience init() throws { try self.init(connectionTimeout: 5) }
 
-    init(connectionTimeout: TimeInterval) throws {
+    /// How many ports `init` tries before it gives up.
+    static let bindAttempts = 16
+
+    /// Listens on 127.0.0.1 and ::1 on one port. The redirect URI names
+    /// `localhost`, which a browser may resolve to ::1 first, so the ::1
+    /// side must be Pimento's too: when ::1 on the port the kernel chose for
+    /// 127.0.0.1 is taken (by another program or user, which would then get
+    /// the redirect with the code and state), the port is dropped and
+    /// another one tried; after `bindAttempts` ports, sign-in fails. Only
+    /// where the system has no IPv6 loopback at all (so nobody can listen on
+    /// ::1) does Pimento listen on 127.0.0.1 alone. `ports`: the 127.0.0.1
+    /// port of each attempt (0: the kernel's choice; tests pick their own).
+    init(connectionTimeout: TimeInterval, ports: [UInt16] = Array(repeating: 0, count: LoopbackListener.bindAttempts)) throws {
         self.connectionTimeout = connectionTimeout
-        let v4 = socket(AF_INET, Self.streamType, 0)
-        guard v4 >= 0 else { throw SignInError.loopback(String(cString: strerror(errno))) }
-        var addr = sockaddr_in()
-        #if canImport(Darwin)
-        addr.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
-        #endif
-        addr.sin_family = sa_family_t(AF_INET)
-        addr.sin_port = 0
-        addr.sin_addr = in_addr(s_addr: UInt32(0x7F00_0001).bigEndian)
-        let bound = withUnsafePointer(to: &addr) {
-            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(v4, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) }
+        for candidate in ports {
+            let (v4, port) = try Self.bindIPv4Loopback(port: candidate)
+            switch Self.bindIPv6Loopback(port: port) {
+            case .bound(let v6):
+                self.port = port
+                sockets = [v4, v6]
+                return
+            case .unavailable:
+                self.port = port
+                sockets = [v4]
+                return
+            case .taken:
+                _ = Self.closeSocket(v4)
+            }
         }
-        guard bound == 0, listen(v4, 8) == 0 else {
-            let message = String(cString: strerror(errno))
-            _ = Self.closeSocket(v4)
-            throw SignInError.loopback(message)
-        }
-        var actual = sockaddr_in()
-        var length = socklen_t(MemoryLayout<sockaddr_in>.size)
-        _ = withUnsafeMutablePointer(to: &actual) {
-            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { getsockname(v4, $0, &length) }
-        }
-        port = UInt16(bigEndian: actual.sin_port)
-        sockets = [v4]
-        // Browsers may resolve localhost to ::1 first; listen there too if we can.
-        if let v6 = Self.bindIPv6Loopback(port: port) { sockets.append(v6) }
+        throw SignInError.loopback("could not listen on 127.0.0.1 and ::1 on the same port (\(ports.count) tries); "
+            + "another program holds the ::1 side")
     }
 
     deinit { close() }
@@ -142,9 +145,49 @@ public final class LoopbackListener: @unchecked Sendable {
         #endif
     }
 
-    private static func bindIPv6Loopback(port: UInt16) -> Int32? {
+    /// 127.0.0.1:`port` (0: any free port), listening; and the port it got.
+    private static func bindIPv4Loopback(port requested: UInt16) throws -> (Int32, UInt16) {
+        let v4 = socket(AF_INET, streamType, 0)
+        guard v4 >= 0 else { throw SignInError.loopback(String(cString: strerror(errno))) }
+        var addr = sockaddr_in()
+        #if canImport(Darwin)
+        addr.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        #endif
+        addr.sin_family = sa_family_t(AF_INET)
+        addr.sin_port = requested.bigEndian
+        addr.sin_addr = in_addr(s_addr: UInt32(0x7F00_0001).bigEndian)
+        let bound = withUnsafePointer(to: &addr) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(v4, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) }
+        }
+        guard bound == 0, listen(v4, 8) == 0 else {
+            let message = String(cString: strerror(errno))
+            _ = closeSocket(v4)
+            throw SignInError.loopback(message)
+        }
+        var actual = sockaddr_in()
+        var length = socklen_t(MemoryLayout<sockaddr_in>.size)
+        _ = withUnsafeMutablePointer(to: &actual) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { getsockname(v4, $0, &length) }
+        }
+        return (v4, UInt16(bigEndian: actual.sin_port))
+    }
+
+    enum IPv6Bind: Equatable {
+        case bound(Int32)
+        /// No IPv6 loopback on this system: nobody can listen on ::1.
+        case unavailable
+        /// ::1 on this port is someone else's (or failed otherwise): try another port.
+        case taken
+    }
+
+    /// Errors that mean the system has no IPv6 loopback, not that the port is taken.
+    static func meansNoIPv6(_ code: Int32) -> Bool {
+        code == EAFNOSUPPORT || code == EPROTONOSUPPORT || code == EADDRNOTAVAIL
+    }
+
+    static func bindIPv6Loopback(port: UInt16) -> IPv6Bind {
         let fd = socket(AF_INET6, streamType, 0)
-        guard fd >= 0 else { return nil }
+        guard fd >= 0 else { return meansNoIPv6(errno) ? .unavailable : .taken }
         var on: Int32 = 1
         setsockopt(fd, Int32(IPPROTO_IPV6), IPV6_V6ONLY, &on, socklen_t(MemoryLayout<Int32>.size))
         var addr = sockaddr_in6()
@@ -157,11 +200,16 @@ public final class LoopbackListener: @unchecked Sendable {
         let bound = withUnsafePointer(to: &addr) {
             $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, socklen_t(MemoryLayout<sockaddr_in6>.size)) }
         }
-        guard bound == 0, listen(fd, 8) == 0 else {
+        if bound != 0 {
+            let code = errno
             _ = closeSocket(fd)
-            return nil
+            return meansNoIPv6(code) ? .unavailable : .taken
         }
-        return fd
+        guard listen(fd, 8) == 0 else {
+            _ = closeSocket(fd)
+            return .taken
+        }
+        return .bound(fd)
     }
 
     /// Stops listening; a pending `waitForCallback` ends with `.cancelled`.
