@@ -1,0 +1,40 @@
+Sources/PimentoCore/SignIn/TokenStore.swift
+  s_4884204a812fec::t_d86ba378ac7322 5-6,256-261,285-320
+Sources/PimentoCore/HistoryFile.swift
+  s_4884204a812fec::t_6a70ee24e3131b 154-155
+Tests/PimentoCoreTests/PlatformTests.swift
+  s_4884204a812fec::t_c8cbfc90cfeb3a 58-88
+Sources/PimentoCore/Tenant.swift
+  s_4884204a812fec::t_dc5f0d5d9b3be4 245-247,257
+Sources/PimentoCore/CLI/CLIPolicy.swift
+  s_4884204a812fec::t_dc5f0d5d9b3be4 41
+Sources/PimentoCore/PIMService.swift
+  s_4884204a812fec::t_dc5f0d5d9b3be4 83,86-88,94,99-126,203,206-208,217
+Tests/PimentoCoreTests/PolicyTests.swift
+  s_4884204a812fec::t_dc5f0d5d9b3be4 165,167,175-184
+  s_4884204a812fec::t_c2b6f0667f58d1 185-186
+Sources/PimentoCore/Models.swift
+  s_4884204a812fec::t_dc5f0d5d9b3be4 21-22,25-28,31-36
+Tests/PimentoCoreTests/OutcomeAndServiceTests.swift
+  s_4884204a812fec::t_dc5f0d5d9b3be4 386-420
+Sources/PimentoCore/RolePolicy.swift
+  s_4884204a812fec::t_dc5f0d5d9b3be4 135-139,141-144,181-184
+CHANGELOG.md
+  s_4884204a812fec::t_36bff2378086ca 501-507
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4f62b60fa17438c260fbaa636af8c761b5ccff5d",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": null
+    }
+  }
+}
