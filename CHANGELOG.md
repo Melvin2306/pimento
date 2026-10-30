@@ -400,6 +400,9 @@ All notable changes to this project are documented here. The format follows
   files.
 - An `az` that timed out while not leading its own process group (or was already reaped) made
   Pimento call itself forever and crash; it is now simply terminated.
+- On Windows, saving a settings, token, preset or history file waits (about two seconds at most)
+  while an antivirus scanner or indexer briefly holds the file, instead of failing at once with
+  "You don't have permission" (Windows error 32) and losing the change.
 
 ### Security
 
