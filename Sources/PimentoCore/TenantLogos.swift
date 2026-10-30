@@ -47,7 +47,8 @@ public enum TenantLogoPolicy {
     /// its answer is decoded strictly and anything odd counts as "no logo".
     public static let brandingURL = URL(string: "https://login.microsoftonline.com/common/GetCredentialType")!
     /// The account name sent with the lookup: no such user exists, and the name
-    /// says what it is for in Microsoft's sign-in logs.
+    /// says what it is for to whoever at Microsoft sees it. The lookup is not a
+    /// sign-in attempt; Microsoft does not document what it records about it.
     public static let lookupUser = "pimento-logo-lookup"
     /// Microsoft's branding CDNs, as `organizationalBranding.cdnList` lists them
     /// (Microsoft Graph documentation). Logos are downloaded from these only.
@@ -230,8 +231,19 @@ public enum LogoImageCheck {
     }
 
     #if canImport(ImageIO)
+    /// The ImageIO types each sniffed format may be read as. ImageIO picks its
+    /// own parser from the bytes: a file with the ICO magic can be read as
+    /// TGA, so the type it picked must be the one the magic named.
+    static let imageIOTypes: [Format: Set<String>] = [
+        .png: ["public.png"], .jpeg: ["public.jpeg", "public.mpo-image"], .gif: ["com.compuserve.gif"],
+        .ico: ["com.microsoft.ico"], .bmp: ["com.microsoft.bmp"], .webp: ["org.webmproject.webp"],
+    ]
+
     static func source(_ data: Data) -> CGImageSource? {
-        CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary)
+        guard let format = format(of: data),
+              let source = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary),
+              let type = CGImageSourceGetType(source) as String?, imageIOTypes[format]?.contains(type) == true else { return nil }
+        return source
     }
 
     /// The index and size of the largest frame (an `.ico` holds several).
@@ -285,7 +297,7 @@ public struct TenantLogoFetcher: Sendable {
     }
 
     func branding(domain: String) async -> TenantLogo? {
-        guard let (data, status) = try? await transport.send(TenantLogoPolicy.brandingRequest(domain: domain)), status == 200,
+        guard !Task.isCancelled, let (data, status) = try? await transport.send(TenantLogoPolicy.brandingRequest(domain: domain)), status == 200,
               let url = TenantLogoPolicy.tileLogoURL(fromBranding: data),
               let image = await download(url, allowed: TenantLogoPolicy.isAllowedBrandingImage) else { return nil }
         return TenantLogo(data: image, source: .branding)
@@ -306,7 +318,8 @@ public struct TenantLogoFetcher: Sendable {
     func download(_ url: URL, allowed: (URL) -> Bool) async -> Data? {
         var next = url
         for _ in 0...TenantLogoPolicy.maxRedirects {
-            guard allowed(next) else { return nil }
+            // Turned off or cleared meanwhile: no further request.
+            guard !Task.isCancelled, allowed(next) else { return nil }
             do {
                 let (data, status) = try await transport.send(TenantLogoPolicy.imageRequest(next))
                 guard status == 200, data.count <= TenantLogoPolicy.maxBytes, inspect(data) != nil else { return nil }
@@ -437,15 +450,18 @@ public struct TenantLogoService: Sendable {
         if !refresh, case .fresh(let logo) = cache.lookup(tenantId: tenant.id, now: clock()) { return logo }
         guard TenantLogoPolicy.brandingDomain(for: tenant) != nil || TenantLogoPolicy.websiteDomain(for: tenant) != nil else { return nil }
         let logo = await fetcher.fetch(tenant)
+        // Cancelled (the setting was turned off): an answer cut short is not "no logo".
+        guard !Task.isCancelled else { return nil }
         try? cache.store(tenantId: tenant.id, logo: logo, now: clock())
         return logo
     }
 }
 
 /// The transport for logos: URLSession with no cookies, no cache, no stored
-/// credentials and a plain `User-Agent`; HTTPS only; redirects refused (the
-/// fetcher decides which to follow); answers over `maxBytes` abandoned while
-/// they download. Refused while the network is blocked (demo mode).
+/// credentials, a plain `User-Agent` and a fixed `Accept-Language`; HTTPS
+/// only; redirects and authentication challenges refused (the fetcher decides
+/// which redirects to follow); answers over `maxBytes` abandoned while they
+/// download. Refused while the network is blocked (demo mode).
 public struct LogoTransport: HTTPTransport {
     public struct Refused: Error, Equatable {
         public let reason: String
@@ -469,17 +485,25 @@ public struct LogoTransport: HTTPTransport {
         config.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
         config.timeoutIntervalForRequest = TenantLogoPolicy.timeout
         config.timeoutIntervalForResource = TenantLogoPolicy.timeout * 2
-        return URLSession(configuration: config, delegate: RedirectRefusal.shared, delegateQueue: nil)
+        return URLSession(configuration: config, delegate: LogoSessionDelegate.shared, delegateQueue: nil)
     }()
+
+    /// What `send` adds to every request: no cookies, `User-Agent: Pimento/<version>`
+    /// and `Accept-Language: en` (otherwise Foundation sends the user's preferred languages).
+    static func prepared(_ request: URLRequest) -> URLRequest {
+        var request = request
+        request.httpShouldHandleCookies = false
+        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+        request.setValue("en", forHTTPHeaderField: "Accept-Language")
+        return request
+    }
 
     public func send(_ request: URLRequest) async throws -> (Data, Int) {
         try NetworkGuard.check("a logo request to \(request.url?.host ?? "?")")
         guard let url = request.url, TenantLogoPolicy.isPlainHTTPS(url) else { throw Refused(reason: "not HTTPS") }
-        var request = request
-        request.httpShouldHandleCookies = false
-        request.setValue(Self.userAgent, forHTTPHeaderField: "User-Agent")
+        let request = Self.prepared(request)
         #if canImport(Darwin)
-        let (bytes, response) = try await Self.session.bytes(for: request, delegate: RedirectRefusal.shared)
+        let (bytes, response) = try await Self.session.bytes(for: request, delegate: LogoSessionDelegate.shared)
         let http = response as? HTTPURLResponse
         let status = http?.statusCode ?? 0
         try URLSessionTransport.check(status: status, location: http?.value(forHTTPHeaderField: "Location"), requested: url, answered: response.url)
@@ -491,12 +515,36 @@ public struct LogoTransport: HTTPTransport {
         }
         return (data, status)
         #else
-        let (data, response) = try await Self.session.data(for: request, delegate: RedirectRefusal.shared)
+        let (data, response) = try await Self.session.data(for: request, delegate: LogoSessionDelegate.shared)
         let http = response as? HTTPURLResponse
         let status = http?.statusCode ?? 0
         try URLSessionTransport.check(status: status, location: http?.value(forHTTPHeaderField: "Location"), requested: url, answered: response.url)
         guard data.count <= maxBytes else { throw Refused(reason: "too large") }
         return (data, status)
         #endif
+    }
+}
+
+/// The logo session's delegate: refuses every redirect (as `RedirectRefusal`)
+/// and every authentication challenge but the server's certificate check, so
+/// that no credential (a Kerberos ticket, a client certificate, a password)
+/// is ever offered to a tenant's website.
+final class LogoSessionDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    static let shared = LogoSessionDelegate()
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest, completionHandler: @escaping @Sendable (URLRequest?) -> Void) {
+        completionHandler(nil)
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didReceive challenge: URLAuthenticationChallenge,
+                    completionHandler: @escaping @Sendable (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+        let (disposition, credential) = Self.answer(challenge.protectionSpace.authenticationMethod)
+        completionHandler(disposition, credential)
+    }
+
+    /// The certificate check runs as usual; anything else is cancelled.
+    static func answer(_ authenticationMethod: String) -> (URLSession.AuthChallengeDisposition, URLCredential?) {
+        authenticationMethod == NSURLAuthenticationMethodServerTrust ? (.performDefaultHandling, nil) : (.cancelAuthenticationChallenge, nil)
     }
 }

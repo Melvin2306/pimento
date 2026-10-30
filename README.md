@@ -1191,8 +1191,9 @@ directly with the PIM APIs (`api-version=2020-10-01`):
   `pimento login` / `logout` the refresh token and `auth.json`.
 - **Tenant logos** are off by default: tenants show initials drawn on the Mac. With *Settings ›
   General › Fetch tenant logos* on, for each tenant the app shows (the current one and those in
-  the picker, not hidden ones) it sends, without a token, account or cookie and with the
-  `User-Agent` `Pimento/<version>`:
+  the picker, not hidden ones) it sends, without a token, account or cookie (and refusing any
+  website that asks for a password or certificate), with the `User-Agent` `Pimento/<version>` and a
+  fixed `Accept-Language: en` (not your system's languages):
   1. `POST https://login.microsoftonline.com/common/GetCredentialType` with
      `{"username":"pimento-logo-lookup@<the tenant's .onmicrosoft.com or other verified domain>"}`
      (no such user exists; it is how the sign-in page finds a tenant's branding), then a `GET` of
@@ -1202,12 +1203,13 @@ directly with the PIM APIs (`api-version=2020-10-01`):
      then `/favicon.ico` (redirects followed only within that domain, over HTTPS).
 
   So **Microsoft and each tenant's own website learn that this Mac looked them up** (your IP
-  address and the domain), and the lookup may show up in the tenant's sign-in logs as an unknown
-  user. HTTPS only, 10-second request timeouts, at most 512 KB per answer, and only files that decode as
-  an image of 32 to 4096 pixels are kept: in `~/Library/Application Support/Pimento/TenantLogos`
-  (mode 600) for 7 days, a tenant without a logo included. *Refresh Logos* fetches again, *Clear
-  Cache* deletes them, and turning the setting off deletes them too. Never in demo mode, never by
-  the CLI.
+  address and the domain). The lookup is not a sign-in attempt, so it is not expected in the
+  tenant's sign-in logs, but Microsoft does not document what it records about it. HTTPS only,
+  10-second request timeouts, at most 512 KB per answer, and only files that decode as an image of
+  32 to 4096 pixels are kept: in `~/Library/Application Support/Pimento/TenantLogos` (mode 600) for
+  7 days, a tenant without a logo included. *Refresh Logos* fetches again, *Clear Cache* deletes
+  them, and turning the setting off deletes them too and stops the fetches under way. Never in demo
+  mode, never by the CLI.
 - No analytics, no update checks, no third-party dependencies (the CLI's argument parser is
   hand-written, so the build needs no package downloads).
 

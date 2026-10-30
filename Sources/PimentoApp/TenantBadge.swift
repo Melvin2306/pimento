@@ -85,6 +85,9 @@ final class TenantLogoStore {
     @ObservationIgnored private var requested: Set<String> = []
     @ObservationIgnored private var pending: [TenantInfo] = []
     @ObservationIgnored private var running = 0
+    /// The fetches under way, cancelled by `clear()` so that none sends more once the setting is off.
+    @ObservationIgnored private var tasks: [Int: Task<Void, Never>] = [:]
+    @ObservationIgnored private var nextTask = 0
     /// Bumped by `clear()`: answers to earlier requests are dropped.
     @ObservationIgnored private var generation = 0
     @ObservationIgnored let service = TenantLogoService(cache: TenantLogoCache(directory: TenantLogoCache.defaultDirectory()))
@@ -135,6 +138,7 @@ final class TenantLogoStore {
         images = [:]
         requested.removeAll()
         pending.removeAll()
+        for task in tasks.values { task.cancel() }
         let cache = service.cache
         Task.detached(priority: .utility) { cache.clear() }
     }
@@ -144,16 +148,19 @@ final class TenantLogoStore {
             let tenant = pending.removeFirst()
             running += 1
             let service = service, generation = generation, demo = AppRuntime.isDemo, pixels = Self.thumbnailPixels
-            Task.detached(priority: .utility) { [weak self] in
+            let id = nextTask
+            nextTask += 1
+            tasks[id] = Task.detached(priority: .utility) { [weak self] in
                 let logo = await service.logo(for: tenant, enabled: true, demo: demo)
                 let image = logo.flatMap { LogoImageCheck.thumbnail($0.data, maxPixels: pixels) }
-                await self?.finish(tenant.id, image: image, generation: generation)
+                await self?.finish(id, tenantId: tenant.id, image: image, generation: generation)
             }
         }
     }
 
-    private func finish(_ tenantId: String, image: CGImage?, generation: Int) {
+    private func finish(_ task: Int, tenantId: String, image: CGImage?, generation: Int) {
         running -= 1
+        tasks[task] = nil
         if generation == self.generation, isAllowed {
             images[tenantId] = image
         } else {

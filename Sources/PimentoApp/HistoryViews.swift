@@ -190,7 +190,7 @@ private struct HistoryFilterBar: View {
                         Text("All").tag(String?.none)
                         Divider()
                         ForEach(tenants, id: \.id) { tenant in
-                            let info = model.knownTenant(tenant.id) 
+                            let info = model.knownTenant(tenant.id)
                                 ?? TenantInfo(id: tenant.id, displayName: UUID(uuidString: tenant.label) == nil ? tenant.label : nil)
                             Label {
                                 Text(tenant.label)
