@@ -14,6 +14,13 @@ public struct KeepAlivePassResult: Sendable {
     public var nextCheck: Date?
 }
 
+/// Thrown by a pass that `reset` overtook (another tenant or account came in
+/// while it waited for Azure): it stops there and leaves the new session's
+/// memory alone.
+public struct KeepAliveSessionReset: Error, Equatable, LocalizedError {
+    public var errorDescription: String? { "Keep alive started over (another tenant or account)." }
+}
+
 /// Keep-alive's memory across passes (the tracks and the policies read so
 /// far) and the pass itself: read, decide (`KeepAlivePlanner`), send. Shared
 /// by the app and `pimento keep-alive`.
@@ -24,6 +31,9 @@ public actor KeepAliveSession {
     /// administrator may have turned on approval meanwhile).
     private var policiesRead: [RoleMatcher.Key: Date] = [:]
     static let policyMaxAge: TimeInterval = 60 * 60
+    /// Counts `reset`s: a pass that resumes after one (the actor is reentrant
+    /// at every `await`) must not write the old session's tracks back.
+    private var generation = 0
 
     public init() {}
 
@@ -35,9 +45,15 @@ public actor KeepAliveSession {
 
     /// Forgets everything (another tenant or account).
     public func reset() {
+        generation += 1
         book = KeepAliveBook()
         policies = [:]
         policiesRead = [:]
+    }
+
+    /// Throws when `reset` ran since the pass of `generation` began.
+    private func stillCurrent(_ generation: Int) throws {
+        if generation != self.generation { throw KeepAliveSessionReset() }
     }
 
     /// Forgets that `keys` were active, so they are not brought back (you
@@ -56,10 +72,12 @@ public actor KeepAliveSession {
         confirmedAccess: Set<String>? = nil
     ) async throws -> KeepAlivePassResult {
         let now = clock()
+        let generation = self.generation
         // Keep-alive's requests are recorded as its own (source `keepAlive`).
         let writer = writer.recording(to: writer.history?.with(source: .keepAlive))
         let snapshot = try await reader.loadRoles(now: now)
         let history = try await reader.loadRequestHistory(now: now)
+        try stillCurrent(generation)
         let rules = KeepAliveRule.resolve(perRole: perRole, presets: presets, roles: snapshot.roles)
         let kept = snapshot.roles.filter { rules[ReminderRole.key($0.policyKey)] != nil }
         let missing = kept.filter { role in
@@ -69,7 +87,9 @@ public actor KeepAliveSession {
             }
         }
         if !missing.isEmpty {
-            if let loaded = try? await reader.loadPolicies(for: missing) {
+            let loaded = try? await reader.loadPolicies(for: missing)
+            try stillCurrent(generation)
+            if let loaded {
                 policies.merge(loaded) { _, new in new }
                 for role in missing { policiesRead[role.policyKey] = now }
             } else {
@@ -90,9 +110,13 @@ public actor KeepAliveSession {
             hours: hours, paused: paused, now: now, calendar: calendar, confirmedAccess: confirmedAccess, deactivations: deactivations)
         let due = items.filter { $0.status.action != nil }
         var events: [KeepAliveEvent] = []
-        if !dryRun, !dropped.isEmpty { _ = await Self.withdraw(dropped, writer: writer) }
+        if !dryRun, !dropped.isEmpty {
+            _ = await Self.withdraw(dropped, writer: writer)
+            try stillCurrent(generation)
+        }
         if !dryRun, !due.isEmpty {
-            events = await send(due, writer: writer, principalId: snapshot.identity.objectId, now: now, maxConcurrent: maxConcurrent)
+            events = try await send(due, writer: writer, principalId: snapshot.identity.objectId, now: now, maxConcurrent: maxConcurrent,
+                                    generation: generation)
             // Where each stands now: acted roles show their continuation or retry.
             let after = clock()
             // Withdrawn now (still in the listing read before): not pending any more.
@@ -125,7 +149,7 @@ public actor KeepAliveSession {
     /// Sends the due actions (activations with `execute`, a few at a time,
     /// recorded in the history; withdrawals with `cancel`) and records the outcomes.
     private func send(_ due: [KeepAlivePlanner.Item], writer: PIMService, principalId: String, now: Date,
-                      maxConcurrent: Int) async -> [KeepAliveEvent] {
+                      maxConcurrent: Int, generation: Int) async throws -> [KeepAliveEvent] {
         var plans: [(item: KeepAlivePlanner.Item, plan: PlannedRequest)] = []
         var cancels: [(item: KeepAlivePlanner.Item, request: ScheduledRequest)] = []
         var events: [KeepAliveEvent] = []
@@ -164,6 +188,8 @@ public actor KeepAliveSession {
             } catch {
                 for p in plans { box.set(p.plan.requestId, .failed(code: "Auth", message: error.localizedDescription)) }
             }
+            // Reset meanwhile: what was sent belongs to the old session, and so does its record.
+            try stillCurrent(generation)
             for (item, plan) in plans {
                 let outcome = box.get(plan.requestId) ?? .failed(code: "NotSent", message: "not sent")
                 events.append(book.record(item.status.action!, outcome: .request(outcome, requestId: plan.requestId),
@@ -177,6 +203,7 @@ public actor KeepAliveSession {
             } catch {
                 for c in cancels { box.set(c.request.name, .failed(code: "Auth", message: error.localizedDescription)) }
             }
+            try stillCurrent(generation)
             for (item, request) in cancels {
                 events.append(book.record(item.status.action!, outcome: .cancel(box.get(request.name) ?? .failed(code: "NotSent", message: "not sent")),
                                           role: item.role, key: item.key, now: now))

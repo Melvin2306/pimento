@@ -107,6 +107,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- Keep alive: switching tenant or account while a pass waited for Azure no longer lets that pass
+  write the previous session's state (ends, continuations, justifications) back into the new one,
+  where the next pass could withdraw the old session's continuations with the new token or reuse
+  a justification. The overtaken pass stops; the app runs a new one a few seconds later.
 - The Raycast extension and the Alfred workflow activate a preset by its id, so the preset you
   picked is the one that runs. They used to pass its name and guess which preset the CLI would
   choose; that guess could differ from the CLI's (a preset whose tenant is a domain, or names that

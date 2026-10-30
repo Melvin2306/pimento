@@ -288,6 +288,10 @@ extension AppModel {
                 ?? AppClock.now().addingTimeInterval(Self.keepAliveMaxIdle)
             if !paused, let fire = AppClock.realDate(for: next) { scheduleKeepAlivePass(atReal: max(fire, Date().addingTimeInterval(5))) }
             if !result.actions.isEmpty { await refreshAfterChange() }
+        } catch is KeepAliveSessionReset {
+            // Overtaken by a reset (another tenant or account): start over soon.
+            guard generation == tenantGeneration else { return }
+            scheduleKeepAlivePass(after: 5)
         } catch {
             guard generation == tenantGeneration else { return }
             keepAliveError = error.localizedDescription

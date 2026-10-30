@@ -274,6 +274,47 @@ struct KeepAliveSafetyDemoTests {
         #expect(await session.book.tracks.isEmpty)
     }
 
+    /// A transport that resets `session` once, on the first request whose
+    /// method is `method`, while the pass waits for it (the actor is free then).
+    struct ResettingTransport: HTTPTransport {
+        let base: HTTPTransport
+        let session: KeepAliveSession
+        let method: String
+        let done = Flag()
+        final class Flag: @unchecked Sendable {
+            private let lock = NSLock()
+            private var set = false
+            func once() -> Bool { lock.withLock { defer { set = true }; return !set } }
+        }
+        func send(_ request: URLRequest) async throws -> (Data, Int) {
+            if request.httpMethod ?? "GET" == method, done.once() { await session.reset() }
+            return try await base.send(request)
+        }
+    }
+
+    /// Another tenant or account while a pass waits for Azure: the pass stops
+    /// and leaves the new session's memory empty, even after sending.
+    @Test func aResetDuringAPassIsNotUndoneByIt() async throws {
+        for method in ["GET", "PUT"] {
+            let demo = DemoFixture(start: Self.start)
+            let session = KeepAliveSession()
+            let key = ReminderRole.key(try await kv(demo).policyKey)
+            let clock = demo.clock
+            let service = PIMService(transport: ResettingTransport(base: demo.azure, session: session, method: method),
+                                     tokens: demo.azure.cliTokens(tenantId: nil), sleep: { clock.advance(by: $0) }, clock: { clock.now() })
+            await #expect(throws: KeepAliveSessionReset.self, "\(method)") {
+                try await demo.offline {
+                    try await session.pass(reader: service.readOnly, writer: service, perRole: [key], presets: [], hours: WorkingHours(),
+                                           paused: false, calendar: calendar, clock: { clock.now() })
+                }
+            }
+            #expect(await session.book.tracks.isEmpty, "\(method)")
+            let sent = demo.azure.requestLog.filter { $0.hasPrefix("PUT") }.count
+            // Reset while reading: nothing sent. While sending: that one request only.
+            #expect(sent == (method == "GET" ? 0 : 1), "\(method): \(demo.azure.requestLog)")
+        }
+    }
+
     @Test func policiesAreReadAgainAfterAnHour() async throws {
         let demo = DemoFixture(start: Self.start)
         let session = KeepAliveSession()
