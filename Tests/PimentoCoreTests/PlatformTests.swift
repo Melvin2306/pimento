@@ -76,9 +76,13 @@ struct WindowsReplaceTests {
         let handle = try #require(held)
         #expect(handle != INVALID_HANDLE_VALUE)
         let address = UInt(bitPattern: handle)
-        DispatchQueue.global().asyncAfter(deadline: .now() + 0.3) {
+        // A thread of its own, not the shared dispatch pool: with the whole
+        // suite running in parallel the pool can be busy for longer than the
+        // replace waits (about two seconds), and the handle would close late.
+        Thread {
+            Thread.sleep(forTimeInterval: 0.3)
             CloseHandle(HANDLE(bitPattern: address))
-        }
+        }.start()
         try PrivateFile.write(Data("new".utf8), to: file)
         #expect(try String(contentsOf: file, encoding: .utf8) == "new")
         let leftovers = try FileManager.default.contentsOfDirectory(atPath: dir.path).filter { $0.hasPrefix(".") }
