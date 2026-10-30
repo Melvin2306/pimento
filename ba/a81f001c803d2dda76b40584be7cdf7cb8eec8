@@ -1,0 +1,25 @@
+CHANGELOG.md
+  s_4884204a812fec::t_4db8af5f50ea94 88-90
+Sources/PimentoCore/AppInfo.swift
+  s_4884204a812fec::t_26bb27aac74b02 11-30
+Sources/PimentoCore/TenantLogos.swift
+  s_4884204a812fec::t_a8d654384d1ed6 476,495
+Sources/PimentoCore/UpdateCheck.swift
+  s_4884204a812fec::t_44a679c9320386 223,274-275
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "baa81f001c803d2dda76b40584be7cdf7cb8eec8",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
