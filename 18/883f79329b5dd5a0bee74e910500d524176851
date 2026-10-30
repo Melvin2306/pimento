@@ -1,0 +1,23 @@
+Sources/PimentoCore/CLI/CLICommand.swift
+  s_4884204a812fec::t_4b24ce71c82ed6 418,469-470,518-527,789-790,806-807,840-841,874,929-930,1037-1038
+CHANGELOG.md
+  s_4884204a812fec::t_4bd0eb88d12c2a 422-423
+Tests/PimentoCoreTests/CLILifecycleTests.swift
+  s_4884204a812fec::t_82c6289ee68d38 220-237
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "18883f79329b5dd5a0bee74e910500d524176851",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
