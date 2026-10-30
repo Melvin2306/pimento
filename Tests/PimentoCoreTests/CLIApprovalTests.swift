@@ -357,6 +357,37 @@ struct CLIApproverTests {
         #expect(patches.count == 1 && patches[0].url!.absoluteString.contains("roleAssignmentApprovals/\(swapped)/stages/"))
     }
 
+    /// Roles that can grant access to others get the same warning as Owner.
+    @Test func approvingAccessAdministratorRolesWarnsAndAsks() async throws {
+        let uaa = Self.inboxItem(name: "7e7e7e7e-0000-4000-8000-0000000000a1", roleGUID: AccessGrantingRole.userAccessAdministratorGUID,
+                                 roleName: "User Access Administrator", scopeName: "Dummy Production")
+        let rbac = Self.inboxItem(name: "7e7e7e7e-1111-4000-8000-0000000000a2", roleGUID: AccessGrantingRole.rbacAdministratorGUID,
+                                  roleName: "Role Based Access Control Administrator", scopeName: "Dummy Staging")
+        let owner = Self.inboxItem(name: "7e7e7e7e-2222-4000-8000-0000000000a3", roleGUID: EligibleRole.ownerRoleGUID,
+                                   roleName: "Owner", scopeName: "Dummy Sandbox")
+        let reader = Self.inboxItem(name: "7e7e7e7e-3333-4000-8000-0000000000a4", roleGUID: "acdd72a7-3385-48ef-bd42-f606fba81ae7",
+                                    roleName: "Reader", scopeName: "Dummy Sandbox")
+        let listing = try JSONSerialization.data(withJSONObject: ["value": [uaa, rbac, owner, reader]])
+        let h = CLIHarness(answers: ["n"])
+        h.stdinIsTTY = true
+        h.get = { request in request.url!.absoluteString.contains("asApprover()") ? (listing, 200) : nil }
+        #expect(await h.run("approve", "7e7e7e7e-0", "7e7e7e7e-1", "7e7e7e7e-2", "7e7e7e7e-3", "-j", "ok") == 1)
+        #expect(h.out.contains("User Access Administrator (!)"))
+        #expect(h.out.contains("Role Based Access Control Administrator (!)"))
+        #expect(!h.out.contains("Reader (!)"))
+        #expect(h.out.contains("Warning: 1 Owner role (!)"))
+        #expect(h.out.contains("Warning: 2 access administrator roles (!): can grant anyone any role on the resource, Owner included."))
+        #expect(h.err.contains("Approve 4 requests, including 1 Owner and 2 access administrators? [y/N]"))
+        #expect(await h.transport.requests.filter { $0.httpMethod == "PATCH" }.isEmpty)
+
+        let one = CLIHarness(answers: ["n"])
+        one.stdinIsTTY = true
+        one.get = h.get
+        #expect(await one.run("approve", "7e7e7e7e-0", "-j", "ok") == 1)
+        #expect(one.err.contains("Approve 1 request, including 1 access administrator? [y/N]"))
+        #expect(!one.out.contains("Owner role"))
+    }
+
     @Test func dryRunAsksNothingAndSendsNothing() async {
         let h = CLIHarness()
         #expect(await h.run("deny", "a1a1a1a1", "-j", "use staging", "--dry-run") == 0)
@@ -467,7 +498,7 @@ struct CLITerminalSafetyTests {
             #expect(!h.out.contains("\u{1B}[8m") && !h.out.contains("\u{1B}]"))
             #expect(h.out.contains("User Access Administrator") && h.out.contains("Contoso Production"))
             #expect(h.out.contains("\\rf6f6f6f6  Dummy Requester  Reader"))
-            #expect(h.err.contains("Approve 1 request? [y/N]"))
+            #expect(h.err.contains("Approve 1 request, including 1 access administrator? [y/N]"))
             #expect(await h.transport.requests.filter { $0.httpMethod == "PATCH" }.isEmpty)
 
             let list = CLIHarness()

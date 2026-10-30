@@ -461,6 +461,12 @@ All notable changes to this project are documented here. The format follows
   matches no pending request is reported as not found (exit 1) instead of being retried as a
   resource filter, which with `--yes` could cancel another of your requests (`cancel cafe` picked
   `rg-cafe`). Give more of the resource name (`rg-cafe`) to filter.
+- Approving a request for User Access Administrator or Role Based Access Control Administrator
+  warns like Owner does: they can grant anyone any role on the resource, Owner included.
+  `pimento approve` marks them `(!)`, prints a warning and names them in the `[y/N]` prompt; the app
+  marks them in the Approvals sheet and asks before approving (with the Owner confirmation on).
+  Roles are recognised by their built-in GUID or name; custom roles with
+  `Microsoft.Authorization/roleAssignments/write` are not, as Pimento reads no role definitions.
 
 ## [0.1.0] - 2026-10-29
 

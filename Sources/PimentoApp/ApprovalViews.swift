@@ -105,9 +105,10 @@ struct ApprovalsSheet: View {
         let selected = model.selectedApprovals
         let n = selected.count
         let owners = selected.filter(\.isOwner).count
+        let admins = selected.filter(\.isAccessAdministrator).count
         let noun = "request\(n == 1 ? "" : "s")"
         switch model.pendingDecision {
-        case .approve: return owners > 0 ? "Approve \(n) \(noun), including \(owners) Owner?" : "Approve \(n) \(noun)?"
+        case .approve: return "Approve \(n) \(noun)\(ApprovalRequest.privilegedNote(owners: owners, admins: admins))?"
         case .deny: return "Deny \(n) \(noun)?"
         }
     }
@@ -116,8 +117,10 @@ struct ApprovalsSheet: View {
         let selected = model.selectedApprovals
         let lines = selected.prefix(10).map { "• \($0.requesterName ?? $0.requesterLabel): \($0.roleName) · \($0.scopeName)" }
         let more = selected.count > 10 ? "\n… and \(selected.count - 10) more" : ""
+        let admins = selected.contains(where: \.isAccessAdministrator)
         let what = model.pendingDecision == .approve
             ? "They get the roles as requested. Owner grants full control of the resource, including access."
+                + (admins ? " User Access Administrator and RBAC Administrator can grant anyone any role on it, Owner included." : "")
             : "They do not get the roles and see your justification."
         return "\(what)\n\n\(lines.joined(separator: "\n"))\(more)\n\nJustification: \(model.trimmedApprovalJustification)"
     }
@@ -166,9 +169,13 @@ private struct ApprovalRow: View {
                 HStack(spacing: 4) {
                     Text(request.requesterName ?? request.requesterLabel).fontWeight(.semibold)
                     Text("asks for").foregroundStyle(.secondary)
-                    Text(request.roleName).fontWeight(request.isOwner ? .semibold : .regular)
+                    Text(request.roleName).fontWeight(request.grantsAccess ? .semibold : .regular)
                     if request.isOwner {
                         Image(systemName: "crown.fill").foregroundStyle(.orange).imageScale(.small).accessibilityLabel("Owner role")
+                    } else if request.isAccessAdministrator {
+                        Image(systemName: "key.fill").foregroundStyle(.orange).imageScale(.small)
+                            .accessibilityLabel("Role that can grant access")
+                            .help("Can grant anyone any role on the resource, Owner included")
                     }
                     Text("· \(request.scopeName)").foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                 }
@@ -211,6 +218,8 @@ private struct ApprovalRow: View {
             }
         } else if request.isOwner {
             Text("Owner").font(.caption).foregroundStyle(.orange)
+        } else if request.isAccessAdministrator {
+            Text("Grants access").font(.caption).foregroundStyle(.orange)
         }
     }
 }
@@ -225,6 +234,8 @@ private struct DecisionBar: View {
         let all = model.approvalInbox.requests.count
         let n = model.selectedApprovals.count
         let owners = model.selectedApprovals.filter(\.isOwner).count
+        let admins = model.selectedApprovals.filter(\.isAccessAdministrator).count
+        let privileged = owners + admins
         HStack(spacing: 12) {
             Toggle("All", isOn: Binding(get: { n == all && all > 0 }, set: { model.selectAllApprovals($0) }))
                 .toggleStyle(.checkbox)
@@ -241,15 +252,17 @@ private struct DecisionBar: View {
                 .themedButton(.secondary)
                 .disabled(!model.canDecide)
                 .help("Deny the selected requests (asks first)")
-            Button(model.prefs.confirmOwnerRoles && owners > 0 ? "Approve\(n > 1 ? " \(n)" : "")…" : "Approve\(n > 1 ? " \(n)" : "")") {
+            Button(model.prefs.confirmOwnerRoles && privileged > 0 ? "Approve\(n > 1 ? " \(n)" : "")…" : "Approve\(n > 1 ? " \(n)" : "")") {
                 model.requestDecision(.approve)
             }
-            .themedButton(.primary(warning: owners > 0))
+            .themedButton(.primary(warning: privileged > 0))
             .buttonStyle(.borderedProminent)
-            .tint(theme == .native && owners > 0 ? .orange : nil)
+            .tint(theme == .native && privileged > 0 ? .orange : nil)
             .disabled(!model.canDecide)
             .keyboardShortcut(.defaultAction)
-            .help(owners > 0 ? "Approve the selected requests, including \(owners) Owner role\(owners == 1 ? "" : "s") (asks first)" : "Approve the selected requests")
+            .help(privileged > 0
+                ? "Approve the selected requests\(ApprovalRequest.privilegedNote(owners: owners, admins: admins))\(model.prefs.confirmOwnerRoles ? " (asks first)" : "")"
+                : "Approve the selected requests")
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)

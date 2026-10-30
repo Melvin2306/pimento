@@ -328,8 +328,9 @@ and stops once none is left. When one is decided you get a notification:
 *Approvals (2)* when two wait) lists the requests you may decide: requester, role, resource,
 duration and start, justification, ticket, when it was asked and when it expires. Check one or more
 (or *All*), enter a justification (required; the requester sees it) and press **Approve** or
-**Deny**. Deny always asks first; Approve asks when Owner roles are among them (with *Confirm before
-activating Owner roles* on). Each row shows *Sending…*, then *Approved* / *Denied*, or why not (for
+**Deny**. Deny always asks first; Approve asks when roles that can grant access are among them:
+Owner, User Access Administrator or Role Based Access Control Administrator, marked in the list
+(with *Confirm before activating Owner roles* on). Each row shows *Sending…*, then *Approved* / *Denied*, or why not (for
 example decided by another approver meanwhile). The first approver's decision counts, and you
 cannot approve your own requests. Without approver permissions the sheet simply says *You have no
 approvals to review*. The list is read whenever Pimento refreshes; with *New approval requests* on
@@ -832,7 +833,8 @@ Exit codes: 0 all approved, 1 any denied, expired, cancelled, failed or not foun
 
 `pimento approvals` lists the requests you can decide (an empty list, exit 0, when you have none or
 no approver permissions). `pimento approve ID… -j TEXT` and `pimento deny ID… -j TEXT` follow the
-safety rules below: the requests first (Owner roles highlighted for approve), a `[y/N]` prompt on a
+safety rules below: the requests first (Owner, User Access Administrator and Role Based Access
+Control Administrator marked `(!)` with a warning for approve, since they can grant anyone access), a `[y/N]` prompt on a
 terminal, `--yes` otherwise, `--dry-run` prints the `PATCH` and its body and sends nothing. A
 request decided by someone else meanwhile is reported as not pending (exit 1). The ID column shows
 the whole request id: on a terminal its first 4+ characters are enough (the prompt shows the
@@ -1055,7 +1057,7 @@ directly with the PIM APIs (`api-version=2020-10-01`):
   10 justifications (Settings › Activation clears them).
 - The only write calls are the `roleAssignmentScheduleRequests` `PUT`s (activate, deactivate,
   renew, extend), `POST …/cancel`, and the approval `PATCH` (approve, deny). They run after you
-  confirm in the app (Activate and Approve ask for Owner roles; Deactivate, Renew, Cancel All and
+  confirm in the app (Activate asks for Owner roles, Approve for Owner and the access administrator roles; Deactivate, Renew, Cancel All and
   Deny always ask), after a tap on *Renew* / *End Now* in a reminder, or when the CLI command has
   your confirmation (or `--yes`). Following your requests for a decision is read-only (`GET`).
   **Preview** in the app and `pimento activate --dry-run` show the requests without sending them.

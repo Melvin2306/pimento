@@ -221,6 +221,21 @@ public struct ApprovalRequest: Identifiable, Hashable, Sendable {
             || roleName.caseInsensitiveCompare("Owner") == .orderedSame
     }
 
+    /// Owner, or another role that can grant roles to anyone (`AccessGrantingRole`).
+    public var grantsAccess: Bool { AccessGrantingRole.matches(roleDefinitionId: roleDefinitionId, roleName: roleName) }
+
+    /// User Access Administrator or Role Based Access Control Administrator:
+    /// grants access, but is not Owner.
+    public var isAccessAdministrator: Bool { grantsAccess && !isOwner }
+
+    /// ", including 1 Owner and 2 access administrators" (empty for none),
+    /// for the approve confirmation of the app and the CLI.
+    public static func privilegedNote(owners: Int, admins: Int) -> String {
+        let parts = (owners > 0 ? ["\(owners) Owner"] : [])
+            + (admins > 0 ? ["\(admins) access administrator\(admins == 1 ? "" : "s")"] : [])
+        return parts.isEmpty ? "" : ", including " + parts.joined(separator: " and ")
+    }
+
     /// The first 8 characters of the request GUID.
     public var shortId: String { String(name.prefix(8)) }
 

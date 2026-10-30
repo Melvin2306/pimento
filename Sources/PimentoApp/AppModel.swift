@@ -668,12 +668,13 @@ final class AppModel {
         approvalSelection = on ? Set(approvalInbox.requests.map(\.name)) : []
     }
 
-    /// Deny always asks; Approve asks when Owner roles are among the
+    /// Deny always asks; Approve asks when roles that grant access (Owner,
+    /// User Access Administrator, RBAC Administrator) are among the
     /// selection (with the Owner confirmation on).
     func requestDecision(_ decision: ApprovalDecision) {
         guard canDecide else { return }
         pendingDecision = decision
-        if decision == .deny || (prefs.confirmOwnerRoles && selectedApprovals.contains(where: \.isOwner)) {
+        if decision == .deny || (prefs.confirmOwnerRoles && selectedApprovals.contains(where: \.grantsAccess)) {
             showDecisionConfirmation = true
         } else {
             Task { await decide(decision) }

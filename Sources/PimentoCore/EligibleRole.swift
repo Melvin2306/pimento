@@ -233,3 +233,21 @@ public enum RoleMatcher {
         return ""
     }
 }
+
+/// Built-in Azure roles whose holder can grant roles to anyone on the
+/// resource (they include `Microsoft.Authorization/roleAssignments/write`):
+/// Owner, User Access Administrator and Role Based Access Control
+/// Administrator. Matched by role definition GUID or, failing that, by name.
+/// Custom roles are not recognised: Pimento does not read role definitions.
+public enum AccessGrantingRole {
+    public static let userAccessAdministratorGUID = "18d7d88d-d35e-4fb5-a5c3-7773c20a72d9"
+    public static let rbacAdministratorGUID = "f58310d9-a9f6-439a-9e8d-f62e7b41a168"
+
+    static let guids: Set<String> = [EligibleRole.ownerRoleGUID, userAccessAdministratorGUID, rbacAdministratorGUID]
+    static let names: Set<String> = ["owner", "user access administrator", "role based access control administrator"]
+
+    public static func matches(roleDefinitionId: String, roleName: String) -> Bool {
+        guids.contains(RoleMatcher.lastPathComponent(roleDefinitionId).lowercased())
+            || names.contains(roleName.trimmingCharacters(in: .whitespaces).lowercased())
+    }
+}

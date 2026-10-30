@@ -423,3 +423,37 @@ struct RequestHistoryTests {
         #expect(history.items(matching: "A4000").count == 1)
     }
 }
+
+@Suite("Approvals: roles that grant access")
+struct AccessGrantingRoleTests {
+    @Test func ownerAndAccessAdministratorsGrantAccess() {
+        let scope = "/subscriptions/00000000-0000-0000-0000-000000000001"
+        func role(_ guid: String, _ name: String) -> (String, String) { ("\(scope)/providers/Microsoft.Authorization/roleDefinitions/\(guid)", name) }
+        for (id, name) in [role(EligibleRole.ownerRoleGUID, "Owner"),
+                           role(AccessGrantingRole.userAccessAdministratorGUID, "User Access Administrator"),
+                           role(AccessGrantingRole.rbacAdministratorGUID.uppercased(), "Role Based Access Control Administrator"),
+                           // By name when the GUID is unexpected (or by GUID when renamed).
+                           role("11111111-0000-0000-0000-000000000000", "user access administrator"),
+                           role(AccessGrantingRole.userAccessAdministratorGUID, "Renamed")] {
+            #expect(AccessGrantingRole.matches(roleDefinitionId: id, roleName: name), "\(name)")
+        }
+        for (id, name) in [role("b24988ac-6180-42a0-ab88-20f7382dd24c", "Contributor"),
+                           role("acdd72a7-3385-48ef-bd42-f606fba81ae7", "Reader"),
+                           role("11111111-0000-0000-0000-000000000000", "Owner of nothing")] {
+            #expect(!AccessGrantingRole.matches(roleDefinitionId: id, roleName: name), "\(name)")
+        }
+        #expect(ApprovalRequest.privilegedNote(owners: 0, admins: 0) == "")
+        #expect(ApprovalRequest.privilegedNote(owners: 2, admins: 0) == ", including 2 Owner")
+        #expect(ApprovalRequest.privilegedNote(owners: 1, admins: 1) == ", including 1 Owner and 1 access administrator")
+    }
+
+    /// The app (no test target) asks before approving any of them, as the CLI does.
+    @Test func theAppAsksBeforeApprovingRolesThatGrantAccess() throws {
+        let model = try String(contentsOf: AppSourceTests.appSources.appendingPathComponent("AppModel.swift"), encoding: .utf8)
+        #expect(model.contains("prefs.confirmOwnerRoles && selectedApprovals.contains(where: \\.grantsAccess)"))
+        let views = try String(contentsOf: AppSourceTests.appSources.appendingPathComponent("ApprovalViews.swift"), encoding: .utf8)
+        #expect(views.contains("ApprovalRequest.privilegedNote(owners: owners, admins: admins)"))
+        #expect(views.contains("request.isAccessAdministrator"))
+    }
+}
+

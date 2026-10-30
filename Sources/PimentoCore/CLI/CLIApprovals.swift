@@ -420,7 +420,7 @@ extension CLIRunner {
                 // The whole id: `approve ID --yes` takes only that.
                 .init(r.name, .dim),
                 .init(r.requesterName ?? r.requesterEmail ?? r.requesterId),
-                .init(r.isOwner ? "\(r.roleName) (!)" : r.roleName, r.isOwner ? .strong : .plain),
+                .init(r.grantsAccess ? "\(r.roleName) (!)" : r.roleName, r.grantsAccess ? .strong : .plain),
                 .init(r.scopeName),
                 .init(r.durationMinutes.map { DurationText.short(minutes: $0) } ?? "", .dim),
                 .init(age(r.createdOn, now: now), .dim),
@@ -493,11 +493,16 @@ extension CLIRunner {
             return .failure
         }
         let owners = sendable.filter(\.request.isOwner).count
+        let admins = sendable.filter(\.request.isAccessAdministrator).count
         human((o.dryRun ? "Would \(verb) " : "\(o.decision.rawValue) ")
             + "\(CLIFormat.plural(plans.count, "request")) in tenant \(tenantId ?? defaultTenantLabel):")
         approvalTable(plans.map(\.request), now: now, style: style, json: o.json).forEach { human("  " + $0) }
         if o.decision == .approve, owners > 0 {
             human(style.boldRed("Warning:") + " \(CLIFormat.plural(owners, "Owner role")) (!): full control of the resource, including access.")
+        }
+        if o.decision == .approve, admins > 0 {
+            human(style.boldRed("Warning:") + " \(CLIFormat.plural(admins, "access administrator role")) (!): "
+                + "can grant anyone any role on the resource, Owner included.")
         }
         human(o.decision == .approve
             ? "The requesters get the roles as requested (for the duration shown)."
@@ -525,7 +530,8 @@ extension CLIRunner {
             return notFound.isEmpty && unsendable.isEmpty ? .success : .failure
         }
         if confirm == .ask {
-            write("\(o.decision.rawValue) \(CLIFormat.plural(sendable.count, "request"))\(o.decision == .approve && owners > 0 ? ", including \(owners) Owner" : "")? [y/N] ", .err)
+            write("\(o.decision.rawValue) \(CLIFormat.plural(sendable.count, "request"))"
+                + "\(o.decision == .approve ? ApprovalRequest.privilegedNote(owners: owners, admins: admins) : "")? [y/N] ", .err)
             guard ConfirmationPolicy.isYes(env.readLine()) else {
                 err("Nothing was sent.")
                 return .failure
