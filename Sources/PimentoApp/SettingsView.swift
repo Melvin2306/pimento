@@ -88,6 +88,7 @@ private struct GeneralSettings: View {
                         .fixedSize()
                     }
                 }
+                DemoSettingsSection()
             } trailing: {
                 SettingsGroup("Menu bar") {
                     Toggle("Show in menu bar", isOn: $model.prefs.showInMenuBar)

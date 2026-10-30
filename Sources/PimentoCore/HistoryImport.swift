@@ -79,7 +79,7 @@ public enum HistoryImport {
 
 extension PIMService {
     /// Your past requests from Azure as history records (read-only).
-    public func loadHistoryFromAzure(since: Date? = nil, tenantLabel: String? = nil, now: Date = Date()) async throws -> [HistoryRecord] {
+    public func loadHistoryFromAzure(since: Date? = nil, tenantLabel: String? = nil, now: Date? = nil) async throws -> [HistoryRecord] {
         let history = try await loadRequestHistory(now: now)
         return HistoryImport.records(
             from: history.items, principalId: history.identity.objectId, tenantId: history.identity.tenantId,

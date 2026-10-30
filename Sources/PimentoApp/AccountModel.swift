@@ -21,7 +21,7 @@ extension AppModel {
 
     /// The client ID sign-in uses: `$PIMENTO_CLIENT_ID`, the field, the saved one, the account's.
     var effectiveClientId: String? {
-        try? AuthSourceResolver.clientId(commandLine: nil, environment: ProcessInfo.processInfo.environment,
+        try? AuthSourceResolver.clientId(commandLine: nil, environment: Self.settingsEnvironment,
                                          saved: MicrosoftIdentity.isValidClientId(trimmedClientIdDraft) ? trimmedClientIdDraft : authSettings.clientId,
                                          account: currentAccount?.clientId)
     }
@@ -79,6 +79,19 @@ extension AppModel {
         guard let clientId = effectiveClientId, !isSigningIn else { return }
         signInState = .browser
         let claims = authSettings.claimsChallenge, hint = currentAccount?.username, tenant = signInTenant
+        if AppRuntime.isDemo {
+            // No browser in the demo: the simulator signs the demo account in.
+            signInTask = Task {
+                do {
+                    let challenge = try await broker.startDeviceCode(clientId: clientId, tenant: tenant)
+                    let account = try await broker.finishDeviceCode(challenge, clientId: clientId, tenant: tenant)
+                    await finishSignIn(account, clientId: clientId)
+                } catch {
+                    signInFailed(error)
+                }
+            }
+            return
+        }
         signInTask = Task {
             do {
                 let account = try await broker.signInWithBrowser(clientId: clientId, tenant: tenant, loginHint: hint, claims: claims) { url in

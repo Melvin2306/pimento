@@ -114,6 +114,11 @@ extension AppModel {
     /// unbundled copies may be refused: the reason is shown.
     func setLaunchAtLogin(_ on: Bool) {
         loginItemError = nil
+        // The demo changes nothing on the system.
+        guard !AppRuntime.isDemo else {
+            loginItemError = "Not in demo mode: launch at login is a setting of your own Pimento."
+            return
+        }
         do {
             if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
         } catch {

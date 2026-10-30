@@ -37,7 +37,10 @@ enum Notifier {
     }
 
     /// Hands a request to macOS and logs a refusal (permission missing, …).
+    /// In demo mode it is marked as the demo's (`DemoNotifications`).
     private nonisolated static func schedule(_ request: UNNotificationRequest) {
+        let request = UNNotificationRequest(identifier: request.identifier, content: DemoNotifications.tagged(request.content),
+                                            trigger: request.trigger)
         installDelegate().add(request) { error in
             if let error {
                 log.error("Notification \(request.identifier, privacy: .public) not scheduled: \(error.localizedDescription, privacy: .public)")
@@ -95,7 +98,9 @@ enum Notifier {
         content.interruptionLevel = .active
         content.categoryIdentifier = ReminderAction.categoryIdentifier
         content.userInfo = payload.userInfo
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: max(1, reminder.fireAt.timeIntervalSinceNow), repeats: false)
+        // On the app's clock (the demo's may run faster, or stand still: no reminder then).
+        guard let interval = AppClock.realInterval(until: reminder.fireAt) else { return }
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: interval, repeats: false)
         // Same identifier per expiry minute and roles: replaces a pending one.
         schedule(UNNotificationRequest(identifier: reminder.id, content: content, trigger: trigger))
     }
@@ -112,14 +117,14 @@ enum Notifier {
         let center = UNUserNotificationCenter.current()
         center.getPendingNotificationRequests { requests in
             let pending = requests.compactMap { request -> (id: String, fireAt: Date, payload: ReminderPayload)? in
-                guard ActivationSummary.isReminder(request.identifier),
+                guard ActivationSummary.isReminder(request.identifier), DemoNotifications.isOwn(request.content),
                       let payload = ReminderPayload(userInfo: request.content.userInfo),
                       let trigger = request.trigger as? UNTimeIntervalNotificationTrigger,
                       let fireAt = trigger.nextTriggerDate()
                 else { return nil }
-                return (request.identifier, fireAt, payload)
+                return (request.identifier, AppClock.appDate(fromReal: fireAt), payload)
             }
-            let sound = requests.first { ActivationSummary.isReminder($0.identifier) }?.content.sound != nil
+            let sound = requests.first { ActivationSummary.isReminder($0.identifier) && DemoNotifications.isOwn($0.content) }?.content.sound != nil
             for update in ReminderUpdate.updates(pending: pending, ended: keys) {
                 switch update {
                 case .remove(let id):
@@ -131,7 +136,7 @@ enum Notifier {
         }
         center.getDeliveredNotifications { delivered in
             let stale = delivered.filter { note in
-                guard ActivationSummary.isReminder(note.request.identifier),
+                guard ActivationSummary.isReminder(note.request.identifier), DemoNotifications.isOwn(note.request.content),
                       let payload = ReminderPayload(userInfo: note.request.content.userInfo) else { return false }
                 return payload.removing(keys) == nil
             }
@@ -147,10 +152,10 @@ enum Notifier {
             "Test notification",
             "This is how Pimento tells you that activations finished or roles are about to expire.",
             thread: "test", sound: prefs.playSound)
-        let request = UNNotificationRequest(identifier: "test-\(UUID().uuidString)", content: content, trigger: nil)
+        let request = UNNotificationRequest(identifier: "test-\(UUID().uuidString)", content: DemoNotifications.tagged(content), trigger: nil)
         do {
             try await installDelegate().add(request)
-            return .sent(Date())
+            return .sent(AppClock.now())
         } catch {
             log.error("Test notification not scheduled: \(error.localizedDescription, privacy: .public)")
             return .failed(error.localizedDescription)
@@ -164,10 +169,11 @@ enum Notifier {
     static func syncScheduledStarts(_ requests: [ScheduledRequest], tenantId: String?, prefs: Preferences) {
         guard isAvailable else { return }
         let prefix = ScheduledStartNotice.idPrefix(tenantId: tenantId)
-        let notices = prefs.notifyScheduledStart ? ScheduledStartNotice.notices(for: requests, tenantId: tenantId, now: Date()) : []
+        let notices = prefs.notifyScheduledStart ? ScheduledStartNotice.notices(for: requests, tenantId: tenantId, now: AppClock.now()) : []
         let sound = prefs.playSound
         UNUserNotificationCenter.current().getPendingNotificationRequests { pending in
-            let stale = pending.map(\.identifier).filter { $0.hasPrefix(prefix) && !notices.map(\.id).contains($0) }
+            let stale = pending.filter { DemoNotifications.isOwn($0.content) }.map(\.identifier)
+                .filter { $0.hasPrefix(prefix) && !notices.map(\.id).contains($0) }
             UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: stale)
             for notice in notices {
                 let content = UNMutableNotificationContent()
@@ -176,7 +182,8 @@ enum Notifier {
                 content.sound = sound ? .default : nil
                 content.threadIdentifier = "scheduled"
                 content.interruptionLevel = .active
-                let trigger = UNTimeIntervalNotificationTrigger(timeInterval: max(1, notice.fireAt.timeIntervalSinceNow), repeats: false)
+                guard let interval = AppClock.realInterval(until: notice.fireAt) else { continue }
+                let trigger = UNTimeIntervalNotificationTrigger(timeInterval: interval, repeats: false)
                 // Same identifier per start minute: replaces a pending one.
                 schedule(UNNotificationRequest(identifier: notice.id, content: content, trigger: trigger))
             }
@@ -219,7 +226,7 @@ enum Notifier {
         guard isAvailable else { return }
         UNUserNotificationCenter.current().getPendingNotificationRequests { requests in
             let center = UNUserNotificationCenter.current()
-            let ids = requests.map(\.identifier).filter(ActivationSummary.isReminder)
+            let ids = requests.filter { DemoNotifications.isOwn($0.content) }.map(\.identifier).filter(ActivationSummary.isReminder)
             center.removePendingNotificationRequests(withIdentifiers: ids)
         }
     }
@@ -230,12 +237,13 @@ enum Notifier {
         guard isAvailable else { return }
         UNUserNotificationCenter.current().getPendingNotificationRequests { requests in
             let center = UNUserNotificationCenter.current()
-            for request in requests where ActivationSummary.isReminder(request.identifier) {
-                guard let fireAt = ActivationSummary.rescheduledFireDate(for: request.identifier, reminderLead: lead) else {
+            for request in requests where ActivationSummary.isReminder(request.identifier) && DemoNotifications.isOwn(request.content) {
+                guard let fireAt = ActivationSummary.rescheduledFireDate(for: request.identifier, reminderLead: lead, now: AppClock.now()),
+                      let interval = AppClock.realInterval(until: fireAt) else {
                     center.removePendingNotificationRequests(withIdentifiers: [request.identifier])
                     continue
                 }
-                let trigger = UNTimeIntervalNotificationTrigger(timeInterval: max(1, fireAt.timeIntervalSinceNow), repeats: false)
+                let trigger = UNTimeIntervalNotificationTrigger(timeInterval: interval, repeats: false)
                 // Same identifier: replaces the pending one.
                 schedule(UNNotificationRequest(identifier: request.identifier, content: request.content, trigger: trigger))
             }
@@ -322,6 +330,11 @@ private final class ForegroundPresenter: NSObject, UNUserNotificationCenterDeleg
         let action = ReminderAction(rawValue: response.actionIdentifier)
         let payload = ReminderPayload(userInfo: response.notification.request.content.userInfo)
         let opens = response.notification.request.content.userInfo[Notifier.openKey] as? String
+        // A demo notification does nothing outside the demo, and a real one nothing inside it.
+        guard DemoNotifications.isOwn(response.notification.request.content) else {
+            completionHandler()
+            return
+        }
         Task { @MainActor in
             if let action, let payload {
                 await AppModel.shared.handleReminderAction(action, payload: payload)

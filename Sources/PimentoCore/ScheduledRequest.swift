@@ -311,13 +311,15 @@ public struct RequestHistory: Sendable {
 
 extension PIMService {
     /// Your pending activation requests (scheduled or awaiting approval). Read-only.
-    public func loadScheduledRequests(now: Date = Date()) async throws -> (identity: Identity, requests: [ScheduledRequest]) {
+    public func loadScheduledRequests(now: Date? = nil) async throws -> (identity: Identity, requests: [ScheduledRequest]) {
         let history = try await loadRequestHistory(now: now)
         return (history.identity, history.pending)
     }
 
     /// Every request that targets you (`asTarget()`), pending and past. Read-only.
-    public func loadRequestHistory(now: Date = Date()) async throws -> RequestHistory {
+    /// `now` nil: the service's clock.
+    public func loadRequestHistory(now: Date? = nil) async throws -> RequestHistory {
+        let now = now ?? clock()
         let token = try await tokens.accessToken()
         guard let identity = JWT.identity(fromToken: token) else { throw PIMServiceError.noIdentity }
         let items: [AssignmentScheduleRequestItem] = try await listAll(ARM.assignmentRequestsURL, token: token)

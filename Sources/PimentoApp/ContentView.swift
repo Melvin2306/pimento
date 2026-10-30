@@ -121,6 +121,11 @@ struct ContentView: View {
         ToolbarItem(placement: .navigation) {
             TenantToolbarButton()
         }
+        if AppRuntime.isDemo {
+            ToolbarItem(placement: .navigation) {
+                DemoBadge()
+            }
+        }
         ToolbarItemGroup(placement: .navigation) {
             Button {
                 Task { await model.refresh() }
@@ -389,7 +394,7 @@ struct StatusCell: View {
     }
 
     private func scheduledText(_ r: ScheduledRequest) -> String {
-        r.kind == .scheduled ? "Scheduled \(ScheduleTime.label(r.start, now: Date()))" : "Awaiting approval"
+        r.kind == .scheduled ? "Scheduled \(ScheduleTime.label(r.start, now: AppClock.now()))" : "Awaiting approval"
     }
 
     private func scheduledHelp(_ r: ScheduledRequest) -> String {

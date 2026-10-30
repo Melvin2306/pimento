@@ -155,7 +155,9 @@ public final class PIMService: Sendable {
     }
 
     /// GETs eligibilities + active instances and joins them. Read-only.
-    public func loadRoles(now: Date = Date()) async throws -> RoleSnapshot {
+    /// `now` nil: the service's clock.
+    public func loadRoles(now: Date? = nil) async throws -> RoleSnapshot {
+        let now = now ?? clock()
         let token = try await tokens.accessToken()
         guard let identity = JWT.identity(fromToken: token) else { throw PIMServiceError.noIdentity }
         async let eligibilities: [EligibilityScheduleInstance] = listAll(ARM.eligibilityInstancesURL, token: token)

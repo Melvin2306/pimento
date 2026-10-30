@@ -11,6 +11,10 @@ let launchArguments = Array(CommandLine.arguments.dropFirst())
 if LaunchArguments.isLegacyCLICall(launchArguments) {
     CommandLineTool.forwardLegacyCall(launchArguments)
 }
+// Demo mode (`--demo`, PIMENTO_DEMO=1): set up before anything reads a setting.
+MainActor.assumeIsolated {
+    AppRuntime.configure(arguments: launchArguments, environment: ProcessInfo.processInfo.environment)
+}
 PimentoApp.main()
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -18,6 +22,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The notification delegate must be set before launch finishes: a tap
         // on Renew or End Now that launched the app is delivered right then.
         MainActor.assumeIsolated { Notifier.setUp() }
+        // Demo notifications never outlive the demo (nor start it stale).
+        DemoNotifications.withdraw()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        if AppClock.isDemo { DemoNotifications.withdraw() }
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -47,7 +57,7 @@ struct PimentoApp: App {
     private var model: AppModel { AppModel.shared }
     /// Whether the menu bar extra is shown: read from the stored setting,
     /// which `AppModel` saves on every change, so the scene follows it live.
-    @AppStorage(Preferences.showInMenuBarKey) private var showInMenuBar = Preferences().showInMenuBar
+    @AppStorage(Preferences.showInMenuBarKey, store: AppRuntime.defaults) private var showInMenuBar = Preferences().showInMenuBar
 
     var body: some Scene {
         Window(AppInfo.name, id: "main") {
@@ -62,7 +72,9 @@ struct PimentoApp: App {
             }
             CommandGroup(after: .appSettings) {
                 Button("Install Command Line Tool…") { CommandLineTool.install() }
+                    .disabled(AppRuntime.isDemo)
                 Button("Uninstall Command Line Tool…") { CommandLineTool.uninstall() }
+                    .disabled(AppRuntime.isDemo)
             }
             CommandGroup(replacing: .newItem) {}
             CommandGroup(after: .toolbar) {
@@ -106,6 +118,7 @@ struct PimentoApp: App {
                 PresetMenuItems(shortcuts: true)
                     .environment(model)
             }
+            DemoCommands()
             CommandGroup(replacing: .help) {
                 Button("\(AppInfo.name) on GitHub") { NSWorkspace.shared.open(AppInfo.repositoryURL) }
                 Button("Report an Issue") { NSWorkspace.shared.open(AppInfo.issuesURL) }

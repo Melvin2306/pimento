@@ -19,7 +19,7 @@ struct StartMenu: View {
                 Button("Now") { model.setStart(nil) }
                 Divider()
                 ForEach(ScheduleTime.Preset.allCases, id: \.self) { preset in
-                    Button(preset.title) { model.setStart(preset.date(now: Date())) }
+                    Button(preset.title) { model.setStart(preset.date(now: AppClock.now())) }
                 }
                 Divider()
                 Button("Pick Date and Time…") { model.openStartPicker() }
@@ -62,7 +62,7 @@ private struct StartPicker: View {
             Text("Start the activation at").font(.headline)
             // The calendar for the day, a field for the time: the analog
             // clock of the graphical style is hard to set to the minute.
-            DatePicker("Day", selection: $model.startPickerDraft, in: Date()...model.latestStart,
+            DatePicker("Day", selection: $model.startPickerDraft, in: AppClock.now()...model.latestStart,
                        displayedComponents: [.date])
                 .datePickerStyle(.graphical)
                 .labelsHidden()
@@ -257,11 +257,11 @@ private struct ScheduledRow: View {
             var parts = ["Awaiting approval"]
             if let asked = request.createdOn { parts.append("asked \(ScheduledRowAge.ago(asked))") }
             if let expires = request.expiresAt {
-                parts.append(expires > Date() ? "expires in \(DurationText.short(minutes: max(1, Int(expires.timeIntervalSinceNow / 60))))" : "expired")
+                parts.append(expires > AppClock.now() ? "expires in \(DurationText.short(minutes: max(1, Int(expires.timeIntervalSince(AppClock.now()) / 60))))" : "expired")
             }
             return parts.joined(separator: " · ")
         }
-        let left = DurationText.short(minutes: max(1, Int(request.start.timeIntervalSinceNow / 60)))
+        let left = DurationText.short(minutes: max(1, Int(request.start.timeIntervalSince(AppClock.now()) / 60)))
         return "Starts \(model.startLabel(request.start)) · in \(left)"
     }
 

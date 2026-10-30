@@ -287,7 +287,7 @@ private struct TimeOfDayFields: View {
     /// each boundary, so the text follows the clock.
     private var nowText: String {
         _ = model.appearance
-        let status = model.prefs.appearanceSchedule.status(at: Date(), calendar: .autoupdatingCurrent)
+        let status = model.prefs.appearanceSchedule.status(at: AppClock.now(), calendar: .autoupdatingCurrent)
         guard let until = status.until else { return "Now: \(status.mode.title), all day" }
         return "Now: \(status.mode.title) until \(until.formatted(Self.timeStyle))"
     }

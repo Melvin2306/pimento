@@ -354,10 +354,18 @@ private struct WhenCell: View {
     var body: some View {
         HStack(spacing: 6) {
             Text(date.formatted(.dateTime.month(.abbreviated).day()) + " " + date.formatted(date: .omitted, time: .shortened)).lineLimit(1)
-            Text(date.formatted(.relative(presentation: .named, unitsStyle: .abbreviated)))
+            Text(Self.relative(date))
                 .foregroundStyle(.secondary).lineLimit(1)
         }
         .help(date.formatted(date: .complete, time: .standard))
+    }
+
+    /// "2 days ago", against the app's clock (the demo's may differ).
+    static func relative(_ date: Date) -> String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.dateTimeStyle = .named
+        formatter.unitsStyle = .abbreviated
+        return formatter.localizedString(for: date, relativeTo: AppClock.now())
     }
 }
 

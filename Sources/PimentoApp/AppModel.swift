@@ -65,7 +65,7 @@ final class AppModel {
     // Scheduling: nil starts the activations now; a date schedules them.
     var scheduleStart: Date?
     var showStartPicker = false
-    var startPickerDraft = Date()
+    var startPickerDraft = AppClock.now()
     /// Your pending requests in Azure (scheduled, or awaiting approval).
     var scheduledRequests: [ScheduledRequest] = []
     /// Tickets of your requests by request name: what Renew sends again.
@@ -110,7 +110,7 @@ final class AppModel {
     private var policyTask: Task<Void, Never>?
 
     // Presets, shared with the CLI through the presets file.
-    let presetStore = PresetStore()
+    let presetStore = AppRuntime.demo?.workspace.presetStore ?? PresetStore()
     var presetLibrary = PresetLibrary()
     /// The presets file could not be read (or written).
     var presetFileError: String?
@@ -129,7 +129,7 @@ final class AppModel {
     private(set) var awaitingManualRefresh = false
 
     // History: every write this app (and the CLI) sent, from the shared file.
-    let historyStore = HistoryStore()
+    let historyStore = AppRuntime.demo?.workspace.historyStore ?? HistoryStore()
     let historyRecorder: HistoryRecorder
     /// Whether history is kept, and for how long (shared with the CLI).
     var historySettings: HistorySettings {
@@ -139,8 +139,8 @@ final class AppModel {
     var showHistory = false
     var historySearch = ""
     var historyPeriod: HistoryPeriod = .all
-    var historyFrom = Date().addingTimeInterval(-7 * 86400)
-    var historyTo = Date()
+    var historyFrom = AppClock.now().addingTimeInterval(-7 * 86400)
+    var historyTo = AppClock.now()
     var historyAction: HistoryAction?
     var historyResult: HistoryResult?
     /// A tenant GUID (lower-case), or nil for all.
@@ -246,7 +246,7 @@ final class AppModel {
         let text: String
     }
 
-    private enum Keys {
+    enum Keys {
         /// The tenant last picked in the app.
         static let tenant = "tenantId"
         static let hiddenTenants = "hiddenTenantIds"
@@ -275,7 +275,23 @@ final class AppModel {
     func tokens(tenantId: String?) -> TokenProvider { authContext.tokens(tenantId: tenantId) }
 
     var authContext: AuthContext {
-        AuthContext(selection: authSelection, broker: broker, accountId: authSettings.accountId)
+        AuthContext(selection: authSelection, broker: broker, accountId: authSettings.accountId, azureCLI: Self.azureCLITokens)
+    }
+
+    /// The Azure CLI's tokens, or the demo's stand-in for them.
+    static var azureCLITokens: @Sendable (String?) -> TokenProvider {
+        if let demo = AppRuntime.demo { return { demo.azureCLITokens(tenantId: $0) } }
+        return { AzureCLITokenProvider(tenantId: $0) }
+    }
+
+    /// The environment the app reads `PIMENTO_TENANT` / `PIMENTO_AUTH` /
+    /// `PIMENTO_CLIENT_ID` from: none of the user's in demo mode.
+    static var settingsEnvironment: [String: String] { AppRuntime.isDemo ? [:] : ProcessInfo.processInfo.environment }
+
+    /// A service for `tokens`: on the demo simulator in demo mode.
+    static func makeService(tokens: TokenProvider, history: HistoryRecorder) -> PIMService {
+        if let demo = AppRuntime.demo { return demo.makeService(tokens: tokens, history: history) }
+        return PIMService(tokens: tokens, history: history)
     }
 
     var authSource: AuthSource { authSelection.source }
@@ -289,7 +305,7 @@ final class AppModel {
          signInTransport: HTTPTransport? = nil) {
         // 0.1.0 persisted a dry-run mode; activation is now always real (the
         // preview is a separate action), so the stale setting is dropped.
-        let defaults = UserDefaults.standard
+        let defaults = AppRuntime.defaults
         defaults.removeObject(forKey: "dryRun")
         self.commandLineTenant = commandLineTenant
         let prefs = Preferences.load(from: defaults)
@@ -313,31 +329,37 @@ final class AppModel {
         let saved = prefs.startupTenant(lastUsed: defaults.string(forKey: Keys.tenant))
         let selection: TenantSelection
         do {
-            selection = try TenantResolver.resolve(commandLine: commandLineTenant, saved: saved)
+            selection = try TenantResolver.resolve(commandLine: commandLineTenant, environment: Self.settingsEnvironment, saved: saved)
         } catch {
             selection = TenantSelection(tenantId: nil, source: .azDefault)
             tenantError = error.localizedDescription
         }
         tenant = selection
-        let authStore = authSettingsStore ?? AuthSettingsStore()
+        let authStore = authSettingsStore ?? AppRuntime.demo?.workspace.authSettingsStore ?? AuthSettingsStore()
         self.authSettingsStore = authStore
         let auth = authStore.load()
         authSettings = auth
         clientIdDraft = auth.clientId ?? ""
-        let selectedAuth = (try? AuthSourceResolver.resolve(commandLine: nil, environment: ProcessInfo.processInfo.environment, saved: auth.source))
+        let selectedAuth = (try? AuthSourceResolver.resolve(commandLine: nil, environment: Self.settingsEnvironment, saved: auth.source))
             ?? AuthSelection(source: auth.source ?? .az, origin: auth.source == nil ? .default : .saved)
         authSelection = selectedAuth
-        let broker = TokenBroker(store: tokenStore ?? TokenStores.standard(), transport: signInTransport ?? URLSessionTransport())
+        // Demo mode: the demo account in memory, sign-in on the simulator (never the Keychain).
+        let broker = if tokenStore == nil, let demo = AppRuntime.demo {
+            demo.makeBroker()
+        } else {
+            TokenBroker(store: tokenStore ?? TokenStores.standard(), transport: signInTransport ?? URLSessionTransport())
+        }
         self.broker = broker
-        let recorder = HistoryRecorder(store: historyStore, source: .app)
+        let recorder = HistoryRecorder(store: historyStore, source: .app, clock: { AppClock.now() })
         historyRecorder = recorder
         historySettings = historyStore.loadSettings()
-        service = PIMService(
-            tokens: AuthContext(selection: selectedAuth, broker: broker, accountId: auth.accountId).tokens(tenantId: selection.tenantId),
+        service = Self.makeService(
+            tokens: AuthContext(selection: selectedAuth, broker: broker, accountId: auth.accountId, azureCLI: Self.azureCLITokens)
+                .tokens(tenantId: selection.tenantId),
             history: recorder)
         restartAutoRefresh()
         observeClockChanges()
-        scheduleAppearanceChange(after: Date())
+        scheduleAppearanceChange(after: AppClock.now())
         reloadPresets()
         Task { await reloadAccounts() }
         // Old records go once per launch (the CLI and later writes prune too).
@@ -446,38 +468,38 @@ final class AppModel {
 
     private func rememberTicket(_ ticket: TicketInfo?) {
         guard let ticket else { return }
-        if let system = ticket.ticketSystem { UserDefaults.standard.set(system, forKey: Keys.lastTicketSystem) }
+        if let system = ticket.ticketSystem { AppRuntime.defaults.set(system, forKey: Keys.lastTicketSystem) }
         guard prefs.rememberJustifications else { return }
         recentTickets = TicketInfo.recording(ticket, in: recentTickets, limit: Preferences.recentJustificationLimit)
-        if let data = try? JSONEncoder().encode(recentTickets) { UserDefaults.standard.set(data, forKey: Keys.recentTickets) }
+        if let data = try? JSONEncoder().encode(recentTickets) { AppRuntime.defaults.set(data, forKey: Keys.recentTickets) }
     }
 
     func clearRecentTickets() {
         recentTickets = []
-        UserDefaults.standard.removeObject(forKey: Keys.recentTickets)
+        AppRuntime.defaults.removeObject(forKey: Keys.recentTickets)
     }
 
     // MARK: Scheduling
 
     /// `Fri 08:00`, for the start menu and the results.
-    func startLabel(_ date: Date) -> String { ScheduleTime.label(date, now: Date()) }
+    func startLabel(_ date: Date) -> String { ScheduleTime.label(date, now: AppClock.now()) }
 
     func setStart(_ date: Date?) {
         scheduleStart = date
         if let date {
-            do { try ScheduleTime.validate(date, now: Date()) } catch {
+            do { try ScheduleTime.validate(date, now: AppClock.now()) } catch {
                 banner = Banner(kind: .error, text: error.localizedDescription)
             }
         }
     }
 
     func openStartPicker() {
-        startPickerDraft = scheduleStart ?? ScheduleTime.Preset.tomorrowMorning.date(now: Date())
+        startPickerDraft = scheduleStart ?? ScheduleTime.Preset.tomorrowMorning.date(now: AppClock.now())
         showStartPicker = true
     }
 
     /// The latest start PIM accepts, for the date picker.
-    var latestStart: Date { Date().addingTimeInterval(TimeInterval(ScheduleTime.maxDaysAhead) * 86400) }
+    var latestStart: Date { AppClock.now().addingTimeInterval(TimeInterval(ScheduleTime.maxDaysAhead) * 86400) }
 
     /// Pending requests of the eligibility in `role` (scope + role).
     func scheduledRequests(for role: EligibleRole) -> [ScheduledRequest] {
@@ -501,7 +523,7 @@ final class AppModel {
             activationTickets = history.activationTickets
             scheduledLoadState = .loaded
             Notifier.syncScheduledStarts(requests, tenantId: history.identity.tenantId ?? effectiveTenantId, prefs: prefs)
-            let decided = approvalTracker.update(items: history.items, principalId: history.identity.objectId, now: Date())
+            let decided = approvalTracker.update(items: history.items, principalId: history.identity.objectId, now: AppClock.now())
             updateApprovalPolling()
             if !decided.isEmpty { Task { await self.announce(decided) } }
         } catch {
@@ -550,7 +572,7 @@ final class AppModel {
             let review = t.resolution.isApproved ? nil : await service.review(approvalId: t.request.approvalId)
             guard generation == tenantGeneration else { return }
             let role = roles.first { $0.policyKey == t.request.policyKey && $0.isActive }
-            let notice = ApprovalNotice.decision(t, review: review, until: role?.activeUntil, now: Date())
+            let notice = ApprovalNotice.decision(t, review: review, until: role?.activeUntil, now: AppClock.now())
             Notifier.approvalDecided(notice, prefs: prefs)
             lines.append(notice.title)
             if t.resolution.isApproved, let role {
@@ -772,7 +794,7 @@ final class AppModel {
             // Drop selections that changed state or disappeared.
             checked.formIntersection(Set(roles.filter { !$0.isActive }.map(\.id)))
             checkedActive.formIntersection(Set(roles.filter(\.isActive).map(\.id)))
-            lastRefreshed = Date()
+            lastRefreshed = AppClock.now()
             loadState = .loaded
             reloadPresets()
             loadPolicies(retryFailures: true)
@@ -798,7 +820,7 @@ final class AppModel {
     /// Shows rows this app just changed the way they will be until Azure
     /// lists them so, and forgets those Azure agrees with (or that are stale).
     private func applyPending(to fresh: [EligibleRole]) -> [EligibleRole] {
-        let now = Date()
+        let now = AppClock.now()
         return fresh.map { role in
             guard let state = pending[role.id] else { return role }
             switch state {
@@ -834,6 +856,9 @@ final class AppModel {
         defer { isLoadingTenants = false }
         let loaded: [TenantInfo]?
         switch authSource {
+        case _ where AppRuntime.demo != nil:
+            // The demo account's tenants, from the simulated `/tenants`.
+            loaded = try? await AppRuntime.demo?.loadTenants(tokens: tokens(tenantId: tenant.tenantId))
         case .az: loaded = try? await TenantDirectory.load(preferredTenant: tenant.tenantId)
         case .pimento:
             // ARM's /tenants lists every tenant of the signed-in account.
@@ -844,13 +869,13 @@ final class AppModel {
 
     func setHidden(_ tenant: TenantInfo, _ hidden: Bool) {
         if hidden { hiddenTenantIds.insert(tenant.id) } else { hiddenTenantIds.remove(tenant.id) }
-        UserDefaults.standard.set(hiddenTenantIds.sorted(), forKey: Keys.hiddenTenants)
+        AppRuntime.defaults.set(hiddenTenantIds.sorted(), forKey: Keys.hiddenTenants)
     }
 
     func unhideAllTenants() {
         hiddenTenantIds = []
         showHiddenTenants = false
-        UserDefaults.standard.removeObject(forKey: Keys.hiddenTenants)
+        AppRuntime.defaults.removeObject(forKey: Keys.hiddenTenants)
     }
 
     func openTenantPicker() {
@@ -869,10 +894,10 @@ final class AppModel {
                 banner = Banner(kind: .error, text: TenantError.invalid(id).localizedDescription)
                 return
             }
-            UserDefaults.standard.set(id, forKey: Keys.tenant)
+            AppRuntime.defaults.set(id, forKey: Keys.tenant)
             tenant = TenantSelection(tenantId: id, source: .saved)
         } else {
-            UserDefaults.standard.removeObject(forKey: Keys.tenant)
+            AppRuntime.defaults.removeObject(forKey: Keys.tenant)
             tenant = TenantSelection(tenantId: nil, source: .azDefault)
         }
         restartSession()
@@ -881,7 +906,7 @@ final class AppModel {
     /// A new service for the current tenant and auth source; forgets everything
     /// loaded with the previous one and reloads.
     func restartSession() {
-        service = PIMService(tokens: tokens(tenantId: tenant.tenantId), history: historyRecorder)
+        service = Self.makeService(tokens: tokens(tenantId: tenant.tenantId), history: historyRecorder)
         tenantGeneration += 1
         roles = []
         identity = nil
@@ -958,7 +983,7 @@ final class AppModel {
         let ticket = currentTicket
         let start = scheduleStart
         let requested = duration
-        let now = Date()
+        let now = AppClock.now()
         if let start { try ScheduleTime.validate(start, now: now) }
         await ensurePolicies(for: roles)
         let needTicket = TicketRequirement.missing(roles, ticket: ticket) { self.policies[$0.policyKey] }
@@ -1159,7 +1184,7 @@ final class AppModel {
     /// would need approval to come back is unknown.
     private func renewalSelection(_ targets: [EligibleRole], forRenewal: Bool = true, loadingIsKnown: Bool = false) -> RoleLifecycle.Selection {
         RoleLifecycle.select(
-            targets, now: Date(), forRenewal: forRenewal,
+            targets, now: AppClock.now(), forRenewal: forRenewal,
             needsTicket: { RenewTicket.isMissing($0, ticket: self.renewalTicket(for: $0), policy: self.policies[$0.policyKey]) },
             requiresApproval: { self.policies[$0.policyKey]?.policy?.requiresApproval == true },
             policyKnown: { role in
@@ -1171,7 +1196,7 @@ final class AppModel {
     /// Ends the activations of `roles` (SelfDeactivate).
     func deactivate(_ targets: [EligibleRole]) async {
         guard !isActivating, let identity else { return }
-        let selection = RoleLifecycle.select(targets, now: Date())
+        let selection = RoleLifecycle.select(targets, now: AppClock.now())
         let planned: [PlannedRequest]
         do {
             planned = try ActivationRequestBuilder.deactivationPlan(selection.ready, principalId: identity.objectId)
@@ -1199,7 +1224,7 @@ final class AppModel {
             banner = Banner(kind: .error, text: error.localizedDescription)
         }
         var ended: [EligibleRole] = []
-        let now = Date()
+        let now = AppClock.now()
         for plan in planned {
             guard case .done(let outcome) = progress[plan.id] else { continue }
             switch outcome {
@@ -1303,7 +1328,7 @@ final class AppModel {
         var renewed: [EligibleRole] = []
         var lost: [EligibleRole] = []
         var awaiting: [EligibleRole] = []
-        let now = Date()
+        let now = AppClock.now()
         for plan in plans {
             guard case .done(let outcome) = progress[plan.id] else { continue }
             switch outcome {
@@ -1626,7 +1651,7 @@ final class AppModel {
         if historyPeriod == .custom {
             (filter.since, filter.until) = HistoryPeriod.customRange(from: historyFrom, to: historyTo)
         } else {
-            filter.since = historyPeriod.since(now: Date())
+            filter.since = historyPeriod.since(now: AppClock.now())
         }
         if let historyAction { filter.actions = [historyAction] }
         if let historyResult { filter.results = [historyResult] }
@@ -1663,7 +1688,7 @@ final class AppModel {
         let service = service.readOnly
         let store = historyStore
         let label = effectiveTenantId.flatMap(knownTenant)?.name
-        let cutoff = historySettings.retention.cutoff(now: Date())
+        let cutoff = historySettings.retention.cutoff(now: AppClock.now())
         do {
             let records = try await service.loadHistoryFromAzure(tenantLabel: label)
             let kept = records.filter { cutoff == nil || $0.at >= cutoff! }
@@ -1684,7 +1709,7 @@ final class AppModel {
         let records = visibleHistory
         let panel = NSSavePanel()
         panel.title = "Export History"
-        panel.nameFieldStringValue = "pimento-history-\(Date().formatted(.iso8601.year().month().day())).csv"
+        panel.nameFieldStringValue = "pimento-history-\(AppClock.now().formatted(.iso8601.year().month().day())).csv"
         panel.allowedContentTypes = [.commaSeparatedText]
         panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let url = panel.url else { return }
@@ -1786,7 +1811,7 @@ final class AppModel {
             return
         }
         guard prefs != old else { return }
-        prefs.save(to: UserDefaults.standard)
+        prefs.save(to: AppRuntime.defaults)
         updateAppearance()
         if AppPresence.activationPolicy(prefs) != AppPresence.activationPolicy(old) { DockIcon.apply(prefs, reactivate: true) }
         if prefs.defaultHours != old.defaultHours, !isActivating { duration = .hours(prefs.defaultHours) }
@@ -1811,7 +1836,7 @@ final class AppModel {
     /// Applies `prefs.resolvedAppearance()` if it changed, and arms the
     /// timer for the next change of the time-of-day schedule.
     func updateAppearance() {
-        let date = Date()
+        let date = AppClock.now()
         let resolved = prefs.resolvedAppearance(at: date)
         if resolved != appearance {
             appearance = resolved
@@ -1858,19 +1883,19 @@ final class AppModel {
         columnCustomization = TableColumnCustomization()
         // After the assignments, whose didSet saves: no stored value pins
         // today's defaults, so future defaults apply.
-        Preferences.reset(in: UserDefaults.standard)
-        UserDefaults.standard.removeObject(forKey: Keys.tableColumns)
+        Preferences.reset(in: AppRuntime.defaults)
+        AppRuntime.defaults.removeObject(forKey: Keys.tableColumns)
     }
 
     private func rememberJustification(_ text: String) {
         guard prefs.rememberJustifications else { return }
         recentJustifications = Preferences.recording(text, in: recentJustifications)
-        UserDefaults.standard.set(recentJustifications, forKey: Keys.recentJustifications)
+        AppRuntime.defaults.set(recentJustifications, forKey: Keys.recentJustifications)
     }
 
     func clearRecentJustifications() {
         recentJustifications = []
-        UserDefaults.standard.removeObject(forKey: Keys.recentJustifications)
+        AppRuntime.defaults.removeObject(forKey: Keys.recentJustifications)
     }
 
     func isColumnVisible(_ column: Column) -> Bool {
@@ -1883,7 +1908,7 @@ final class AppModel {
 
     private func saveColumnCustomization() {
         if let data = try? JSONEncoder().encode(columnCustomization) {
-            UserDefaults.standard.set(data, forKey: Keys.tableColumns)
+            AppRuntime.defaults.set(data, forKey: Keys.tableColumns)
         }
     }
 

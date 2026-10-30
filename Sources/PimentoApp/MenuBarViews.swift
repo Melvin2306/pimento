@@ -37,7 +37,7 @@ final class MenuBarClock {
     static let shared = MenuBarClock(model: .shared)
 
     /// What the countdowns are computed against.
-    private(set) var now = Date()
+    private(set) var now = AppClock.now()
     /// The popover is on screen: the countdown shows seconds.
     var popoverOpen = false
 
@@ -51,7 +51,7 @@ final class MenuBarClock {
 
     /// Re-reads the time and plans the next tick.
     func tick() {
-        now = Date()
+        now = AppClock.now()
         plan()
     }
 
@@ -61,7 +61,7 @@ final class MenuBarClock {
         // Re-plan when anything read here changes: the roles (refresh,
         // activation), the settings, the popover opening or closing.
         let (next, open) = withObservationTracking {
-            let date = Date()
+            let date = AppClock.now()
             let prefs = model.prefs
             let open = popoverOpen
             guard prefs.showInMenuBar else { return (nil as Date?, open) }
@@ -71,8 +71,9 @@ final class MenuBarClock {
         } onChange: { [weak self] in
             Task { @MainActor in self?.tick() }
         }
-        guard let next else { return }
-        let timer = Timer(fire: next, interval: 0, repeats: false) { [weak self] _ in
+        // In demo mode the clock may run faster or stand still.
+        guard let next, let fire = AppClock.realDate(for: next) else { return }
+        let timer = Timer(fire: max(fire, Date(timeIntervalSinceNow: AppClock.isDemo ? 0.25 : 0)), interval: 0, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
         }
         timer.tolerance = open ? 0.05 : 0.5
@@ -233,7 +234,10 @@ private struct MenuBarHeader: View {
                 .renderingMode(.template)
                 .foregroundStyle(colors.headerText)
             VStack(alignment: .leading, spacing: 1) {
-                Text(AppInfo.name).font(.headline).foregroundStyle(colors.headerText)
+                HStack(spacing: 6) {
+                    Text(AppInfo.name).font(.headline).foregroundStyle(colors.headerText)
+                    DemoBadge(compact: true)
+                }
                 Text(subtitle)
                     .font(.caption)
                     .foregroundStyle(colors.headerText.opacity(0.8))
@@ -263,7 +267,7 @@ private struct MenuBarHeader: View {
         case .idle where model.awaitingManualRefresh:
             return "\(model.tenantLabel) · not loaded yet"
         default:
-            let n = model.menuBarEntries(now: Date()).count
+            let n = model.menuBarEntries(now: AppClock.now()).count
             return "\(model.tenantLabel) · \(n == 0 ? "no active roles" : n == 1 ? "1 active role" : "\(n) active roles")"
         }
     }

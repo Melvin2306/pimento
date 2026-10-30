@@ -137,7 +137,7 @@ private struct ApprovalRow: View {
     private var detail: String {
         var parts: [String] = []
         if let minutes = request.durationMinutes { parts.append("for \(DurationText.short(minutes: minutes))") }
-        if let start = request.start, start > Date().addingTimeInterval(ScheduleTime.immediateSlack) {
+        if let start = request.start, start > AppClock.now().addingTimeInterval(ScheduleTime.immediateSlack) {
             parts.append("from \(model.startLabel(start))")
         }
         if let n = request.ticket { parts.append("ticket \(n.label)") }
@@ -149,7 +149,7 @@ private struct ApprovalRow: View {
         var parts: [String] = []
         if let asked = request.createdOn { parts.append("asked \(ScheduledRowAge.ago(asked))") }
         if let expires = request.expiresAt {
-            parts.append(expires > Date() ? "expires in \(DurationText.short(minutes: max(1, Int(expires.timeIntervalSinceNow / 60))))" : "expired")
+            parts.append(expires > AppClock.now() ? "expires in \(DurationText.short(minutes: max(1, Int(expires.timeIntervalSince(AppClock.now()) / 60))))" : "expired")
         }
         return parts.joined(separator: " · ")
     }
@@ -260,7 +260,7 @@ private struct DecisionBar: View {
 /// "12 min ago".
 enum ScheduledRowAge {
     static func ago(_ date: Date) -> String {
-        let minutes = Int(Date().timeIntervalSince(date) / 60)
+        let minutes = Int(AppClock.now().timeIntervalSince(date) / 60)
         return minutes < 1 ? "just now" : "\(DurationText.short(minutes: minutes)) ago"
     }
 }
