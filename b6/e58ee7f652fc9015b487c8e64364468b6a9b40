@@ -1,0 +1,32 @@
+Tests/PimentoCoreTests/DemoIsolationTests.swift
+  s_4884204a812fec::t_7dd165e0e5aed8 1-146
+Tests/PimentoCoreTests/DemoAzureTests.swift
+  s_4884204a812fec::t_c793a3d4a0943b 1-130,152-466
+  s_4884204a812fec::t_47eed626b05a34 467-474
+Sources/PimentoCore/CLI/CLIDemo.swift
+  s_4884204a812fec::t_0e42ec95d1443b 1-67
+Sources/PimentoCore/CLI/CLICommand.swift
+  s_4884204a812fec::t_c737534255e6bb 375-376,378,382,656-657,660,664-671
+Sources/PimentoCore/CLI/CLIHelp.swift
+  s_4884204a812fec::t_7d3b4a0c8f0ec6 72-73,604,759,823
+Sources/PimentoCore/CLI/CLIRunner.swift
+  s_4884204a812fec::t_efd4c1447f876c 36-39,187-193,199
+Sources/pimento/main.swift
+  s_4884204a812fec::t_89e5665c2166a7 164-169
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b6e58ee7f652fc9015b487c8e64364468b6a9b40",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
