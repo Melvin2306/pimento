@@ -1145,7 +1145,8 @@ final class AppModel {
 
     /// The confirmation's targets split by what PIM allows now.
     func lifecycleSelection(forRenewal: Bool) -> RoleLifecycle.Selection {
-        renewalSelection(lifecycleTargets, forRenewal: forRenewal)
+        // Policies still loading count as known here; renew() decides once they are in.
+        renewalSelection(lifecycleTargets, forRenewal: forRenewal, loadingIsKnown: true)
     }
 
     /// The ticket a renewal of `role` sends: the ticket fields when filled in,
@@ -1154,11 +1155,17 @@ final class AppModel {
         RenewTicket.choose(given: currentTicket, original: RequestHistory.ticket(for: role, in: activationTickets))
     }
 
-    private func renewalSelection(_ targets: [EligibleRole], forRenewal: Bool = true) -> RoleLifecycle.Selection {
+    /// A role whose policy could not be read is not renewed: whether it
+    /// would need approval to come back is unknown.
+    private func renewalSelection(_ targets: [EligibleRole], forRenewal: Bool = true, loadingIsKnown: Bool = false) -> RoleLifecycle.Selection {
         RoleLifecycle.select(
             targets, now: Date(), forRenewal: forRenewal,
             needsTicket: { RenewTicket.isMissing($0, ticket: self.renewalTicket(for: $0), policy: self.policies[$0.policyKey]) },
-            requiresApproval: { self.policies[$0.policyKey]?.policy?.requiresApproval == true })
+            requiresApproval: { self.policies[$0.policyKey]?.policy?.requiresApproval == true },
+            policyKnown: { role in
+                guard let lookup = self.policies[role.policyKey] else { return loadingIsKnown }
+                return lookup.policy != nil
+            })
     }
 
     /// Ends the activations of `roles` (SelfDeactivate).
@@ -1261,6 +1268,10 @@ final class AppModel {
             progress[role.id] = .done(.failed(code: "ApprovalRequired",
                                               message: "Its policy requires approval: after ending it you would wait for an approver. Not renewed."))
         }
+        for role in selection.policyUnknown {
+            progress[role.id] = .done(.failed(code: "PolicyUnknown",
+                                              message: "Its policy could not be read, so it might need approval to come back. Not renewed."))
+        }
         for role in selection.needsTicket {
             let why = historyError.map { " (reading your requests failed: \($0))" } ?? ""
             progress[role.id] = .done(.failed(code: "TicketRequired",
@@ -1314,7 +1325,7 @@ final class AppModel {
             }
         }
         let outcomes = finishedOutcomes
-        let all = selection.tooSoon + selection.needsApproval + selection.needsTicket + plans.map(\.role)
+        let all = selection.tooSoon + selection.needsApproval + selection.policyUnknown + selection.needsTicket + plans.map(\.role)
         let failed = all.filter { outcomes[$0.id]?.isFailure == true }
         var text = lifecycleBanner(done: renewed.count, verb: "renewed", failed: failed, outcomes: outcomes)
         if !awaiting.isEmpty {

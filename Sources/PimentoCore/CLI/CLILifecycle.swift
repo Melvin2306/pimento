@@ -86,6 +86,10 @@ extension CLIRunner {
             human(style.yellow("skip") + "  \(r.roleName) · \(r.scopeName): its policy requires approval, "
                 + "so after ending it you would wait for an approver. Not renewed.")
         }
+        for r in selection.policyUnknown {
+            human(style.yellow("skip") + "  \(r.roleName) · \(r.scopeName): its policy could not be read, so whether it would need "
+                + "approval or a ticket to come back is unknown. Not renewed.")
+        }
         for r in selection.needsTicket {
             human(style.yellow("skip") + "  \(r.roleName) · \(r.scopeName): its policy requires a ticket and the ticket of "
                 + "the current activation is unknown. Add --ticket NUMBER --ticket-system NAME. Not renewed.")
@@ -232,7 +236,9 @@ extension CLIRunner {
         let selection = RoleLifecycle.select(
             s.matched, now: now, forRenewal: true,
             needsTicket: { RenewTicket.isMissing($0, ticket: ticket($0), policy: policies[$0.policyKey]) },
-            requiresApproval: { policies[$0.policyKey]?.policy?.requiresApproval == true })
+            requiresApproval: { policies[$0.policyKey]?.policy?.requiresApproval == true },
+            // A policy that could not be read is not taken as "no approval needed".
+            policyKnown: { policies[$0.policyKey]?.policy != nil })
         let plans = try ActivationRequestBuilder.renewPlan(
             selection.ready, principalId: s.snapshot.identity.objectId, justification: justification, now: now, ticket: ticket
         ) { role in
@@ -244,6 +250,10 @@ extension CLIRunner {
         for r in selection.needsApproval {
             outcomes[r.id] = .failed(code: "ApprovalRequired", message: "the role's policy requires approval; renewing would leave it off until approved")
         }
+        for r in selection.policyUnknown {
+            outcomes[r.id] = .failed(code: "PolicyUnknown",
+                                     message: "the role's policy could not be read; renewing might leave it off until approved")
+        }
         for r in selection.needsTicket {
             outcomes[r.id] = .failed(code: "TicketRequired",
                                      message: "the role's policy requires a ticket and the current activation's is unknown; add --ticket NUMBER --ticket-system NAME")
@@ -251,7 +261,8 @@ extension CLIRunner {
 
         func json(_ outcomes: [String: ActivationOutcome]) -> CLIJSON.Lifecycle {
             let byRole = Dictionary(plans.map { ($0.role.id, $0) }, uniquingKeysWith: { a, _ in a })
-            let roles = selection.ready + selection.tooSoon + selection.needsApproval + selection.needsTicket + selection.inactive
+            let roles = selection.ready + selection.tooSoon + selection.needsApproval + selection.policyUnknown + selection.needsTicket
+                + selection.inactive
             let results = roles.map { role in
                 CLIJSON.Result(role: role, outcome: outcomes[role.id], plan: byRole[role.id]?.deactivation,
                                followUp: byRole[role.id]?.plannedActivation, skipReason: "not active")
@@ -273,6 +284,7 @@ extension CLIRunner {
         printSkips(selection, now: now, style: style, human: human)
         guard !plans.isEmpty else {
             let onlyInactive = selection.tooSoon.isEmpty && selection.needsApproval.isEmpty && selection.needsTicket.isEmpty
+                && selection.policyUnknown.isEmpty
             human(onlyInactive ? "Nothing to renew: the matching roles are not active. Use `pimento activate`." : "Nothing to renew.")
             if o.json { out(CLIJSON.encode(json(outcomes))) }
             return onlyInactive ? .success : .failure

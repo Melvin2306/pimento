@@ -200,9 +200,16 @@ struct LifecycleOutcomeTests {
         #expect(selection.tooSoon.map(\.id) == [fresh.id])
         #expect(RoleLifecycle.earliestDeactivation(of: fresh) == Fixture.now.addingTimeInterval(180))
 
-        let renewal = RoleLifecycle.select([owner, fresh], now: Fixture.now, forRenewal: true) { $0.id == owner.id }
+        let renewal = RoleLifecycle.select([owner, fresh], now: Fixture.now, forRenewal: true, requiresApproval: { $0.id == owner.id })
         #expect(renewal.needsApproval.map(\.id) == [owner.id])
         #expect(renewal.ready.isEmpty)
+
+        // An unreadable policy is not "no approval needed": the role is left alone.
+        let unknown = RoleLifecycle.select([owner], now: Fixture.now, forRenewal: true, requiresApproval: { _ in false },
+                                           policyKnown: { _ in false })
+        #expect(unknown.policyUnknown.map(\.id) == [owner.id] && unknown.ready.isEmpty && !unknown.isEmpty)
+        // Deactivation does not depend on the policy.
+        #expect(RoleLifecycle.select([owner], now: Fixture.now, policyKnown: { _ in false }).ready.map(\.id) == [owner.id])
     }
 
     @Test func selectionPrefersTheDirectRowOfAnActivation() throws {

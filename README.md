@@ -241,7 +241,7 @@ Both ask first. The same actions are in the menu bar (<kbd>⇧</kbd><kbd>⌘</kb
 | Action | What Pimento sends | What happens |
 | --- | --- | --- |
 | **Deactivate** (End Now) | `SelfDeactivate` | The activation ends; the row goes back to *Eligible*. PIM refuses this in the first **5 minutes** after an activation; Pimento then shows *Too soon* with the time from which it works, and sends nothing. |
-| **Renew** | `SelfDeactivate`, then `SelfActivate` | A fresh activation for the chosen duration (capped at the policy maximum). **In between the role is not active**: PIM accepts the new activation only once it has removed the old one, which took about **3 minutes** in tests. Pimento keeps trying for 5 minutes and shows *Activating again (try n)…*. If that fails, the role stays off: activate it again. Roles whose policy requires approval are not renewed. The new activation carries the ticket the current one was requested with (or the one in the ticket fields / `--ticket`); a role whose policy requires a ticket is skipped when none is known. |
+| **Renew** | `SelfDeactivate`, then `SelfActivate` | A fresh activation for the chosen duration (capped at the policy maximum). **In between the role is not active**: PIM accepts the new activation only once it has removed the old one, which took about **3 minutes** in tests. Pimento keeps trying for 5 minutes and shows *Activating again (try n)…*. If that fails, the role stays off: activate it again. Roles whose policy requires approval, or whose policy cannot be read, are not renewed. The new activation carries the ticket the current one was requested with (or the one in the ticket fields / `--ticket`); a role whose policy requires a ticket is skipped when none is known. |
 | `pimento extend` (CLI) | `SelfExtend` | For **admin-assigned, time-bound** assignments: a *request* that an administrator must approve (`PendingAdminDecision`). Nothing changes until then. |
 
 **Why Renew and not Extend?** PIM has no self-service way to lengthen your own activation.
@@ -777,7 +777,7 @@ otherwise, and `--dry-run` sends nothing. `deactivate` and `renew` only consider
 a role activated less than 5 minutes ago is reported as *too soon* with the time from which it
 can be ended (exit code 1). `renew` warns that the role is off between the two requests, retries
 the activation for up to 5 minutes while PIM removes the old one, and skips roles whose policy
-requires approval. It sends the ticket the current activation was requested with, or `--ticket`
+requires approval or cannot be read. It sends the ticket the current activation was requested with, or `--ticket`
 (with `--ticket-system`, or the preset's); a role whose policy requires a ticket is skipped when
 neither is known. `extend` leaves PIM activations out (use `renew`) and asks for the end of each
 matching admin-assigned assignment to move `--days` later (default 30); an administrator decides.

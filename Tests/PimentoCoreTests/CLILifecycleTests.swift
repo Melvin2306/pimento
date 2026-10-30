@@ -217,6 +217,21 @@ struct CLILifecycleRunnerTests {
         #expect(h.out.contains("requires approval"))
     }
 
+    /// Regression: when the policy could not be read, renew sent
+    /// SelfDeactivate + SelfActivate for a role whose policy needs approval.
+    @Test func renewLeavesRolesAloneWhosePolicyCannotBeRead() async throws {
+        for answer in [(Data(#"{"error":{"code":"InternalServerError","message":"boom"}}"#.utf8), 500), (Data(#"{"value":[]}"#.utf8), 200)] {
+            let h = CLIHarness(put: lifecyclePUT)
+            h.policy = { _ in answer }
+            #expect(await h.run("renew", "--all", "-j", "x", "--yes", "--json") == 1)
+            #expect(await h.puts.isEmpty)
+            #expect(h.err.contains("its policy could not be read"))
+            let doc = try #require(try JSONSerialization.jsonObject(with: Data(h.out.utf8)) as? [String: Any])
+            let results = try #require(doc["results"] as? [[String: Any]])
+            #expect(results.contains { $0["code"] as? String == "PolicyUnknown" })
+        }
+    }
+
     @Test func extendSkipsActivationsAndPointsToRenew() async {
         let h = CLIHarness(put: lifecyclePUT)
         #expect(await h.run("extend", "contoso", "-j", "longer", "--yes") == 1)

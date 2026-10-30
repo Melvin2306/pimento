@@ -44,8 +44,13 @@ public enum RoleLifecycle {
         public var needsApproval: [EligibleRole] = []
         /// Its policy requires a ticket and none is known (Renew only).
         public var needsTicket: [EligibleRole] = []
+        /// Its policy could not be read, so whether it would need approval or
+        /// a ticket to come back is unknown (Renew only): not ended on a guess.
+        public var policyUnknown: [EligibleRole] = []
 
-        public var isEmpty: Bool { ready.isEmpty && tooSoon.isEmpty && inactive.isEmpty && needsApproval.isEmpty && needsTicket.isEmpty }
+        public var isEmpty: Bool {
+            ready.isEmpty && tooSoon.isEmpty && inactive.isEmpty && needsApproval.isEmpty && needsTicket.isEmpty && policyUnknown.isEmpty
+        }
     }
 
     /// `needsTicket` (renewal): the role's policy requires a ticket and no
@@ -53,7 +58,8 @@ public enum RoleLifecycle {
     public static func select(
         _ roles: [EligibleRole], now: Date, forRenewal: Bool = false,
         needsTicket: (EligibleRole) -> Bool = { _ in false },
-        requiresApproval: (EligibleRole) -> Bool = { _ in false }
+        requiresApproval: (EligibleRole) -> Bool = { _ in false },
+        policyKnown: (EligibleRole) -> Bool = { _ in true }
     ) -> Selection {
         var byKey: [RoleMatcher.Key: EligibleRole] = [:]
         var order: [RoleMatcher.Key] = []
@@ -70,6 +76,8 @@ public enum RoleLifecycle {
             let role = byKey[key]!
             if !role.isActive {
                 result.inactive.append(role)
+            } else if forRenewal && !policyKnown(role) {
+                result.policyUnknown.append(role)
             } else if forRenewal && requiresApproval(role) {
                 result.needsApproval.append(role)
             } else if forRenewal && needsTicket(role) {

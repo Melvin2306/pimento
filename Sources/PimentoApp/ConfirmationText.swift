@@ -20,6 +20,10 @@ extension AppModel {
         if renewal, !selection.needsApproval.isEmpty {
             parts.append("\(selection.needsApproval.count) need\(selection.needsApproval.count == 1 ? "s" : "") approval to activate, so \(selection.needsApproval.count == 1 ? "it is" : "they are") not renewed.")
         }
+        if renewal, !selection.policyUnknown.isEmpty {
+            let n = selection.policyUnknown.count
+            parts.append("\(n) \(n == 1 ? "has a policy that" : "have policies that") could not be read, so \(n == 1 ? "it is" : "they are") not renewed.")
+        }
         if renewal, !selection.needsTicket.isEmpty {
             let n = selection.needsTicket.count
             parts.append("\(n) need\(n == 1 ? "s" : "") a ticket and the current activation's is unknown, so \(n == 1 ? "it is" : "they are") not renewed: fill in ticket number and system first.")

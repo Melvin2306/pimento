@@ -411,6 +411,9 @@ All notable changes to this project are documented here. The format follows
   token refresh in flight in another: the rotated refresh token replaces the stored one only while
   it is still the one redeemed (under the file lock; Keychain items are only updated, never
   re-created), so a removed account stays removed and a newer sign-in keeps its token.
+- Renew (app and `pimento renew`) skips a role whose policy could not be read (`PolicyUnknown`)
+  instead of treating it as "no approval needed": before, a failed policy read let renew end a role
+  that then waited for an approver to come back.
 
 ## [0.1.0] - 2026-10-29
 
