@@ -342,7 +342,7 @@ public struct MCPToolbox: Sendable {
             case "list_active_roles": return try await listActive(args, config)
             case "list_presets": return try listPresets(args, config)
             case "list_pending_approvals": return try await listPending(args, config)
-            case "get_history": return try history(args)
+            case "get_history": return try await history(args, config)
             default: return .failure("Unknown tool \(name).")
             }
         } catch {
@@ -414,7 +414,15 @@ public struct MCPToolbox: Sendable {
         ])
     }
 
-    func history(_ args: MCPArguments) throws -> MCPToolResult {
+    /// The GUID of the pinned tenant (`--tenant`, which may be a domain), as
+    /// the token for it says, like the other tools; nil when it cannot be told.
+    func pinnedTenantId(_ pinned: String) async -> String? {
+        if UUID(uuidString: pinned) != nil { return pinned }
+        guard let token = try? await backend.service(pinned, true).tokens.accessToken() else { return nil }
+        return JWT.identity(fromToken: token)?.tenantId
+    }
+
+    func history(_ args: MCPArguments, _ config: MCPConfiguration) async throws -> MCPToolResult {
         guard let store = backend.history else { return .failure("No history is kept here.") }
         let now = backend.now()
         func date(_ key: String) throws -> Date? {
@@ -429,13 +437,28 @@ public struct MCPToolbox: Sendable {
             actions: Set((args.strings("actions") ?? []).map(HistoryAction.init(rawValue:))),
             results: Set((args.strings("outcomes") ?? []).map(HistoryResult.init(rawValue:))),
             text: args.string("text") ?? "")
-        let matching = filter.apply(store.records(now: now))
+        var records = store.records(now: now)
+        var note: String?
+        // A pinned server shows only its tenant's records; none when the
+        // pin cannot be resolved to a tenant id.
+        if let pinned = config.tenant {
+            if let id = await pinnedTenantId(pinned) {
+                records = records.filter { $0.tenantId?.caseInsensitiveCompare(id) == .orderedSame }
+                note = "Only records of tenant \(pinned) (this server is limited to it)."
+            } else {
+                records = []
+                note = "This server is limited to tenant \(pinned), which could not be resolved to a tenant id, so no records are shown."
+            }
+        }
+        let matching = filter.apply(records)
         let shown = Array(matching.prefix(args.int("limit") ?? 50))
-        return .success([
+        var result: [String: JSONValue] = [
             "records": .array(try shown.map { try JSONValue.encoding($0) }),
             "total": .int(matching.count),
             "recording": .bool(store.loadSettings().enabled),
-        ])
+        ]
+        if let note { result["note"] = .string(note) }
+        return .success(.object(result))
     }
 }
 

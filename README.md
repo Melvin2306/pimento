@@ -1128,7 +1128,7 @@ Leave out `--allow-activate` for a read-only server. Desktop apps often do not s
 | `list_active_roles` | Active roles, soonest-expiring first, with the minutes left |
 | `list_presets` | Your saved presets |
 | `list_pending_approvals` | Your requests waiting for an approver |
-| `get_history` | What Pimento sent and how it went (filters as `pimento history`) |
+| `get_history` | What Pimento sent and how it went (filters as `pimento history`; with `--tenant`, only that tenant's records) |
 | `activate_roles` | *With `--allow-activate`.* Activates roles named by exact role and scope (or a preset), with a justification, `hours` (capped at each policy's maximum) and a ticket where the policy needs one |
 | `deactivate_roles` | *With `--allow-activate`.* Ends active roles |
 | `renew_roles` | *With `--allow-activate`.* Ends and activates roles again for a fresh duration (roles that need approval are not renewed) |

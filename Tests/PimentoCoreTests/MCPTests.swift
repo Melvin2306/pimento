@@ -375,6 +375,29 @@ struct MCPValidationTests {
         await h.finish()
     }
 
+    @Test func historyKeepsToThePinnedTenant() async throws {
+        func tenants(_ config: MCPConfiguration) async throws -> [String] {
+            let h = try MCPHarness(config)
+            let at = MCPHarness.now.addingTimeInterval(-3600)
+            try h.workspace.historyStore.append(([DemoDirectory.contoso.id, DemoDirectory.fabrikam.id, nil] as [String?]).map {
+                HistoryRecord(at: at, action: .activate, result: .succeeded, tenantId: $0, scope: "/subscriptions/x",
+                              justification: "pin-check", source: .cli)
+            })
+            _ = try await h.initialize()
+            h.call(1, "get_history", ["text": "pin-check"])
+            let r = try await h.next()
+            #expect(!r.isToolError, "\(r.toolText)")
+            await h.finish()
+            return (r["result"]?["structuredContent"]?["records"]?.arrayValue ?? []).map { $0["tenantId"]?.stringValue ?? "none" }
+        }
+        #expect(try await tenants(MCPConfiguration()).count == 3)
+        #expect(try await tenants(MCPConfiguration(tenant: DemoDirectory.fabrikam.id)) == [DemoDirectory.fabrikam.id])
+        // A domain pin is resolved to the tenant's GUID through its token.
+        #expect(try await tenants(MCPConfiguration(tenant: "CONTOSO.example")) == [DemoDirectory.contoso.id])
+        // A pin that cannot be resolved shows nothing rather than everything.
+        #expect(try await tenants(MCPConfiguration(tenant: "unknown.example")) == [])
+    }
+
     @Test func callsAreRateLimited() async throws {
         var config = MCPConfiguration()
         config.readsPerMinute = 2
