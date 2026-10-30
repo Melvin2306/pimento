@@ -54,6 +54,14 @@ struct ContentView: View {
         } message: {
             Text(model.deactivateConfirmationMessage)
         }
+        .alert(model.keepAliveConsent?.title ?? "", isPresented: Binding(
+            get: { model.keepAliveConsent != nil && model.keepAliveConsent?.preset == nil },
+            set: { if !$0 { model.keepAliveConsent = nil } })) {
+            Button("Keep Alive") { model.confirmKeepAliveConsent() }
+            Button("Cancel", role: .cancel) { model.keepAliveConsent = nil }
+        } message: {
+            Text(model.keepAliveConsent?.message ?? "")
+        }
         .alert(model.renewConfirmationTitle, isPresented: $model.showRenewConfirmation) {
             Button("Renew", role: .destructive) {
                 let targets = model.lifecycleTargets

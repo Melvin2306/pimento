@@ -47,9 +47,12 @@ public actor KeepAliveSession {
     /// records the history. Throws when the reads fail: nothing is sent then.
     public func pass(
         reader: PIMService, writer: PIMService, perRole: Set<String>, presets: [Preset], hours: WorkingHours, paused: Bool,
-        calendar: Calendar, clock: @Sendable () -> Date, dryRun: Bool = false, maxConcurrent: Int = 4
+        calendar: Calendar, clock: @Sendable () -> Date, dryRun: Bool = false, maxConcurrent: Int = 4,
+        confirmedAccess: Set<String>? = nil
     ) async throws -> KeepAlivePassResult {
         let now = clock()
+        // Keep-alive's requests are recorded as its own (source `keepAlive`).
+        let writer = writer.recording(to: writer.history?.with(source: .keepAlive))
         let snapshot = try await reader.loadRoles(now: now)
         let history = try await reader.loadRequestHistory(now: now)
         let rules = KeepAliveRule.resolve(perRole: perRole, presets: presets, roles: snapshot.roles)
@@ -66,7 +69,7 @@ public actor KeepAliveSession {
         let infos = history.activationInfo
         var items = KeepAlivePlanner.plan(
             roles: snapshot.roles, rules: rules, policies: policies, infos: infos, pending: history.pending, book: &book,
-            hours: hours, paused: paused, now: now, calendar: calendar)
+            hours: hours, paused: paused, now: now, calendar: calendar, confirmedAccess: confirmedAccess)
         let due = items.filter { $0.status.action != nil }
         var events: [KeepAliveEvent] = []
         if !dryRun, !due.isEmpty {
@@ -75,7 +78,7 @@ public actor KeepAliveSession {
             let after = clock()
             items = KeepAlivePlanner.plan(
                 roles: snapshot.roles, rules: rules, policies: policies, infos: infos, pending: history.pending, book: &book,
-                hours: hours, paused: paused, now: after, calendar: calendar
+                hours: hours, paused: paused, now: after, calendar: calendar, confirmedAccess: confirmedAccess
             ).map { item in
                 // Do not report a second action that was not sent.
                 guard item.status.action != nil else { return item }
@@ -157,6 +160,7 @@ public actor KeepAliveSession {
     /// no longer kept alive). Failures are left: they start as scheduled.
     public static func withdraw(_ handOvers: [KeepAliveTrack.HandOver], writer: PIMService) async -> [CancelOutcome] {
         guard !handOvers.isEmpty else { return [] }
+        let writer = writer.recording(to: writer.history?.with(source: .keepAlive))
         let requests = handOvers.map { h in
             ScheduledRequest(id: "", name: h.requestName, scope: h.scope, roleDefinitionId: h.roleDefinitionId,
                              roleName: RoleMatcher.lastPathComponent(h.roleDefinitionId), scopeName: RoleMatcher.lastPathComponent(h.scope),

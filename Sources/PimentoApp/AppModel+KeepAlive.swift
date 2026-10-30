@@ -54,13 +54,43 @@ extension AppModel {
         }
     }
 
-    static func loadKeepAliveRoles(from defaults: UserDefaults) -> [String: Set<String>] {
-        guard let stored = defaults.dictionary(forKey: Keys.keepAliveRoles) as? [String: [String]] else { return [:] }
+    static func loadKeepAliveRoles(from defaults: UserDefaults, key: String) -> [String: Set<String>] {
+        guard let stored = defaults.dictionary(forKey: key) as? [String: [String]] else { return [:] }
         return stored.mapValues(Set.init)
     }
 
     private func saveKeepAliveRoles() {
         AppRuntime.defaults.set(keepAliveRolesByTenant.mapValues { $0.sorted() }, forKey: Keys.keepAliveRoles)
+        AppRuntime.defaults.set(keepAliveConfirmedByTenant.mapValues { $0.sorted() }, forKey: Keys.keepAliveConfirmed)
+    }
+
+    // MARK: Confirmation (access-granting roles)
+
+    /// Access-granting roles confirmed in this tenant; nil when the Owner
+    /// confirmation is off (then none is needed).
+    var keepAliveConfirmedAccess: Set<String>? {
+        prefs.confirmOwnerRoles ? keepAliveConfirmedByTenant[keepAliveTenantKey] ?? [] : nil
+    }
+
+    /// Access-granting roles among `roles` whose keep-alive needs your confirmation first.
+    func keepAliveNeedingConsent(_ roles: [EligibleRole]) -> [EligibleRole] {
+        KeepAliveConsent.needingConfirmation(roles, confirmed: keepAliveConfirmedByTenant[keepAliveTenantKey] ?? [],
+                                             enabled: prefs.confirmOwnerRoles)
+    }
+
+    /// The confirmation was accepted: remember the roles, then mark or save.
+    func confirmKeepAliveConsent() {
+        guard let request = keepAliveConsent else { return }
+        keepAliveConsent = nil
+        var confirmed = keepAliveConfirmedByTenant[keepAliveTenantKey] ?? []
+        confirmed.formUnion(KeepAliveConsent.accessKeys(request.roles))
+        keepAliveConfirmedByTenant[keepAliveTenantKey] = confirmed
+        saveKeepAliveRoles()
+        if request.preset != nil {
+            saveDraftNow()
+        } else {
+            setKeepAlive(request.targets, on: true)
+        }
     }
 
     /// Rules from the per-role marks and the presets with keep-alive on.
@@ -84,6 +114,13 @@ extension AppModel {
     /// Turns keep-alive on or off for `targets` (per role). Off withdraws a
     /// continuation Pimento scheduled for them that has not started.
     func setKeepAlive(_ targets: [EligibleRole], on: Bool) {
+        if on {
+            let needing = keepAliveNeedingConsent(targets)
+            if !needing.isEmpty {
+                keepAliveConsent = KeepAliveConsentRequest(roles: needing, targets: targets, preset: nil)
+                return
+            }
+        }
         let keys = Set(targets.map { ReminderRole.key($0.policyKey) })
         var set = keptRoleKeys
         if on { set.formUnion(keys) } else { set.subtract(keys) }
@@ -221,10 +258,12 @@ extension AppModel {
         let generation = tenantGeneration
         let session = keepAliveSession, service = service
         let perRole = keptRoleKeys, presets = visiblePresets, hours = prefs.keepAliveHours, paused = prefs.keepAlivePaused
+        let confirmed = keepAliveConfirmedAccess
         do {
             let result = try await session.pass(
                 reader: service.readOnly, writer: service, perRole: perRole, presets: presets, hours: hours, paused: paused,
-                calendar: .autoupdatingCurrent, clock: { AppClock.now() }, maxConcurrent: min(4, prefs.maxParallelRequests))
+                calendar: .autoupdatingCurrent, clock: { AppClock.now() }, maxConcurrent: min(4, prefs.maxParallelRequests),
+                confirmedAccess: confirmed)
             guard generation == tenantGeneration else { return }
             keepAliveError = nil
             keepAliveItems = Dictionary(result.items.map { ($0.key, $0) }, uniquingKeysWith: { a, _ in a })
@@ -265,4 +304,21 @@ extension AppModel {
             banner = Banner(kind: .error, text: "Keep alive: " + f.notice(now: AppClock.now()).body)
         }
     }
+}
+
+/// Keeping access-granting roles alive asks first (with *Confirm before
+/// activating Owner roles* on): `roles` need it; `targets` are marked once
+/// confirmed, or the preset draft is saved.
+struct KeepAliveConsentRequest: Equatable {
+    let roles: [EligibleRole]
+    let targets: [EligibleRole]
+    /// The preset whose keep-alive toggle asks (nil: roles marked in the table).
+    let preset: String?
+
+    var title: String {
+        preset.map { "Keep the roles of “\($0)” alive, including roles that can grant access?" }
+            ?? (roles.count == 1 ? "Keep \(roles[0].roleName) alive?" : "Keep \(roles.count) roles that can grant access alive?")
+    }
+
+    var message: String { KeepAliveConsent.message(roles) }
 }

@@ -404,6 +404,10 @@ public enum CLIHelp {
       continues; -j is used when that justification is unknown. A role whose
       policy requires a ticket that is not known is skipped.
     - Roles whose policy requires approval, or cannot be read, are left alone.
+    - Roles that can grant access (Owner, User Access Administrator, RBAC
+      Administrator) are kept alive only when confirmed: those listed at the
+      prompt, or all with --yes. One that matches later without --yes is not.
+    - What it sends is recorded in the history with the source keepAlive.
     - A role you end early is not brought back. One that lapsed (the computer
       slept, the network was down) is activated again inside working hours,
       with a gap.

@@ -231,6 +231,14 @@ struct ManagePresetsSheet: View {
         }
         .frame(width: 860, height: 580)
         .themedPageBackground()
+        .alert(model.keepAliveConsent?.title ?? "", isPresented: Binding(
+            get: { model.keepAliveConsent?.preset != nil },
+            set: { if !$0 { model.keepAliveConsent = nil } })) {
+            Button("Save and Keep Alive") { model.confirmKeepAliveConsent() }
+            Button("Cancel", role: .cancel) { model.keepAliveConsent = nil }
+        } message: {
+            Text(model.keepAliveConsent?.message ?? "")
+        }
     }
 
     private var sidebarDividerColor: Color {

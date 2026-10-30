@@ -44,9 +44,14 @@ extension CLIRunner {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = env.timeZone
         let tz = env.timeZone
+        // Access-granting roles (Owner, User Access Administrator, RBAC
+        // Administrator) are kept alive only when confirmed: at the prompt
+        // (those listed there), or by --yes (as for `activate`). nil: all.
+        var confirmedAccess: Set<String>? = o.assumeYes ? nil : []
         func pass(dryRun: Bool) async throws -> KeepAlivePassResult {
             try await session.pass(reader: reader, writer: dryRun ? reader : s.service, perRole: [], presets: [rule], hours: hours,
-                                   paused: false, calendar: calendar, clock: clock, dryRun: dryRun)
+                                   paused: false, calendar: calendar, clock: clock, dryRun: dryRun,
+                                   confirmedAccess: dryRun ? nil : confirmedAccess)
         }
 
         // The plan: what is kept alive and where each role stands.
@@ -65,7 +70,7 @@ extension CLIRunner {
         for item in first.items {
             let r = item.role
             table.append([
-                .init(r.isOwner ? "\(r.roleName) (!)" : r.roleName, r.isOwner ? .strong : .plain),
+                .init(r.grantsAccess ? "\(r.roleName) (!)" : r.roleName, r.grantsAccess ? .strong : .plain),
                 .init(r.scopeName),
                 .init(r.isActive ? (r.activeUntil.map { CLIFormat.timeLeft(until: $0, now: now) } ?? "no end") : "not active", .dim),
                 .init(item.status.summary(now: now, timeZone: tz), item.status.needsAttention ? .strong : .plain),
@@ -76,9 +81,11 @@ extension CLIRunner {
             + "justification and ticket, for \(rule.duration.flatMap(\.hours).map { "\($0) h (capped at its policy)" } ?? "the longest its policy allows"), and never past "
             + "\(hours.end.text). A role that lapsed meanwhile is activated again (with a gap). Roles whose policy requires approval are "
             + "left alone.")
-        let owners = first.items.filter { $0.role.isOwner && !$0.status.isExcluded }.count
+        let access = first.items.filter { $0.role.grantsAccess && !$0.status.isExcluded }
+        let owners = access.count
         if owners > 0 {
-            out(style.boldRed("Warning:") + " \(CLIFormat.plural(owners, "Owner role")) (!): full control of the resource, including access.")
+            out(style.boldRed("Warning:") + " \(CLIFormat.plural(owners, "role")) (!) can grant access to anyone on the resource "
+                + "(Owner, User Access Administrator, RBAC Administrator) and will be renewed without asking again.")
         }
         if o.dryRun {
             for item in first.actions {
@@ -88,11 +95,14 @@ extension CLIRunner {
             return .success
         }
         if confirm == .ask {
-            write("Keep \(CLIFormat.plural(first.items.count, "role")) alive\(owners > 0 ? ", including \(owners) Owner" : "") until you stop it (Ctrl-C)? [y/N] ", .err)
+            write("Keep \(CLIFormat.plural(first.items.count, "role")) alive\(owners > 0 ? ", including \(owners) that can grant access" : "") until you stop it (Ctrl-C)? [y/N] ", .err)
             guard ConfirmationPolicy.isYes(env.readLine()) else {
                 err("Cancelled. Nothing was sent.")
                 return .failure
             }
+            // Confirmed: the access-granting roles listed. One that matches
+            // later is not kept alive (run again, or with --yes).
+            confirmedAccess = Set(access.map(\.key))
         }
         out(style.dim("Running. Ctrl-C stops; continuations already scheduled still start (`pimento scheduled`, `pimento cancel`)."))
 

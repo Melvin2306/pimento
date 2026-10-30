@@ -177,6 +177,42 @@ public enum KeepAliveExclusion: String, Equatable, Sendable {
     case policyUnknown
     /// Its policy is being read.
     case policyLoading
+    /// It can grant access (Owner, User Access Administrator, RBAC
+    /// Administrator) and keeping it alive was not confirmed
+    /// (`KeepAliveConsent`).
+    case notConfirmed
+}
+
+/// Keeping a role alive that can grant access to anyone (Owner, User Access
+/// Administrator, RBAC Administrator) is confirmed once, when it is marked,
+/// while *Confirm before activating Owner roles* is on (the app), or at the
+/// prompt of `pimento keep-alive` (or by `--yes`, as for `activate`).
+public enum KeepAliveConsent {
+    /// The roles among `roles` that need the confirmation: access-granting
+    /// ones whose key (`ReminderRole.key`) is not in `confirmed`, one per
+    /// scope + role. None when the confirmation is off.
+    public static func needingConfirmation(_ roles: [EligibleRole], confirmed: Set<String>, enabled: Bool) -> [EligibleRole] {
+        guard enabled else { return [] }
+        var seen = Set<String>()
+        return roles.filter { role in
+            let key = ReminderRole.key(role.policyKey)
+            return role.grantsAccess && !confirmed.contains(key) && seen.insert(key).inserted
+        }
+    }
+
+    /// The keys of `roles` that can grant access (to remember as confirmed).
+    public static func accessKeys(_ roles: [EligibleRole]) -> Set<String> {
+        Set(roles.filter(\.grantsAccess).map { ReminderRole.key($0.policyKey) })
+    }
+
+    /// The question: which roles, and what keeping them alive means.
+    public static func message(_ roles: [EligibleRole]) -> String {
+        let lines = roles.prefix(8).map { "• \($0.roleName) · \($0.scopeName)" }
+        let more = roles.count > 8 ? ["… and \(roles.count - 8) more"] : []
+        return "\(roles.count == 1 ? "This role" : "These roles") can grant access to anyone on the resource. Pimento will renew "
+            + "\(roles.count == 1 ? "it" : "them") automatically during working hours, without asking again, until you turn keep-alive off.\n\n"
+            + (lines + more).joined(separator: "\n")
+    }
 }
 
 /// Why a renewal that is due cannot be sent.
@@ -285,6 +321,7 @@ public enum KeepAliveStatus: Equatable, Sendable {
         case .excluded(.needsApproval): return "not possible: its policy requires approval"
         case .excluded(.policyUnknown): return "not possible: its policy could not be read"
         case .excluded(.policyLoading): return "reading its policy…"
+        case .excluded(.notConfirmed): return "not confirmed: it can grant access; mark it with Keep Alive to confirm"
         case .blocked(.needsJustification): return "skipped: the activation's justification is unknown"
         case .blocked(.needsTicket): return "skipped: its policy requires a ticket and the activation's ticket is unknown"
         case .retryLater(let at, let n): return "failed \(n == 1 ? "once" : "\(n) times"), trying again at \(t(at))"
@@ -574,7 +611,7 @@ public enum KeepAlivePlanner {
     public static func plan(
         roles: [EligibleRole], rules: [String: KeepAliveRule], policies: [RoleMatcher.Key: PolicyLookup],
         infos: [String: ActivationRequestInfo], pending: [ScheduledRequest], book: inout KeepAliveBook,
-        hours: WorkingHours, paused: Bool, now: Date, calendar: Calendar
+        hours: WorkingHours, paused: Bool, now: Date, calendar: Calendar, confirmedAccess: Set<String>? = nil
     ) -> [Item] {
         var byKey: [String: EligibleRole] = [:]
         var order: [String] = []
@@ -598,7 +635,9 @@ public enum KeepAlivePlanner {
             var track = book[key]
             track.enter(window: window?.start)
             track.observe(role, info: RequestHistory.info(for: role, in: infos), now: now)
-            let status = KeepAlive.decide(
+            // An access-granting role nobody confirmed: never sent.
+            let unconfirmed = role.grantsAccess && confirmedAccess.map { !$0.contains(key) } == true
+            let status = unconfirmed ? (paused ? .paused : .excluded(.notConfirmed)) : KeepAlive.decide(
                 role: role, rule: rule, policy: policies[role.policyKey], pending: pendingByKey[key] ?? [], track: track,
                 hours: hours, paused: paused, now: now, calendar: calendar)
             if status == .endedEarly { track.lastEnd = nil }

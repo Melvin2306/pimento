@@ -114,12 +114,16 @@ public struct HistorySource: RawRepresentable, Hashable, Codable, Sendable {
     public static let cli = HistorySource(rawValue: "cli")
     /// Read from Azure (`pimento history import-azure`, Import from Azure).
     public static let azure = HistorySource(rawValue: "azure")
+    /// Sent by keep-alive (the app's or `pimento keep-alive`): continuations,
+    /// re-activations of lapsed roles and withdrawn continuations.
+    public static let keepAlive = HistorySource(rawValue: "keepAlive")
 
     public var title: String {
         switch self {
         case .app: "App"
         case .cli: "CLI"
         case .azure: "Azure"
+        case .keepAlive: "Keep alive"
         default: rawValue
         }
     }

@@ -248,6 +248,10 @@ final class AppModel {
     // Keep alive (`AppModel+KeepAlive.swift`).
     /// Roles kept alive one by one, by tenant (lower-case, or "default"), as role keys.
     var keepAliveRolesByTenant: [String: Set<String>] = [:]
+    /// Access-granting roles whose keep-alive you confirmed, by tenant, as role keys.
+    var keepAliveConfirmedByTenant: [String: Set<String>] = [:]
+    /// The open confirmation for keeping access-granting roles alive.
+    var keepAliveConsent: KeepAliveConsentRequest?
     /// How each kept role is kept alive (per role or by a preset), by role key.
     var keepAliveRules: [String: KeepAliveRule] = [:]
     /// Where each kept role stands after the last pass, by role key.
@@ -276,6 +280,8 @@ final class AppModel {
         static let tableColumns = "tableColumns"
         /// Roles kept alive one by one: `{tenant: [role key]}`.
         static let keepAliveRoles = "keepAlive.roles"
+        /// Access-granting roles whose keep-alive was confirmed: `{tenant: [role key]}`.
+        static let keepAliveConfirmed = "keepAlive.confirmed"
     }
 
     /// Table columns the Settings window can show or hide.
@@ -379,7 +385,8 @@ final class AppModel {
             tokens: AuthContext(selection: selectedAuth, broker: broker, accountId: auth.accountId, azureCLI: Self.azureCLITokens)
                 .tokens(tenantId: selection.tenantId),
             history: recorder)
-        keepAliveRolesByTenant = Self.loadKeepAliveRoles(from: defaults)
+        keepAliveRolesByTenant = Self.loadKeepAliveRoles(from: defaults, key: Keys.keepAliveRoles)
+        keepAliveConfirmedByTenant = Self.loadKeepAliveRoles(from: defaults, key: Keys.keepAliveConfirmed)
         restartAutoRefresh()
         observeClockChanges()
         scheduleAppearanceChange(after: AppClock.now())
@@ -1685,6 +1692,20 @@ final class AppModel {
     }
 
     func saveDraft() {
+        guard let draft = presetDraft else { return }
+        // Keep-alive on for access-granting roles: confirmed once, now.
+        if draft.keepAlive {
+            let needing = keepAliveNeedingConsent(draft.resolve(in: roles).roles)
+            if !needing.isEmpty {
+                keepAliveConsent = KeepAliveConsentRequest(roles: needing, targets: [], preset: draft.name)
+                return
+            }
+        }
+        saveDraftNow()
+    }
+
+    /// Saves the draft (after the keep-alive confirmation, if one was needed).
+    func saveDraftNow() {
         guard let draft = presetDraft else { return }
         do {
             let saved = try updatePresets { try $0.save(draft) }
