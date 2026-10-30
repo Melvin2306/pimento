@@ -1,0 +1,43 @@
+CHANGELOG.md
+  s_4884204a812fec::t_b9eda970b7f0f5 144-148
+README.md
+  s_4884204a812fec::t_2df8083db24d17 1142
+Sources/PimentoCore/CLI/CLIOutput.swift
+  s_4884204a812fec::t_c279e50c56379b 259-261,285
+Tests/PimentoCoreTests/CLIRunnerTests.swift
+  s_4884204a812fec::t_94083664c6ca4d 217
+integrations/alfred/README.md
+  s_4884204a812fec::t_325db208cb815b 20-21
+integrations/alfred/alfred.js
+  s_4884204a812fec::t_c53a7607d6d462 82-91,93-99,185,209
+integrations/alfred/test.sh
+  s_4884204a812fec::t_05880404e7c9e7 75-78,95-96,112-119
+integrations/raycast/README.md
+  s_4884204a812fec::t_0681fe1f40c403 14-15
+integrations/raycast/src/active.tsx
+  s_4884204a812fec::t_39f7f2639c9c21 4-12,53-55
+integrations/raycast/src/components.tsx
+  s_4884204a812fec::t_254e2889d1a12b 17,76-77,80,111,280-281
+integrations/raycast/src/lib/pimento.ts
+  s_4884204a812fec::t_3c60284f3e27e6 32-33,429-438,532-546
+integrations/raycast/src/presets.tsx
+  s_4884204a812fec::t_ac25f73e2d0267 6,95
+integrations/raycast/test/pimento.test.mts
+  s_4884204a812fec::t_1019a110f173d3 9,33-35,155-178,272
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "163bf3dfd6390830412a4275a20b3a81e7ddb0ac",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
