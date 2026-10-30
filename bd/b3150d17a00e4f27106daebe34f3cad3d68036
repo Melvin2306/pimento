@@ -1,0 +1,29 @@
+Sources/PimentoCore/KeepAliveSession.swift
+  s_4884204a812fec::t_4e3b3354ade654 1-183
+  s_4884204a812fec::t_16a3126ff92eb2 184-187
+Sources/PimentoCore/WorkingHours.swift
+  s_4884204a812fec::t_881c4066537e4f 1-156
+Sources/PimentoCore/KeepAlive.swift
+  s_4884204a812fec::t_e7e13d0c80e959 1-631,636-637
+  s_4884204a812fec::t_b5d94712163c13 632-635,638-641
+Sources/PimentoCore/Preferences.swift
+  s_4884204a812fec::t_50e98303e4a95b 123-128,234-235,250,274-275,307-308
+Sources/PimentoCore/Presets.swift
+  s_4884204a812fec::t_6600d7bfda7ed7 77-79,86,96,102,117,132
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bdb3150d17a00e4f27106daebe34f3cad3d68036",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
