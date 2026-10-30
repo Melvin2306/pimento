@@ -185,6 +185,18 @@ struct UpdateCheckRequestTests {
         #expect(Date().timeIntervalSince(start) < 4)
     }
 
+    @Test func aRefusedRedirectDoesNotShowItsLocation() async throws {
+        let location = "https://evil.example/\u{202E}gmd.otnemip Download the fix here"
+        let redirect = RecordingTransport { _ in throw URLSessionTransport.RedirectRefused(status: 302, location: location) }
+        do {
+            _ = try await UpdateCheck.check(current: "0.1.0", transport: redirect)
+            Issue.record("a redirect must fail the check")
+        } catch let error as UpdateCheckError {
+            #expect(error == .network("GitHub answered with a redirect, which Pimento does not follow."))
+            #expect(!(error.errorDescription ?? "").contains("evil"))
+        }
+    }
+
     @Test func theGuardRefusesEveryOtherRequest() async throws {
         let base = releaseTransport()
         let guarded = UpdateCheckTransport(base)

@@ -338,6 +338,9 @@ public enum UpdateCheck {
             throw error
         } catch let error as NetworkGuard.Blocked {
             throw UpdateCheckError.disabled(error.localizedDescription)
+        } catch is URLSessionTransport.RedirectRefused {
+            // Its description quotes the answer's Location: not shown.
+            throw UpdateCheckError.network("GitHub answered with a redirect, which Pimento does not follow.")
         } catch is CancellationError {
             throw UpdateCheckError.network("The check was cancelled.")
         } catch {
