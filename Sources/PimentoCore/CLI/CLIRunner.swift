@@ -230,6 +230,7 @@ public struct CLIRunner: Sendable {
         case .deactivate(let o): return try await deactivate(o)
         case .renew(let o): return try await renew(o)
         case .extend(let o): return try await extend(o)
+        case .keepAlive(let o): return try await keepAlive(o)
         case .scheduled(let o): return try await scheduled(o)
         case .cancel(let o): return try await cancel(o)
         case .pending(let o): return try await pending(o)

@@ -194,6 +194,42 @@ public struct LifecycleOptions: Equatable, Sendable {
     public init() {}
 }
 
+/// `pimento keep-alive`: renew roles shortly before they expire, during
+/// working hours, until stopped (Ctrl-C).
+public struct KeepAliveOptions: Equatable, Sendable {
+    public var tenant: String?
+    /// Kept alive: roles matching these (re-read at every pass).
+    public var criteria = RoleCriteria()
+    /// Every role.
+    public var all = false
+    public var preset: String?
+    /// Sent when the justification of the activation being continued is unknown.
+    public var justification = ""
+    /// nil: the preset's duration, else the longest each policy allows.
+    public var duration: RequestedDuration?
+    /// nil: Monday to Friday.
+    public var days: Set<Int>?
+    /// nil: 08:00-18:00.
+    public var window: (start: ClockTime, end: ClockTime)?
+    public var assumeYes = false
+    public var dryRun = false
+    /// Stop after this many passes (tests); nil: until stopped.
+    var maxPasses: Int?
+    public init() {}
+
+    public var hours: WorkingHours {
+        var h = WorkingHours()
+        if let days { h.days = days }
+        if let window { h.start = window.start; h.end = window.end }
+        return h
+    }
+
+    public static func == (a: KeepAliveOptions, b: KeepAliveOptions) -> Bool {
+        a.tenant == b.tenant && a.criteria == b.criteria && a.all == b.all && a.preset == b.preset && a.justification == b.justification
+            && a.duration == b.duration && a.hours == b.hours && a.assumeYes == b.assumeYes && a.dryRun == b.dryRun && a.maxPasses == b.maxPasses
+    }
+}
+
 /// `pimento extend`: ask an administrator to extend time-bound assignments.
 public struct ExtendOptions: Equatable, Sendable {
     public var tenant: String?
@@ -332,6 +368,7 @@ public enum CLICommand: Equatable, Sendable {
     case deactivate(LifecycleOptions)
     case renew(LifecycleOptions)
     case extend(ExtendOptions)
+    case keepAlive(KeepAliveOptions)
     case scheduled(ScheduledOptions)
     case cancel(CancelOptions)
     case pending(PendingOptions)
@@ -361,7 +398,7 @@ public enum CLICommand: Equatable, Sendable {
     }
 
     public static let names = [
-        "list", "activate", "deactivate", "renew", "extend", "scheduled", "cancel", "pending", "wait", "approvals", "approve",
+        "list", "activate", "deactivate", "renew", "extend", "keep-alive", "scheduled", "cancel", "pending", "wait", "approvals", "approve",
         "deny", "status", "tenants", "presets", "history", "login", "logout", "whoami", "completions", "version", "help",
     ]
 }
@@ -403,6 +440,8 @@ public enum CLIParseError: Error, Equatable, LocalizedError {
     case missingShell
     case unknownShell(String)
     case invalidStart(String)
+    case invalidDays(String)
+    case invalidWindow(String)
     case missingTicket(roles: [String])
     case noCancelSelection
     case ambiguousRequestId(String, matches: Int)
@@ -438,6 +477,8 @@ public enum CLIParseError: Error, Equatable, LocalizedError {
         case .conflicting(let a, let b): "Use either \(a) or \(b), not both."
         case .missingJustification: "activate needs a justification: -j \"TEXT\"."
         case .missingJustificationFor(let c): "\(c) needs a justification: -j \"TEXT\"."
+        case .noActiveSelection(let c) where c == "keep-alive":
+            "Say which roles to keep alive: resource filters, --role NAME, --preset NAME, or --all."
         case .noActiveSelection(let c):
             "Say which active roles to \(c): resource filters, --role NAME\(c == "extend" ? "" : ", --preset NAME"), or --all."
         case .noSelection:
@@ -445,6 +486,8 @@ public enum CLIParseError: Error, Equatable, LocalizedError {
         case .missingShell: "Name a shell: pimento completions zsh|bash|fish."
         case .unknownShell(let s): "No completions for “\(s)”. Use zsh, bash or fish."
         case .invalidStart(let message): "--at: \(message)"
+        case .invalidDays(let v): "--days: cannot read “\(v)”. Use e.g. mon-fri, mon,wed,fri, weekend or all."
+        case .invalidWindow(let v): "--window: cannot read “\(v)”. Use e.g. 08:00-18:00 (local time; 22:00-06:00 runs overnight)."
         case .missingTicket(let roles):
             "\(roles.count == 1 ? "This role needs" : "These roles need") a ticket (its PIM policy requires one): "
                 + roles.joined(separator: "; ") + ". Add --ticket NUMBER --ticket-system NAME."
@@ -584,6 +627,20 @@ public enum CLIParser {
         "--ticket-system": Flag(key: "ticket-system", takesValue: true),
     ]) { a, _ in a }
 
+    private static let keepAliveFlags = tenant.merging([
+        "--role": Flag(key: "role", takesValue: true),
+        "--all": Flag(key: "all", takesValue: false),
+        "--preset": Flag(key: "preset", takesValue: true),
+        "--justification": Flag(key: "justification", takesValue: true),
+        "-j": Flag(key: "justification", takesValue: true),
+        "--hours": Flag(key: "hours", takesValue: true),
+        "--days": Flag(key: "days", takesValue: true),
+        "--window": Flag(key: "window", takesValue: true),
+        "--yes": Flag(key: "yes", takesValue: false),
+        "-y": Flag(key: "yes", takesValue: false),
+        "--dry-run": Flag(key: "dry-run", takesValue: false),
+    ]) { a, _ in a }
+
     private static let extendFlags = tenant.merging(json) { a, _ in a }.merging([
         "--role": Flag(key: "role", takesValue: true),
         "--all": Flag(key: "all", takesValue: false),
@@ -717,6 +774,7 @@ public enum CLIParser {
         case "activate": return try CLIInvocation(parseActivate(rest))
         case "deactivate", "renew": return try CLIInvocation(parseLifecycle(rest, command: first))
         case "extend": return try CLIInvocation(parseExtend(rest))
+        case "keep-alive": return try CLIInvocation(parseKeepAlive(rest))
         case "scheduled":
             let scan = try scan(rest, command: first, flags: plainFlags, positionals: false)
             if scan.help { return CLIInvocation(.help(topic: first)) }
@@ -875,6 +933,36 @@ public enum CLIParser {
             return .renew(o)
         }
         return .deactivate(o)
+    }
+
+    static func parseKeepAlive(_ args: [String]) throws -> CLICommand {
+        let command = "keep-alive"
+        let scan = try scan(args, command: command, flags: keepAliveFlags, positionals: true)
+        if scan.help { return .help(topic: command) }
+        var o = KeepAliveOptions()
+        o.tenant = scan.values["tenant"]?.last
+        o.criteria.filters = try terms(scan.positionals, "filter")
+        o.criteria.roles = try terms(scan.values["role"] ?? [], "--role")
+        o.all = scan.values["all"] != nil
+        o.assumeYes = scan.values["yes"] != nil
+        o.dryRun = scan.values["dry-run"] != nil
+        o.preset = scan.values["preset"]?.last?.trimmingCharacters(in: .whitespaces)
+        o.justification = (scan.values["justification"]?.last ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if let raw = scan.values["hours"]?.last { o.duration = try hours(raw) }
+        if let raw = scan.values["days"]?.last {
+            guard let days = WorkingHours.parseDays(raw) else { throw CLIParseError.invalidDays(raw) }
+            o.days = days
+        }
+        if let raw = scan.values["window"]?.last {
+            guard let window = WorkingHours.parseWindow(raw) else { throw CLIParseError.invalidWindow(raw) }
+            o.window = window
+        }
+        if o.preset != nil {
+            if o.criteria.hasSelection || o.all { throw CLIParseError.conflicting("--preset", "filters, --role or --all") }
+            return .keepAlive(o)
+        }
+        guard o.criteria.hasSelection || o.all else { throw CLIParseError.noActiveSelection(command) }
+        return .keepAlive(o)
     }
 
     static func parseCancel(_ args: [String]) throws -> CLICommand {
