@@ -1383,7 +1383,13 @@ final class AppModel {
         }
         switch action {
         case .end:
-            await deactivate(targets)
+            if targets.contains(where: \.isOwner) && prefs.confirmOwnerRoles {
+                // As in the app: Owner roles are ended after the confirmation there.
+                NSApp.activate(ignoringOtherApps: true)
+                requestDeactivation(targets)
+            } else {
+                await deactivate(targets)
+            }
         case .renew:
             let owners = targets.contains(where: \.isOwner) && prefs.confirmOwnerRoles
             let text = payload.justification?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""

@@ -398,6 +398,10 @@ All notable changes to this project are documented here. The format follows
   while a browser that tries ::1 first sends the code and `state` to the other program. IPv4 alone is
   used only where the system has no IPv6 loopback. The redirect URI stays `http://localhost`: Entra
   documents the ignored port only for `localhost`, and `http://127.0.0.1` needs a manifest edit.
+- The expiry reminder's **Renew** and **End Now** actions require an unlocked Mac
+  (`authenticationRequired`): someone at the locked screen can no longer end (or renew) your roles
+  from the notification. End Now on an Owner role brings the app forward and asks first, as the
+  app's own Deactivate does.
 
 ## [0.1.0] - 2026-10-29
 

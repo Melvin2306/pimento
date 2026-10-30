@@ -17,6 +17,8 @@ struct ReminderActionTests {
         #expect(ReminderAction(rawValue: "com.apple.UNNotificationDefaultActionIdentifier") == nil)
         #expect(ReminderAction.end.isDestructive && !ReminderAction.renew.isDestructive)
         #expect(ReminderAction.renew.opensApp && !ReminderAction.end.opensApp)
+        // Both write to Azure: never from the lock screen without unlocking.
+        #expect(ReminderAction.allCases.allSatisfy { $0.requiresAuthentication })
         #expect(ReminderAction.renew.title == "Renew")
         #expect(ReminderAction.end.title == "End Now")
     }

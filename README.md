@@ -260,9 +260,11 @@ notification sums it up. Reminders for ended roles are withdrawn; renewed roles 
   the same justification when Pimento keeps recent justifications (Settings › Activation). If
   there is no justification, or the roles include Owner (with the Owner confirmation on), the app
   comes forward and asks.
-- **End Now** ends them right away.
+- **End Now** ends them right away; with an Owner role (and the Owner confirmation on), the app
+  comes forward and asks first.
 
 Both act in the tenant the reminder is for; if the app shows another tenant, it says so instead.
+Both need an unlocked Mac: on the lock screen, macOS asks for your password or Touch ID first.
 
 ### Scheduled activations and tickets
 

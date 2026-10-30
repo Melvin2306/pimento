@@ -124,4 +124,24 @@ import Testing
         #expect(willFinish.lowerBound < setUp.lowerBound && setUp.lowerBound < didFinish.lowerBound)
         #expect(!main.contains("Task { @MainActor in Notifier.setUp() }"))
     }
+
+    /// Expiry-reminder actions write to Azure as the user: macOS must ask to
+    /// unlock before running them from the lock screen, and End Now on an
+    /// Owner role goes through the app's confirmation, as in the app.
+    @Test func reminderActionsNeedAnUnlockedMacAndOwnersAreConfirmed() throws {
+        let notifier = try String(contentsOf: Self.appSources.appendingPathComponent("Notifier.swift"), encoding: .utf8)
+        let category = try #require(notifier.range(of: "reminderCategory: UNNotificationCategory"))
+        let body = notifier[category.upperBound...].prefix(700)
+        #expect(body.contains("if action.requiresAuthentication { options.insert(.authenticationRequired) }"))
+        #expect(body.contains("options.insert(.destructive)"))
+
+        let model = try String(contentsOf: Self.appSources.appendingPathComponent("AppModel.swift"), encoding: .utf8)
+        let handler = try #require(model.range(of: "func handleReminderAction("))
+        let end = try #require(model.range(of: "case .end:", range: handler.upperBound..<model.endIndex))
+        let endBody = model[end.upperBound...].prefix(400)
+        let owners = try #require(endBody.range(of: "targets.contains(where: \\.isOwner) && prefs.confirmOwnerRoles"))
+        let ask = try #require(endBody.range(of: "requestDeactivation(targets)"))
+        let send = try #require(endBody.range(of: "await deactivate(targets)"))
+        #expect(owners.lowerBound < ask.lowerBound && ask.lowerBound < send.lowerBound)
+    }
 }

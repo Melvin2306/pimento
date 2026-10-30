@@ -64,5 +64,6 @@ anything that requires an attacker to already control your user account or `az` 
 - `az` is started with an argv array, never through a shell; tenant values are validated.
 - The only write requests are the `roleAssignmentScheduleRequests` `PUT`s (activate, deactivate,
   renew, extend), `POST …/cancel` and the approval `PATCH` (approve, deny), from the app after you
-  confirm or tap a reminder action, and from the CLI after its `[y/N]` prompt or `--yes`. Previews
+  confirm or tap a reminder action (which macOS lets run only on an unlocked Mac; End Now on an
+  Owner role asks in the app first), and from the CLI after its `[y/N]` prompt or `--yes`. Previews
   and `--dry-run` go through a transport that refuses anything but `GET`.

@@ -47,6 +47,10 @@ public enum ReminderAction: String, CaseIterable, Sendable {
     /// Both act on Azure, so both need the app (and the az token) running;
     /// Renew may ask for a justification or the Owner confirmation.
     public var opensApp: Bool { self == .renew }
+
+    /// Both send a write to Azure as you: macOS asks to unlock first, so
+    /// neither can be pressed on the lock screen by someone else.
+    public var requiresAuthentication: Bool { true }
 }
 
 /// What an expiry reminder carries in `userInfo`: property-list values only.

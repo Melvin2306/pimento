@@ -51,6 +51,7 @@ enum Notifier {
             var options: UNNotificationActionOptions = []
             if action.opensApp { options.insert(.foreground) }
             if action.isDestructive { options.insert(.destructive) }
+            if action.requiresAuthentication { options.insert(.authenticationRequired) }
             return UNNotificationAction(identifier: action.rawValue, title: action.title, options: options)
         }
         return UNNotificationCategory(identifier: ReminderAction.categoryIdentifier, actions: actions, intentIdentifiers: [])
