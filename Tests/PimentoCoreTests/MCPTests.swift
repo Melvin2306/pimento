@@ -780,6 +780,29 @@ struct MCPConfirmationTests {
         #expect(h.methods.writes == 0)
         await h.finish()
     }
+
+    @Test func aWriteCancelledWhileQueuedIsNotSent() async throws {
+        // A legacy client holds the write gate with a confirmation on screen;
+        // a second write (a stateless request the server may send unconfirmed,
+        // --no-confirm) waits behind it and is cancelled meanwhile.
+        let h = try MCPHarness(MCPConfiguration(allowActivate: true, noConfirm: true))
+        _ = try await h.initialize()
+        h.call(1, "activate_roles", reader)
+        let ask = try await h.next()
+        #expect(ask["method"] == "elicitation/create")
+        h.send(["jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": [
+            "_meta": MCPHarness.modernMeta(elicitation: false), "name": "activate_roles",
+            "arguments": ["roles": [["role": "Reader", "scope": "Contoso Root"]], "justification": "x"]]])
+        try await Task.sleep(nanoseconds: 50_000_000)
+        h.send(["jsonrpc": "2.0", "method": "notifications/cancelled", "params": ["requestId": 2]])
+        try await Task.sleep(nanoseconds: 50_000_000)
+        h.send(["jsonrpc": "2.0", "id": ask["id"]!, "result": ["action": "decline"]])
+        #expect(try await h.next().isToolError)
+        try await h.expectSilence()
+        #expect(h.methods.writes == 0)
+        #expect(h.mcpHistory.isEmpty)
+        await h.finish()
+    }
 }
 
 extension MCPHarness {

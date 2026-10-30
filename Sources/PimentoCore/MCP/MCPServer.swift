@@ -397,7 +397,7 @@ extension MCPServer {
                 guard confirmed == plan.fingerprint else {
                     return toolResult(.failure("Nothing was sent: the roles or their policies changed after the user confirmed. Call the tool again to show the user the current plan."), era)
                 }
-                return toolResult(await tools.execute(plan), era)
+                return await execute(plan, era)
             }
             // Handshake revisions: the server asks the client itself.
             let answer = await ask("elicitation/create", request, timeout: config.confirmationTimeout)
@@ -415,7 +415,7 @@ extension MCPServer {
             guard fresh.fingerprint == plan.fingerprint else {
                 return toolResult(.failure("Nothing was sent: the roles or their policies changed while the user was deciding. Call the tool again to show the user the current plan."), era)
             }
-            return toolResult(await tools.execute(fresh), era)
+            return await execute(fresh, era)
         }
 
         guard config.noConfirm else {
@@ -429,6 +429,13 @@ extension MCPServer {
             }
             return toolResult(.failure(why), era)
         }
+        return await execute(plan, era)
+    }
+
+    /// Sends a plan that may be sent, unless the client withdrew the call
+    /// (`notifications/cancelled`) while it waited for its turn or its answer.
+    func execute(_ plan: MCPWritePlan, _ era: MCPEra) async -> JSONValue {
+        if Task.isCancelled { return toolResult(.failure("Nothing was sent: the request was cancelled."), era) }
         return toolResult(await tools.execute(plan), era)
     }
 
