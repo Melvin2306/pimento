@@ -11,3 +11,21 @@ DerivedData/
 
 # macOS
 .DS_Store
+
+# Secrets and personal data: never commit them (Pimento keeps its own files
+# outside the repository, but copies for debugging end up here).
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.mobileprovision
+*.cer
+tokens.json
+auth.json
+presets.json
+history.jsonl
+history.jsonl.*
+history-settings.json
+*.har
