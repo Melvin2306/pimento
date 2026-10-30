@@ -1,0 +1,45 @@
+CHANGELOG.md
+  s_4884204a812fec::t_39cea083213141 110-114,154-159
+README.md
+  s_4884204a812fec::t_c04c25dfe5cb87 778-779,1510-1513,1537,1586-1594
+Sources/PimentoApp/UpdateChecker.swift
+  s_4884204a812fec::t_f2e56e8e326a13 32
+Sources/PimentoCore/CLI/CLICompletions.swift
+  s_4884204a812fec::t_70d5c8efa3d7b8 227-229
+Sources/PimentoCore/CLI/CLIVersion.swift
+  s_4884204a812fec::t_d71a659cbc2880 29
+Sources/PimentoCore/SignIn/SignInError.swift
+  s_4884204a812fec::t_00158940115670 50-52
+Sources/PimentoCore/TenantLogos.swift
+  s_4884204a812fec::t_85aabaab118238 65-66,465-466,468,470,474-475,477,479,506
+Sources/PimentoCore/UpdateCheck.swift
+  s_4884204a812fec::t_238a56ed69e296 229-235,379-383,521
+Sources/pimento/main.swift
+  s_4884204a812fec::t_9b9702d7b5c540 183
+Tests/PimentoCoreTests/PowerShellCompletionTests.swift
+  s_4884204a812fec::t_257d9fa4578e12 61-62
+Tests/PimentoCoreTests/SignInTests.swift
+  s_4884204a812fec::t_dc6928faf00d81 197-202
+Tests/PimentoCoreTests/TenantLogoTests.swift
+  s_4884204a812fec::t_86db1784860c1c 595-597
+Tests/PimentoCoreTests/UpdateCheckTests.swift
+  s_4884204a812fec::t_d59932685e82d4 228-250,375,378,436-437,449
+scripts/install.ps1
+  s_4884204a812fec::t_ba9ade5824e43c 195,295
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "391688ab1ff711760ad1db685004ade789da7b41",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
