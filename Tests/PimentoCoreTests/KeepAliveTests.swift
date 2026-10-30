@@ -401,6 +401,9 @@ struct KeepAlivePlannerTests {
         book["b"] = track(lastEnd: mon("15:00"))
         #expect(book.pause(now: mon("13:50")) == ["a": h])
         #expect(book["b"].lastEnd == nil, "what lapses while paused is not brought back")
+        #expect(book["a"].handOver == nil, "withdrawn on pause: after a resume the role is continued again")
+        #expect(book.pause(now: mon("13:51")).isEmpty, "withdrawn once")
+        book["a"] = t
         #expect(book.remove("a", now: mon("13:50")) == h)
         #expect(book.remove("a", now: mon("13:50")) == nil)
         book["c"] = t
