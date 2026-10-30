@@ -1,0 +1,85 @@
+.editorconfig
+  s_4884204a812fec::t_45697b665db2bf 16-19
+.github/workflows/ci.yml
+  s_4884204a812fec::t_7635f71b885f73 31-32,54-58
+.gitignore
+  s_4884204a812fec::t_bc651341c44809 15-19
+CHANGELOG.md
+  s_4884204a812fec::t_17b154ae2ab62f 57-69
+CONTRIBUTING.md
+  s_4884204a812fec::t_8a015dc2011e42 44-47
+README.md
+  s_4884204a812fec::t_99aef7d44ba9b3 938-941,991-994,1321-1351,1647-1648
+Sources/PimentoCore/CLI/CLICommand.swift
+  s_4884204a812fec::t_e1d9aa3b32e639 16-19,22,25,30,40,61-70,627,632,657,927,945,961,980,995
+Sources/PimentoCore/CLI/CLIHelp.swift
+  s_4884204a812fec::t_27747e8b33104e 90,102-103,125-126,333-334,373,731,738,760,862,873-874,876-877,936
+Tests/PimentoCoreTests/CLILifecycleTests.swift
+  s_4884204a812fec::t_f1a1924e196004 57
+Tests/PimentoCoreTests/CLIParserTests.swift
+  s_4884204a812fec::t_7656b78fab0487 51-71,276-301
+Tests/PimentoCoreTests/CLIPresetTests.swift
+  s_4884204a812fec::t_4fdb7e27267e35 16
+Tests/PimentoCoreTests/DemoCLITests.swift
+  s_4884204a812fec::t_c8b409ec0ae84a 161-194
+integrations/alfred/README.md
+  s_4884204a812fec::t_3bd23069765567 1-69
+integrations/alfred/action.sh
+  s_4884204a812fec::t_0a4421d7bc3802 1-57
+integrations/alfred/alfred.js
+  s_4884204a812fec::t_30618959e42d2a 1-437
+integrations/alfred/build.sh
+  s_4884204a812fec::t_497e66ca39d619 1-32
+integrations/alfred/info.plist
+  s_4884204a812fec::t_5b762e623556b6 1-306
+integrations/alfred/lib.sh
+  s_4884204a812fec::t_b522ede6628588 1-108
+integrations/alfred/scriptfilter.sh
+  s_4884204a812fec::t_89926ea8d6d073 1-38
+integrations/alfred/test.sh
+  s_4884204a812fec::t_366c3ece438000 1-163
+integrations/raycast/.gitignore
+  s_4884204a812fec::t_0c377cb5084767 1-5
+integrations/raycast/.prettierrc
+  s_4884204a812fec::t_38a902e25f075d 1-4
+integrations/raycast/README.md
+  s_4884204a812fec::t_1ea213f9832f6f 1-74
+integrations/raycast/eslint.config.js
+  s_4884204a812fec::t_0fc39038f5e7f3 1-4
+integrations/raycast/package-lock.json
+  s_4884204a812fec::t_32e7de8e7ef7dd 1-3068
+integrations/raycast/package.json
+  s_4884204a812fec::t_43051bf07881a3 1-88
+integrations/raycast/src/active.tsx
+  s_4884204a812fec::t_19488f3b6ff0c7 1-72
+integrations/raycast/src/components.tsx
+  s_4884204a812fec::t_43dd02e6e87a9d 1-328
+integrations/raycast/src/lib/pimento.ts
+  s_4884204a812fec::t_5296b8d0dd00d9 1-530
+integrations/raycast/src/lib/raycast.ts
+  s_4884204a812fec::t_830ec053c39126 1-52
+integrations/raycast/src/presets.tsx
+  s_4884204a812fec::t_04f93f6326dc8b 1-109
+integrations/raycast/src/roles.tsx
+  s_4884204a812fec::t_727baa10aac2de 1-100
+integrations/raycast/test/pimento.test.mts
+  s_4884204a812fec::t_60cf5ecfb96094 1-258
+integrations/raycast/tsconfig.json
+  s_4884204a812fec::t_051fa9674a069a 1-17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "932de638f1e8cfae4ca56234e76e461d1e16cf67",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
