@@ -150,6 +150,11 @@ final class CLIHarness: @unchecked Sendable {
 
     @discardableResult
     func run(_ args: String...) async -> Int32 {
+        await run(args)
+    }
+
+    @discardableResult
+    func run(_ args: [String]) async -> Int32 {
         await CLIRunner(environment: environment()).run(args)
     }
 }

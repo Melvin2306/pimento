@@ -226,4 +226,34 @@ struct CLILifecycleRunnerTests {
         #expect(h.out.contains("PendingAdminDecision"))
         #expect(h.out.contains("An administrator of each resource must approve"))
     }
+
+    @Test func renewAndExtendRefuseWithoutAnswerAndAskOnATerminal() async {
+        for args in [["renew", "rg-app-dev", "-j", "x"], ["extend", "fabrikam", "-j", "x", "--days", "7"]] {
+            let script = CLIHarness(put: lifecyclePUT)
+            script.policy = noApprovalPolicy
+            #expect(await script.run(args) == 2, "\(args[0]) without --yes and without a terminal")
+            #expect(script.err.contains("Refusing to \(args[0])"))
+            #expect(await script.puts.isEmpty)
+
+            let no = CLIHarness(answers: ["n"], put: lifecyclePUT)
+            no.policy = noApprovalPolicy
+            no.stdinIsTTY = true
+            #expect(await no.run(args) == 1)
+            #expect(no.err.contains("[y/N]"))
+            #expect(await no.puts.isEmpty, "\(args[0]) answered no")
+
+            let yes = CLIHarness(answers: ["y"], put: lifecyclePUT)
+            yes.policy = noApprovalPolicy
+            yes.stdinIsTTY = true
+            _ = await yes.run(args)
+            #expect(await !yes.puts.isEmpty, "\(args[0]) answered yes")
+        }
+    }
+
+    @Test func extendDryRunSendsNothing() async throws {
+        let h = CLIHarness(put: lifecyclePUT)
+        #expect(await h.run("extend", "fabrikam", "-j", "x", "--days", "7", "--dry-run") == 0)
+        #expect(await h.puts.isEmpty)
+        #expect(await h.transport.requests.allSatisfy { $0.httpMethod == "GET" })
+    }
 }
