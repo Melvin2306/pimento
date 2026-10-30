@@ -176,7 +176,7 @@ struct MCPJSONTests {
     }
 
     @Test func redactsPathsAndTokens() {
-        let s = MCPText.redact("open /Users/alex/Library/Application Support/Pimento/presets.json failed; ~/x/y; C:\\Users\\alex\\AppData\\x.json; eyJhbGciOiJub25lIn0.eyJvaWQiOiJ4In0.sig; Bearer abcdefghijklmnop; scope /subscriptions/0000/resourceGroups/rg")
+        let s = MCPText.redact("open /home/alex/.config/pimento/presets.json failed; /private/var/folders/alex/T/x; ~/x/y; C:\\Users\\alex\\AppData\\x.json; eyJhbGciOiJub25lIn0.eyJvaWQiOiJ4In0.sig; Bearer abcdefghijklmnop; scope /subscriptions/0000/resourceGroups/rg")
         #expect(!s.contains("alex"))
         #expect(!s.contains("eyJ"))
         #expect(!s.contains("abcdefghijklmnop"))
