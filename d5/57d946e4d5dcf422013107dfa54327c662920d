@@ -1,0 +1,21 @@
+Sources/PimentoApp/AppModel+KeepAlive.swift
+  s_4884204a812fec::t_7e1d1b129b383c 18-26,225-226,254-258
+Sources/PimentoApp/AppModel.swift
+  s_4884204a812fec::t_a14f63badeac0f 249,251,281,283
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d557d946e4d5dcf422013107dfa54327c662920d",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
