@@ -566,6 +566,15 @@ list (*Show hidden* brings it back). Names come from ARM's `GET /tenants`, fille
 *Unnamed tenant* with the start of its ID. *Enter ID or Domain…* takes any tenant ID or domain.
 With `--tenant` or `PIMENTO_TENANT` the picker is locked and says why.
 
+Each tenant has a **badge** in the picker, the toolbar, the menu bar and the tenant menus of Settings
+and History: one or two initials on a colour that stays the same for that tenant ID. The initials
+come from the display name (*Northwind Traders* → *NT*, *Contoso* → *C*) without legal forms such
+as *SE*, *GmbH*, *& Co. KG*, *Inc.* or *Ltd* and without bracketed parts; Chinese, Japanese and
+Korean names get one character, and a tenant without a name uses its domain. The badge is drawn
+on the Mac, with nothing sent. With **Settings › General › Fetch tenant logos** (off by default)
+Pimento shows the tenant's logo instead, where it finds one: the square logo of the tenant's
+Microsoft sign-in page, else the icon of its website (see [Security and privacy](#security-and-privacy)).
+
 ### Pimento sign-in (without the Azure CLI)
 
 By default Pimento borrows the token of your Azure CLI session. If you do not have (or want) the
@@ -676,7 +685,7 @@ options, with an ⓘ button where an option needs more explanation. Changes appl
 
 | Tab | Options |
 | --- | --- |
-| General | tenant to open with (last used, az's current, or a specific one); unhide hidden tenants; load roles on launch; refresh automatically (off, 1, 5 or 15 minutes); menu bar icon (on by default), its remaining time, hide the Dock icon, launch at login (see [Menu bar](#menu-bar)) |
+| General | tenant to open with (last used, az's current, or a specific one); unhide hidden tenants; fetch tenant logos (off by default; *Refresh Logos*, *Clear Cache*); load roles on launch; refresh automatically (off, 1, 5 or 15 minutes); menu bar icon (on by default), its remaining time, hide the Dock icon, launch at login (see [Menu bar](#menu-bar)) |
 | Appearance | theme, picked from preview cards; mode (see [Themes](#themes)); show or hide the Type, Membership, Condition and Duration columns (also via right-click on a column header) |
 | Account | sign in with the Azure CLI or Pimento sign-in; the client ID of your app registration; signed-in accounts (*Use*, *Sign Out*, *Sign Out All*); *Sign In…* (browser) and *Sign In with Code…* (see [Pimento sign-in](#pimento-sign-in-without-the-azure-cli)) |
 | Activation | default duration; parallel requests (1 to 16, default 8); confirm before activating Owner roles (on by default); remember recent justifications and tickets and offer them from the clock buttons next to the fields; start with the last justification filled in |
@@ -1180,6 +1189,25 @@ directly with the PIM APIs (`api-version=2020-10-01`):
 - The `pimento` CLI keeps no other state: no settings of its own beyond `auth.json`, no access-token
   cache. It writes the presets file (`pimento presets save` and `delete`), the history, and with
   `pimento login` / `logout` the refresh token and `auth.json`.
+- **Tenant logos** are off by default: tenants show initials drawn on the Mac. With *Settings ›
+  General › Fetch tenant logos* on, for each tenant the app shows (the current one and those in
+  the picker, not hidden ones) it sends, without a token, account or cookie and with the
+  `User-Agent` `Pimento/<version>`:
+  1. `POST https://login.microsoftonline.com/common/GetCredentialType` with
+     `{"username":"pimento-logo-lookup@<the tenant's .onmicrosoft.com or other verified domain>"}`
+     (no such user exists; it is how the sign-in page finds a tenant's branding), then a `GET` of
+     the square logo it names, only from Microsoft's branding CDNs (`aadcdn.msftauthimages.net`,
+     `aadcdn.msauthimages.net`, `secure.aadcdn.microsoftonline-p.com`);
+  2. without one, `GET https://<the tenant's first verified domain that is not Microsoft's>/apple-touch-icon.png`,
+     then `/favicon.ico` (redirects followed only within that domain, over HTTPS).
+
+  So **Microsoft and each tenant's own website learn that this Mac looked them up** (your IP
+  address and the domain), and the lookup may show up in the tenant's sign-in logs as an unknown
+  user. HTTPS only, 10-second request timeouts, at most 512 KB per answer, and only files that decode as
+  an image of 32 to 4096 pixels are kept: in `~/Library/Application Support/Pimento/TenantLogos`
+  (mode 600) for 7 days, a tenant without a logo included. *Refresh Logos* fetches again, *Clear
+  Cache* deletes them, and turning the setting off deletes them too. Never in demo mode, never by
+  the CLI.
 - No analytics, no update checks, no third-party dependencies (the CLI's argument parser is
   hand-written, so the build needs no package downloads).
 

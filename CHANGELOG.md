@@ -6,6 +6,19 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Tenant badges**: the tenant picker, the toolbar, the menu bar and the tenant menus of Settings
+  and History show each tenant as one or two initials on a colour from its tenant ID (*Northwind
+  Traders* → *NT*; legal forms such as *SE*, *GmbH* or *Inc.* skipped; the domain for unnamed
+  tenants) instead of a building symbol. Drawn offline; the palette keeps white initials at WCAG AA
+  and stays visible in light, dark, ultra dark and the Azure and XP themes.
+- **Fetch tenant logos** (*Settings › General*, off by default): shows the square logo of a
+  tenant's Microsoft sign-in page, else its website's icon, instead of the initials. Unauthenticated
+  and without cookies, Microsoft's branding CDNs only for the sign-in logo, HTTPS, 512 KB and
+  image checks, cached for 7 days with *Refresh Logos* and *Clear Cache*; never in demo mode. It
+  tells Microsoft and each tenant's website that this Mac looked them up (see *Security and privacy*).
+
 ## [0.1.0] - 2026-10-30
 
 The first public release. It covers everything built before it; the development history is in
