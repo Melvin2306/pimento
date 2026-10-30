@@ -246,12 +246,31 @@ struct LifecycleOutcomeTests {
     }
 }
 
-/// A transport that answers each PUT by its request type, in order.
+/// A transport that answers each PUT by its request type, in order (a
+/// negative status: the answer is lost, `URLError(.timedOut)`). GETs are
+/// answered from the script's `"GET"` entry and recorded as `GET`.
 actor ScriptedPUTs: HTTPTransport {
     private var script: [String: [(Data, Int)]]
     private(set) var sent: [String] = []
+    /// The request ids (last path component) of the PUTs, in order.
+    private(set) var requestIds: [String] = []
 
     init(_ script: [String: [(Data, Int)]]) { self.script = script }
+
+    /// Answers GETs from the PUT request ids sent so far (overrides `"GET"`).
+    private var getHandler: (@Sendable ([String]) -> Data)?
+
+    func answerGET(_ handler: @escaping @Sendable ([String]) -> Data) { getHandler = handler }
+
+    private func answerGET() -> (Data, Int)? {
+        guard let getHandler else { return nil }
+        sent.append("GET")
+        return (getHandler(requestIds), 200)
+    }
+
+    private func note(_ request: URLRequest) {
+        if request.httpMethod == "PUT", let id = request.url?.lastPathComponent { requestIds.append(id) }
+    }
 
     private func next(_ type: String) -> (Data, Int) {
         sent.append(type)
@@ -263,9 +282,18 @@ actor ScriptedPUTs: HTTPTransport {
     }
 
     nonisolated func send(_ request: URLRequest) async throws -> (Data, Int) {
-        let body = try JSONSerialization.jsonObject(with: request.httpBody ?? Data()) as? [String: Any]
-        let type = (body?["properties"] as? [String: Any])?["requestType"] as? String ?? "?"
-        return await next(type)
+        await note(request)
+        let type: String
+        if request.httpMethod == "GET" {
+            if let answer = await answerGET() { return answer }
+            type = "GET"
+        } else {
+            let body = try JSONSerialization.jsonObject(with: request.httpBody ?? Data()) as? [String: Any]
+            type = (body?["properties"] as? [String: Any])?["requestType"] as? String ?? "?"
+        }
+        let (data, status) = await next(type)
+        if status < 0 { throw URLError(.timedOut) }
+        return (data, status)
     }
 }
 
@@ -342,6 +370,73 @@ struct RenewServiceTests {
         #expect(sleeps.all.reduce(0, +) == PIMService.reactivationDelays.reduce(0, +))
         // PIM took about three minutes to accept the new activation in tests.
         #expect((240...330).contains(PIMService.reactivationDelays.reduce(0, +)))
+    }
+
+    /// An `Activated` instance of rg-app-dev / Owner (the fixture role).
+    func activeInstance(schedule: String, start: String = "2026-10-29T12:00:00Z", end: String = "2026-10-29T13:00:00Z") -> Data {
+        let scope = "/subscriptions/cccccccc-0000-0000-0000-00000000000c/resourceGroups/rg-app-dev"
+        return Data(#"""
+        {"value":[{"id":"\#(scope)/providers/Microsoft.Authorization/roleAssignmentScheduleInstances/i1","properties":{
+          "roleAssignmentScheduleId":"\#(scope)/providers/Microsoft.Authorization/roleAssignmentSchedules/\#(schedule)",
+          "assignmentType":"Activated","memberType":"Direct","scope":"\#(scope)",
+          "roleDefinitionId":"/subscriptions/cccccccc-0000-0000-0000-00000000000c/providers/Microsoft.Authorization/roleDefinitions/8e3af657-a8ff-443c-a75c-2fe8c4bcb635",
+          "startDateTime":"\#(start)","endDateTime":"\#(end)"}}]}
+        """#.utf8)
+    }
+
+    @Test func aLostAnswerFollowedByExistsIsCheckedAndReportedAsRenewed() async throws {
+        let owner = try Fixture.role("rg-app-dev", "Owner")
+        // The first activation reached PIM but its answer was lost; the next
+        // ones are refused because that activation exists. The GET lists the
+        // schedule PIM created for the first one (named after its request).
+        let transport = ScriptedPUTs([
+            "SelfDeactivate": [(requestStatus("Revoked", requestType: "SelfDeactivate"), 201)],
+            "SelfActivate": [(Data(), -1), (armError("RoleAssignmentExists"), 400)],
+        ])
+        await transport.answerGET { ids in self.activeInstance(schedule: ids[1], start: "2026-10-29T11:00:00Z") }
+        let outcome = try await run(transport, try plan(owner))
+        #expect(outcome == .renewed(until: AzureDate.parse("2026-10-29T13:00:00Z")))
+        let sent = await transport.sent
+        #expect(sent.first == "SelfDeactivate")
+        #expect(sent.last == "GET")
+        #expect(sent.filter { $0 == "SelfActivate" }.count == PIMService.reactivationDelays.count)
+    }
+
+    @Test func aLostAnswerIsMatchedByStartTimeWhenTheScheduleIdDiffers() async throws {
+        let owner = try Fixture.role("rg-app-dev", "Owner")
+        let transport = ScriptedPUTs([
+            "SelfDeactivate": [(requestStatus("Revoked", requestType: "SelfDeactivate"), 201)],
+            "SelfActivate": [(Data(), -1), (armError("RoleAssignmentExists"), 400)],
+            "GET": [(activeInstance(schedule: "other"), 200)],
+        ])
+        let outcome = try await run(transport, try plan(owner))
+        #expect(outcome == .renewed(until: AzureDate.parse("2026-10-29T13:00:00Z")))
+    }
+
+    @Test func aLostAnswerWithoutANewActivationStaysAFailure() async throws {
+        let owner = try Fixture.role("rg-app-dev", "Owner")
+        // Only the old activation (started before the renewal) is listed.
+        let old = try #require(owner.activeSince)
+        let transport = ScriptedPUTs([
+            "SelfDeactivate": [(requestStatus("Revoked", requestType: "SelfDeactivate"), 201)],
+            "SelfActivate": [(Data(), -1), (armError("RoleAssignmentExists"), 400)],
+            "GET": [(activeInstance(schedule: "old", start: AzureDate.format(old)), 200)],
+        ])
+        let outcome = try await run(transport, try plan(owner))
+        guard case .failed(let code, _) = outcome else { Issue.record("expected failure, got \(outcome)"); return }
+        #expect(code == "ReactivationFailed")
+        #expect(await transport.sent.filter { $0 == "GET" }.count == 1)
+    }
+
+    @Test func noLostAnswerMeansNoExtraRead() async throws {
+        let owner = try Fixture.role("rg-app-dev", "Owner")
+        let transport = ScriptedPUTs([
+            "SelfDeactivate": [(requestStatus("Revoked", requestType: "SelfDeactivate"), 201)],
+            "SelfActivate": [(armError("RoleAssignmentExists"), 400)],
+            "GET": [(activeInstance(schedule: "other"), 200)],
+        ])
+        guard case .failed = try await run(transport, try plan(owner)) else { Issue.record("expected failure"); return }
+        #expect(!(await transport.sent.contains("GET")))
     }
 
     @Test func anActivationThatHadAlreadyEndedIsActivatedAgain() async throws {

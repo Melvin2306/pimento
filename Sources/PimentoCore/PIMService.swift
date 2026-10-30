@@ -233,7 +233,10 @@ public final class PIMService: Sendable {
     /// Renews each role: ends its activation (`SelfDeactivate`), then activates
     /// it again (`SelfActivate`, a fresh request each attempt). A role whose
     /// deactivation fails keeps its activation; one deactivated but not
-    /// activated again ends as `.failed(code: "ReactivationFailed")`.
+    /// activated again ends as `.failed(code: "ReactivationFailed")`. When an
+    /// attempt's answer was lost, the role's activations are read before a
+    /// failure is reported: PIM may have accepted it (and refused the next
+    /// attempts with `RoleAssignmentExists`).
     public func renew(
         _ plans: [RenewPlan],
         maxConcurrent: Int = 4,
@@ -267,6 +270,7 @@ public final class PIMService: Sendable {
     /// the deactivation already failed).
     func renew(_ plan: RenewPlan, token: String, onPhase: @Sendable (RenewPlan, RenewPhase) async -> Void) async -> (ActivationOutcome, String?) {
         await onPhase(plan, .deactivating)
+        let started = clock()
         let ended = await send(plan.deactivation, token: token)
         switch ended {
         case .deactivated, .notActive: break
@@ -274,14 +278,24 @@ public final class PIMService: Sendable {
         }
         var last: ActivationOutcome = .failed(code: "ReactivationFailed", message: "not attempted")
         var lastId: String?
+        // Attempts whose answer was lost: PIM may have accepted them, and then
+        // answers `RoleAssignmentExists` to the next one.
+        var unanswered: [String] = []
         for (i, delay) in Self.reactivationDelays.enumerated() {
             if delay > 0 { await sleep(delay) }
             await onPhase(plan, .reactivating(attempt: i + 1))
             guard let request = try? plan.activation(now: clock()) else { break }
             lastId = request.requestId
             last = await send(request, token: token)
+            if case .failed("NetworkError", _) = last { unanswered.append(request.requestId) }
             if !RenewPlan.shouldRetry(last) { break }
         }
-        return (RenewPlan.result(of: last), lastId)
+        let result = RenewPlan.result(of: last)
+        if result.isFailure, !unanswered.isEmpty,
+           let instances: [AssignmentScheduleInstance] = try? await listAll(ARM.assignmentInstancesURL, token: token),
+           let found = RenewPlan.confirmedActivation(of: plan, in: instances, requestIds: unanswered, since: started, now: clock()) {
+            return (.renewed(until: found.until), found.requestId ?? lastId)
+        }
+        return (result, lastId)
     }
 }

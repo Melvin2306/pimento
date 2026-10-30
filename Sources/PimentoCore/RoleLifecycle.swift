@@ -152,6 +152,35 @@ public struct RenewPlan: Identifiable, Sendable, Equatable {
         }
     }
 
+    /// After an attempt whose answer was lost: the new activation of `plan`'s
+    /// role in `instances`, if there is one. It is the schedule PIM created for
+    /// one of `requestIds` (a self-activation's schedule has its request's
+    /// name), or an activation of the same scope + role that started after
+    /// the old one and no earlier than `since` (a minute's clock skew allowed):
+    /// the old activation had been ended by then. `requestId`: the matching
+    /// request, when known.
+    public static func confirmedActivation(
+        of plan: RenewPlan, in instances: [AssignmentScheduleInstance], requestIds: [String], since: Date, now: Date
+    ) -> (until: Date?, requestId: String?)? {
+        let ids = Set(requestIds.map { $0.lowercased() })
+        let key = plan.role.policyKey
+        var fallback: (until: Date?, requestId: String?)?
+        for item in instances {
+            let p = item.properties
+            guard p.assignmentType?.caseInsensitiveCompare("Activated") == .orderedSame,
+                  RoleMatcher.key(scope: p.scope, roleDefinitionId: p.roleDefinitionId) == key else { continue }
+            let end = AzureDate.parse(p.endDateTime)
+            if let end, end <= now { continue }
+            let schedule = p.roleAssignmentScheduleId.map { RoleMatcher.lastPathComponent($0).lowercased() }
+            if let schedule, ids.contains(schedule) { return (end, schedule) }
+            if let start = AzureDate.parse(p.startDateTime), start >= since.addingTimeInterval(-60),
+               plan.role.activeSince.map({ start > $0 }) ?? true {
+                fallback = (end, nil)
+            }
+        }
+        return fallback
+    }
+
     /// The final outcome of a renewal, from the last activation attempt.
     public static func result(of activation: ActivationOutcome) -> ActivationOutcome {
         switch activation {
