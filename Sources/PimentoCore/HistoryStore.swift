@@ -298,6 +298,14 @@ public final class HistoryRecorder: @unchecked Sendable {
         self.clock = clock
     }
 
+    /// A recorder into the same file that writes `source` (keep-alive's
+    /// requests), with the same tenant names.
+    public func with(source: HistorySource) -> HistoryRecorder {
+        let copy = HistoryRecorder(store: store, source: source, version: version, clock: clock)
+        copy.setTenantLabels(lock.withLock { labels })
+        return copy
+    }
+
     /// Names of the tenants the app knows, by tenant GUID.
     public func setTenantLabels(_ labels: [String: String]) {
         lock.withLock { self.labels = Dictionary(labels.map { ($0.key.lowercased(), $0.value) }, uniquingKeysWith: { a, _ in a }) }

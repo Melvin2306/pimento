@@ -21,6 +21,30 @@ All notable changes to this project are documented here. The format follows
   `--tenant` (or `PIMENTO_MCP_TENANT`) keeps it in one tenant; `--demo` runs it on the demo data.
   Speaks the stateless 2026-07-28 revision and the `initialize`-based revisions 2024-11-05 to
   2025-11-25, without new dependencies, on macOS, Linux and Windows. See README › AI agents (MCP).
+- **Keep alive**: mark active roles (right-click › *Keep Alive*) or a preset (*Keep alive* in Manage
+  Presets), and Pimento renews them shortly before they expire, during working hours (Settings ›
+  Activation › Keep alive: days and hours, Mon–Fri 08:00–18:00 by default, local time). Fifteen
+  minutes before the end it schedules the next activation to start exactly when the current one
+  ends, so there is no gap (PIM has no self-service extension; `SelfExtend` / `SelfRenew` need an
+  administrator). The rules: the policy maximum and working hours apply (the last renewal of the day
+  is shortened to whole hours ending by then, or skipped); the justification and ticket of the
+  activation are reused, and a renewal whose policy needs one that is unknown is skipped with a
+  notification; roles needing approval are never renewed (the UI says why); a role ended early
+  (noticed from the listing and from your requests, also after sleep or a restart) is not brought
+  back and its continuation is withdrawn, as on pause; one that lapsed while the Mac slept is
+  activated again on wake if still inside working hours; failures back off (1, 5, 15 minutes) and
+  stop after 4 per role per window. Status icon and tooltip in the table and the menu bar, a *Keep
+  Alive* toolbar menu, and a global *Pause* (toolbar, menu bar, Settings). Notifications follow the
+  completion settings (*Renewed Contributor until 18:00*, and failures). Works in demo mode.
+- **`pimento keep-alive`**: the same rules as a foreground loop until Ctrl-C, for Linux, Windows and
+  servers (`--days`, `--window`, `--hours`, `-j`, `--preset`, `--dry-run`; asks once, or `--yes`).
+  The scheduler lives in PimentoCore (`KeepAlive`, `KeepAliveSession`), shared by the app and the CLI.
+- Presets have an optional `keepAlive` field.
+- Keeping a role alive that can grant access (Owner, User Access Administrator, RBAC Administrator)
+  asks once when it is marked (per role or through a preset), while *Confirm before activating Owner
+  roles* is on; `pimento keep-alive` asks at its prompt or takes `--yes`, as `activate` does.
+- History: a new source, **Keep alive** (`keepAlive` in the file, CSV and JSON), for everything
+  keep-alive sends.
 
 ### Changed
 

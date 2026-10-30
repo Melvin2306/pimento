@@ -14,6 +14,7 @@ public enum CLIHelp {
         case "deactivate": deactivate
         case "renew": renew
         case "extend": extend
+        case "keep-alive": keepAlive
         case "scheduled": scheduled
         case "cancel": cancel
         case "pending": pending
@@ -47,6 +48,7 @@ public enum CLIHelp {
       deactivate   End active roles early
       renew        End and activate roles again, for a fresh duration
       extend       Ask an administrator to extend time-bound assignments
+      keep-alive   Renew roles before they expire, during working hours (runs until Ctrl-C)
       scheduled    List your scheduled and pending activations
       cancel       Cancel scheduled or pending activations
       pending      List your requests waiting for approval
@@ -385,6 +387,58 @@ public enum CLIHelp {
       pimento renew --preset On-call --yes
     """
 
+    static let keepAlive = """
+    Usage: pimento keep-alive (FILTER… | --role NAME | --all | --preset NAME) [options]
+
+    Keeps the matching roles active during working hours, until you stop it
+    with Ctrl-C: shortly before an activation ends, Pimento schedules a new one
+    (SelfActivate) that starts exactly when it ends, so there is no gap. Roles
+    that match later (you activate one) are kept alive too; roles that are not
+    active are not activated.
+
+    Rules (the same as the app's Keep alive):
+    - Only during working hours (--days, --window; your local time), and never
+      past their end: the last renewal of the day is shortened to end with
+      them, in whole hours, and skipped when not even an hour fits.
+    - Each renewal asks for --hours (default: the longest each policy allows),
+      capped at the policy maximum.
+    - The new activation carries the justification and ticket of the one it
+      continues; -j is used when that justification is unknown. A role whose
+      policy requires a ticket that is not known is skipped.
+    - Roles whose policy requires approval, or cannot be read, are left alone.
+    - Roles that can grant access (Owner, User Access Administrator, RBAC
+      Administrator) are kept alive only when confirmed: those listed at the
+      prompt, or all with --yes. One that matches later without --yes is not.
+    - What it sends is recorded in the history with the source keepAlive.
+    - A role you end early is not brought back. One that lapsed (the computer
+      slept, the network was down) is activated again inside working hours,
+      with a gap.
+    - Failures are retried after 1, 5 and 15 minutes, then left until the
+      next working hours. Your roles are read at least every 10 minutes.
+
+    Ctrl-C stops the loop. Continuations already scheduled still start: see
+    `pimento scheduled`, and `pimento cancel` to withdraw them.
+
+    Options:
+          --days DAYS     Working days: mon-fri (default), mon,wed,fri, weekend, all
+          --window FROM-TO
+                          Working hours, local time (default 08:00-18:00; 22:00-06:00
+                          runs overnight)
+          --hours N|max   Each renewal's duration, 1-\(ActivationRequestBuilder.maxHours) or max (default: the preset's,
+                          else max), capped at each role's policy maximum
+      -j, --justification TEXT
+                          Used when the justification of the activation is unknown
+                          (default: the preset's)
+      -y, --yes           Don't ask. Required when stdin is not a terminal.
+          --dry-run       Show what would be kept alive and done now, send nothing
+    \(tenantOption)
+
+    Examples:
+      pimento keep-alive contoso-dev --role Contributor
+      pimento keep-alive --preset On-call --window 07:00-19:00 --yes
+      pimento keep-alive --all --days mon-thu --dry-run
+    """
+
     static let extend = """
     Usage: pimento extend (FILTER… | --role NAME | --all) -j TEXT [--days N] [options]
 
@@ -615,6 +669,7 @@ public enum CLIHelp {
         'deactivate:End active roles early'
         'renew:End and activate roles again'
         'extend:Ask an administrator to extend time-bound assignments'
+        'keep-alive:Renew roles before they expire, during working hours'
         'scheduled:List your scheduled and pending activations'
         'cancel:Cancel scheduled or pending activations'
         'pending:List your requests waiting for approval'
@@ -686,6 +741,18 @@ public enum CLIHelp {
                 '--dry-run[Print the requests, send nothing]' \
                 '--max-parallel[Requests in flight at once]:count: ' \
                 '*:resource filter: ' ;;
+            keep-alive)
+              _arguments -s $common \
+                '*--role[Role name, * as wildcard]:role: ' \
+                '--all[Every role]' \
+                '--preset[Saved preset]:preset: ' \
+                '(-j --justification)'{-j,--justification}'[Justification when the activation'"'"'s is unknown]:justification: ' \
+                '--hours[Duration of each renewal in hours, or max]:hours:(max 1 2 4 8 12 24)' \
+                '--days[Working days]:days:(mon-fri mon-thu weekend all)' \
+                '--window[Working hours]:window:(08:00-18:00 07:00-19:00)' \
+                '(-y --yes)'{-y,--yes}'[Do not ask for confirmation]' \
+                '--dry-run[Show what would be done, send nothing]' \
+                '*:resource filter: ' ;;
             extend)
               _arguments -s $common \
                 '*--role[Role name, * as wildcard]:role: ' \
@@ -740,7 +807,7 @@ public enum CLIHelp {
                 '--allow-privileged[Allow Owner and access administrator roles]' \
                 '--no-confirm[Write without elicitation when the client cannot ask]' ;;
             completions) _arguments '1:shell:(zsh bash fish)' ;;
-            help) _arguments '1:command:(list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets history login logout whoami mcp completions version)' ;;
+            help) _arguments '1:command:(list activate deactivate renew extend keep-alive scheduled cancel pending wait approvals approve deny status tenants presets history login logout whoami mcp completions version)' ;;
           esac ;;
       esac
     }
@@ -760,7 +827,7 @@ public enum CLIHelp {
       prev="${COMP_WORDS[COMP_CWORD-1]}"
       cmd="${COMP_WORDS[1]}"
       if [[ $COMP_CWORD -eq 1 ]]; then
-        COMPREPLY=($(compgen -W "list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets history login logout whoami mcp completions version help" -- "$cur"))
+        COMPREPLY=($(compgen -W "list activate deactivate renew extend keep-alive scheduled cancel pending wait approvals approve deny status tenants presets history login logout whoami mcp completions version help" -- "$cur"))
         return
       fi
       case "$prev" in
@@ -781,6 +848,7 @@ public enum CLIHelp {
         deactivate) opts="--tenant --json --role --all --preset --justification --yes --dry-run --max-parallel --help" ;;
         renew) opts="--tenant --json --role --all --preset --justification --hours --ticket --ticket-system --yes --dry-run --max-parallel --help" ;;
         extend) opts="--tenant --json --role --all --justification --days --yes --dry-run --help" ;;
+        keep-alive) opts="--tenant --role --all --preset --justification --hours --days --window --yes --dry-run --help" ;;
         status|tenants|scheduled|pending|approvals) opts="--tenant --json --help" ;;
         wait) opts="--tenant --json --all --timeout --help" ;;
         approve|deny) opts="--tenant --json --justification --yes --dry-run --help" ;;
@@ -795,7 +863,7 @@ public enum CLIHelp {
         whoami) opts="--tenant --json --auth --help" ;;
         mcp) opts="--tenant --allow-activate --allow-privileged --no-confirm --help" ;;
         completions) opts="zsh bash fish" ;;
-        help) opts="list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets history login logout whoami mcp completions version" ;;
+        help) opts="list activate deactivate renew extend keep-alive scheduled cancel pending wait approvals approve deny status tenants presets history login logout whoami mcp completions version" ;;
         *) opts="" ;;
       esac
       [[ "$cmd" != completions && "$cmd" != help && "$cmd" != logout ]] && opts="$opts --auth"
@@ -813,6 +881,7 @@ public enum CLIHelp {
     complete -c pimento -n __fish_use_subcommand -a deactivate -d 'End active roles early'
     complete -c pimento -n __fish_use_subcommand -a renew -d 'End and activate roles again'
     complete -c pimento -n __fish_use_subcommand -a extend -d 'Ask an administrator to extend time-bound assignments'
+    complete -c pimento -n __fish_use_subcommand -a keep-alive -d 'Renew roles before they expire, during working hours'
     complete -c pimento -n __fish_use_subcommand -a scheduled -d 'List your scheduled and pending activations'
     complete -c pimento -n __fish_use_subcommand -a cancel -d 'Cancel scheduled or pending activations'
     complete -c pimento -n __fish_use_subcommand -a pending -d 'List your requests waiting for approval'
@@ -831,27 +900,29 @@ public enum CLIHelp {
     complete -c pimento -n __fish_use_subcommand -a completions -d 'Print a completion script'
     complete -c pimento -n __fish_use_subcommand -a version -d 'Print the version'
     complete -c pimento -n __fish_use_subcommand -a help -d 'Show help for a command'
-    complete -c pimento -n '__fish_seen_subcommand_from list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets history' -s t -l tenant -r -d 'Tenant GUID or domain'
+    complete -c pimento -n '__fish_seen_subcommand_from list activate deactivate renew extend keep-alive scheduled cancel pending wait approvals approve deny status tenants presets history' -s t -l tenant -r -d 'Tenant GUID or domain'
     complete -c pimento -n '__fish_seen_subcommand_from list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets history' -l json -d 'Machine-readable output'
-    complete -c pimento -n '__fish_seen_subcommand_from list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets history' -s h -l help -d 'Show help'
-    complete -c pimento -n '__fish_seen_subcommand_from list activate deactivate renew extend cancel presets' -l role -r -d 'Role name, * as wildcard'
+    complete -c pimento -n '__fish_seen_subcommand_from list activate deactivate renew extend keep-alive scheduled cancel pending wait approvals approve deny status tenants presets history' -s h -l help -d 'Show help'
+    complete -c pimento -n '__fish_seen_subcommand_from list activate deactivate renew extend keep-alive cancel presets' -l role -r -d 'Role name, * as wildcard'
     complete -c pimento -n '__fish_seen_subcommand_from list' -l active -d 'Only active roles'
     complete -c pimento -n '__fish_seen_subcommand_from list' -l eligible -d 'Only roles that are not active'
     complete -c pimento -n '__fish_seen_subcommand_from activate' -l all -d 'Every eligible role'
-    complete -c pimento -n '__fish_seen_subcommand_from deactivate renew extend' -l all -d 'Every active role'
+    complete -c pimento -n '__fish_seen_subcommand_from deactivate renew extend keep-alive' -l all -d 'Every active role'
     complete -c pimento -n '__fish_seen_subcommand_from cancel' -l all -d 'Every pending activation'
     complete -c pimento -n '__fish_seen_subcommand_from activate' -l at -x -a 'now +1h +2h tomorrow08:00 workday08:00' -d 'Start later'
     complete -c pimento -n '__fish_seen_subcommand_from activate renew' -l ticket -r -d 'Ticket number'
     complete -c pimento -n '__fish_seen_subcommand_from activate renew presets' -l ticket-system -r -d 'Ticket system'
     complete -c pimento -n '__fish_seen_subcommand_from extend' -l days -x -a '7 30 90 180 365' -d 'Days to extend by'
-    complete -c pimento -n '__fish_seen_subcommand_from activate deactivate renew extend approve deny presets' -s j -l justification -r -d 'Justification'
-    complete -c pimento -n '__fish_seen_subcommand_from activate renew presets' -l hours -x -a 'max 1 2 4 8 12 24' -d 'Duration in hours, or max'
-    complete -c pimento -n '__fish_seen_subcommand_from activate deactivate renew' -l preset -r -d 'Saved preset'
+    complete -c pimento -n '__fish_seen_subcommand_from keep-alive' -l days -x -a 'mon-fri mon-thu weekend all' -d 'Working days'
+    complete -c pimento -n '__fish_seen_subcommand_from keep-alive' -l window -x -a '08:00-18:00 07:00-19:00' -d 'Working hours'
+    complete -c pimento -n '__fish_seen_subcommand_from activate deactivate renew extend keep-alive approve deny presets' -s j -l justification -r -d 'Justification'
+    complete -c pimento -n '__fish_seen_subcommand_from activate renew keep-alive presets' -l hours -x -a 'max 1 2 4 8 12 24' -d 'Duration in hours, or max'
+    complete -c pimento -n '__fish_seen_subcommand_from activate deactivate renew keep-alive' -l preset -r -d 'Saved preset'
     complete -c pimento -n '__fish_seen_subcommand_from presets; and not __fish_seen_subcommand_from list show save delete' -a 'list show save delete'
     complete -c pimento -n '__fish_seen_subcommand_from presets' -l exact -d 'Store the matching roles, not the filters'
     complete -c pimento -n '__fish_seen_subcommand_from presets' -s f -l force -d 'Replace a preset with the same name'
-    complete -c pimento -n '__fish_seen_subcommand_from activate deactivate renew extend cancel approve deny' -s y -l yes -d 'Do not ask for confirmation'
-    complete -c pimento -n '__fish_seen_subcommand_from activate deactivate renew extend cancel approve deny' -l dry-run -d 'Print the requests, send nothing'
+    complete -c pimento -n '__fish_seen_subcommand_from activate deactivate renew extend keep-alive cancel approve deny' -s y -l yes -d 'Do not ask for confirmation'
+    complete -c pimento -n '__fish_seen_subcommand_from activate deactivate renew extend keep-alive cancel approve deny' -l dry-run -d 'Print the requests, send nothing'
     complete -c pimento -n '__fish_seen_subcommand_from wait' -l all -d 'Every request waiting for approval'
     complete -c pimento -n '__fish_seen_subcommand_from wait' -l timeout -x -a '10m 30m 1h 2h' -d 'Give up after'
     complete -c pimento -n '__fish_seen_subcommand_from activate deactivate renew' -l max-parallel -x -d 'Requests in flight at once'
@@ -863,7 +934,7 @@ public enum CLIHelp {
     complete -c pimento -n '__fish_seen_subcommand_from history' -s n -l limit -x -d 'At most N records'
     complete -c pimento -n '__fish_seen_subcommand_from history' -l csv -d 'CSV on stdout'
     complete -c pimento -n '__fish_seen_subcommand_from history' -s y -l yes -d 'Do not ask (clear)'
-    complete -c pimento -n '__fish_seen_subcommand_from list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets history login whoami mcp' -l auth -x -a 'az pimento' -d 'Auth source'
+    complete -c pimento -n '__fish_seen_subcommand_from list activate deactivate renew extend keep-alive scheduled cancel pending wait approvals approve deny status tenants presets history login whoami mcp' -l auth -x -a 'az pimento' -d 'Auth source'
     complete -c pimento -l demo -d 'Demo mode: simulated Azure, synthetic data'
     complete -c pimento -n '__fish_seen_subcommand_from login whoami' -s t -l tenant -r -d 'Tenant GUID or domain'
     complete -c pimento -n '__fish_seen_subcommand_from login logout whoami' -l json -d 'Machine-readable output'
@@ -875,6 +946,6 @@ public enum CLIHelp {
     complete -c pimento -n '__fish_seen_subcommand_from mcp' -l allow-privileged -d 'Allow Owner and access administrator roles'
     complete -c pimento -n '__fish_seen_subcommand_from mcp' -l no-confirm -d 'Write without elicitation when the client cannot ask'
     complete -c pimento -n '__fish_seen_subcommand_from completions' -a 'zsh bash fish'
-    complete -c pimento -n '__fish_seen_subcommand_from help' -a 'list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets history login logout whoami mcp completions version'
+    complete -c pimento -n '__fish_seen_subcommand_from help' -a 'list activate deactivate renew extend keep-alive scheduled cancel pending wait approvals approve deny status tenants presets history login logout whoami mcp completions version'
     """#
 }

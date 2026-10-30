@@ -75,6 +75,10 @@ public struct EligibleRole: Identifiable, Hashable, Sendable {
 
     public var hasCondition: Bool { !(condition ?? "").isEmpty }
 
+    /// Owner, User Access Administrator or RBAC Administrator: can grant
+    /// roles to anyone (`AccessGrantingRole`).
+    public var grantsAccess: Bool { AccessGrantingRole.matches(roleDefinitionId: roleDefinitionId, roleName: roleName) }
+
     /// Scope + role: identifies the eligibility across refreshes (presets) and
     /// its PIM policy. Two rows share it when you are eligible both directly
     /// and through a group.

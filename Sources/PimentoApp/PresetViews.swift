@@ -231,6 +231,14 @@ struct ManagePresetsSheet: View {
         }
         .frame(width: 860, height: 580)
         .themedPageBackground()
+        .alert(model.keepAliveConsent?.title ?? "", isPresented: Binding(
+            get: { model.keepAliveConsent?.preset != nil },
+            set: { if !$0 { model.keepAliveConsent = nil } })) {
+            Button("Save and Keep Alive") { model.confirmKeepAliveConsent() }
+            Button("Cancel", role: .cancel) { model.keepAliveConsent = nil }
+        } message: {
+            Text(model.keepAliveConsent?.message ?? "")
+        }
     }
 
     private var sidebarDividerColor: Color {
@@ -367,6 +375,12 @@ private struct PresetEditor: View {
                         .themedTextField()
                         .textFieldStyle(.roundedBorder)
                         .accessibilityLabel("Default ticket system")
+                }
+                GridRow {
+                    Text("Keep alive")
+                    Toggle("Renew its roles before they expire, during working hours", isOn: binding(\.keepAlive, false))
+                        .help("While a role of this preset is active, Pimento continues it shortly before it ends "
+                            + "(Settings › Activation › Keep alive). Roles whose policy requires approval are left alone.")
                 }
                 GridRow {
                     Text("Duration")

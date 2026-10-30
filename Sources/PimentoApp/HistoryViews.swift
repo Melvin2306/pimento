@@ -301,7 +301,7 @@ private struct HistoryTable: View {
                 Text(r.source.title).foregroundStyle(.secondary).lineLimit(1)
                     .help(r.version.map { "\(r.source.title), Pimento \($0)" } ?? "Read from Azure")
             }
-            .width(min: 40, ideal: 46)
+            .width(min: 40, ideal: 64)
 
             TableColumn("Request", value: \.requestSortKey) { r in
                 Text(r.shortRequestId ?? "").font(.system(.body, design: .monospaced)).foregroundStyle(.secondary)

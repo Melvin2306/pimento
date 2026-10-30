@@ -74,13 +74,16 @@ public struct Preset: Codable, Hashable, Identifiable, Sendable {
     public var duration: RequestedDuration?
     /// Default ticket system (`ServiceNow`, `Jira`) for roles that need a ticket.
     public var ticketSystem: String?
+    /// Keep-alive: renew the preset's roles while they are active, during
+    /// working hours (`KeepAlive`). Stored only when on.
+    public var keepAlive = false
     public var createdAt: Date?
     public var updatedAt: Date?
 
     public init(
         id: UUID = UUID(), name: String, tenantId: String?, roles: [PresetRole] = [], match: [PresetRule] = [],
         justification: String? = nil, duration: RequestedDuration? = nil, ticketSystem: String? = nil,
-        createdAt: Date? = nil, updatedAt: Date? = nil
+        keepAlive: Bool = false, createdAt: Date? = nil, updatedAt: Date? = nil
     ) {
         self.id = id
         self.name = name
@@ -90,12 +93,13 @@ public struct Preset: Codable, Hashable, Identifiable, Sendable {
         self.justification = justification
         self.duration = duration
         self.ticketSystem = ticketSystem
+        self.keepAlive = keepAlive
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, name, tenantId, roles, match, justification, duration, ticketSystem, createdAt, updatedAt
+        case id, name, tenantId, roles, match, justification, duration, ticketSystem, keepAlive, createdAt, updatedAt
     }
 
     /// Lenient: unknown keys are ignored, a missing id gets a new one, and an
@@ -110,6 +114,7 @@ public struct Preset: Codable, Hashable, Identifiable, Sendable {
         justification = try c.decodeIfPresent(String.self, forKey: .justification)
         duration = (try? c.decodeIfPresent(String.self, forKey: .duration)).flatMap { $0.flatMap(RequestedDuration.init(stringValue:)) }
         ticketSystem = (try? c.decodeIfPresent(String.self, forKey: .ticketSystem))?.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty }
+        keepAlive = (try? c.decodeIfPresent(Bool.self, forKey: .keepAlive)) == true
         createdAt = try? c.decodeIfPresent(Date.self, forKey: .createdAt)
         updatedAt = try? c.decodeIfPresent(Date.self, forKey: .updatedAt)
     }
@@ -124,6 +129,7 @@ public struct Preset: Codable, Hashable, Identifiable, Sendable {
         try c.encodeIfPresent(justification?.nonEmpty, forKey: .justification)
         try c.encodeIfPresent(duration?.stringValue, forKey: .duration)
         try c.encodeIfPresent(trimmedTicketSystem, forKey: .ticketSystem)
+        if keepAlive { try c.encode(true, forKey: .keepAlive) }
         try c.encodeIfPresent(createdAt, forKey: .createdAt)
         try c.encodeIfPresent(updatedAt, forKey: .updatedAt)
     }

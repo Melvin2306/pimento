@@ -225,6 +225,7 @@ private struct ActivationSettings: View {
                         }
                     }
                 }
+                KeepAliveSettingsGroup()
             }
         }
     }
