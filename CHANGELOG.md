@@ -342,6 +342,30 @@ All notable changes to this project are documented here. The format follows
 - "Install Command Line Tool…" checks again, as administrator, that it replaces or removes only a
   symlink.
 - Release workflow: only the publishing job gets a write token.
+- HTTP redirects are no longer followed, for ARM and for sign-in: the host checks covered only the
+  first URL. A redirect is now an error.
+- A renewal whose re-activation answer was lost (a timeout) could end as "ReactivationFailed"
+  while the role was active again: PIM then answers `RoleAssignmentExists` to every later attempt.
+  After a lost answer the role's activations are read, and the renewal reported when it went
+  through.
+- Deactivate sends the eligibility the activation was made with (its `linkedRoleEligibilityScheduleId`),
+  not the row's: for a role held both directly and through a group they can differ. When it is
+  not known yet, it is read before sending.
+- Presets and `tokens.json` are locked while they are changed (`flock`, `LockFileEx` on Windows), so
+  the app and the CLI saving at the same moment no longer lose an update.
+- Dates are parsed and formatted with shared formatters instead of new ones each time.
+- The sign-in redirect listener gives each connection 5 seconds in all: a local client sending a
+  byte at a time can no longer hold it.
+- An `az` that times out is ended with everything it started (its process group; the process tree
+  on Windows): a Python child holding the output open could keep Pimento waiting past 90 seconds.
+- Sign Out All also removes Keychain items whose account info cannot be read.
+- `pimento deactivate`, `renew` and `extend` name the auth source's default tenant ("your sign-in
+  tenant" with Pimento sign-in) instead of always "az's default tenant".
+- A browser sign-in whose id token lacks the nonce is refused (before, only a different nonce was).
+- `pimento tenants` with no tenants exits 0 in the table too (with a note on stderr), as it did with
+  `--json`.
+- CI and release workflows pin third-party actions to commit SHAs; tests clean up their temporary
+  files.
 
 ## [0.1.0] - 2026-10-29
 
