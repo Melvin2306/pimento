@@ -118,9 +118,9 @@ struct MCPWritePlan: Sendable {
 
     /// What the user confirms, without request ids or times: the same plan
     /// made again a minute later has the same fingerprint, a different one
-    /// (another role, duration, ticket or justification) does not.
+    /// (another account, role, duration, ticket or justification) does not.
     var fingerprint: String {
-        var lines: [String] = [kind.rawValue, tenantId?.lowercased() ?? "", justification, ticket?.label ?? ""]
+        var lines: [String] = [kind.rawValue, tenantId?.lowercased() ?? "", user.objectId.lowercased(), justification, ticket?.label ?? ""]
         var items: [String] = []
         for p in activations { items.append("a|\(p.role.policyKey.scope)|\(p.role.policyKey.role)|\(p.duration.minutes)") }
         for p in deactivations { items.append("d|\(p.role.policyKey.scope)|\(p.role.policyKey.role)") }
@@ -351,7 +351,15 @@ public struct MCPToolbox: Sendable {
     }
 
     func listTenants(_ config: MCPConfiguration) async throws -> MCPToolResult {
-        let tenants = try await backend.tenants(config.tenant ?? backend.resolveTenant(nil))
+        var tenants = try await backend.tenants(config.tenant ?? backend.resolveTenant(nil))
+        // A pinned server names only its own tenant: by the GUID its token
+        // has, else by the GUID or default domain it was pinned with.
+        if let pinned = config.tenant {
+            let id = await pinnedTenantId(pinned) ?? pinned
+            tenants = tenants.filter {
+                $0.id.caseInsensitiveCompare(id) == .orderedSame || $0.defaultDomain?.caseInsensitiveCompare(pinned) == .orderedSame
+            }
+        }
         let list: [JSONValue] = tenants.map { t in
             var o: [String: JSONValue] = ["id": .string(t.id)]
             if let n = t.displayName { o["displayName"] = .string(n) }
@@ -537,6 +545,23 @@ extension MCPToolbox {
         return TicketInfo.make(number: number, system: system ?? (number != nil ? preset?.trimmedTicketSystem : nil))
     }
 
+    /// The roles a keep-alive preset covers: the Pimento app renews those
+    /// during working hours, beyond the duration in the confirmation, with
+    /// this activation's justification (roles kept alive one by one in the
+    /// app are not known here).
+    static func keepAliveNotes(_ roles: [EligibleRole], presets: [Preset]) -> [String] {
+        let rules = KeepAliveRule.resolve(perRole: [], presets: presets, roles: roles)
+        var byPreset: [String: [EligibleRole]] = [:]
+        for role in roles {
+            if let preset = rules[ReminderRole.key(role.policyKey)]?.preset { byPreset[preset, default: []].append(role) }
+        }
+        return byPreset.keys.sorted().map { preset in
+            let names = byPreset[preset]!.map { "\($0.roleName) on \($0.scopeName)" }.joined(separator: ", ")
+            return "\(names) \(byPreset[preset]!.count == 1 ? "is" : "are") kept alive by the preset “\(preset)”: the Pimento app renews "
+                + "\(byPreset[preset]!.count == 1 ? "it" : "them") during working hours, beyond this duration, with this justification."
+        }
+    }
+
     func privilegeRefusal(_ roles: [EligibleRole], _ config: MCPConfiguration, verb: String) -> MCPToolResult? {
         let privileged = roles.filter(Self.isPrivileged)
         guard !privileged.isEmpty, !config.allowPrivileged else { return nil }
@@ -612,6 +637,10 @@ extension MCPToolbox {
                 let s = renewal.selection
                 plan.leftOut = (s.tooSoon + s.needsApproval + s.policyUnknown + s.needsTicket).map { ($0, renewal.outcomes[$0.id], "") }
                     + s.inactive.map { ($0, nil, "not active") }
+            }
+            if plan.kind != .deactivate {
+                let presets = (try? backend.presets.load())?.presets(forTenant: tenantId) ?? []
+                plan.notes += Self.keepAliveNotes(plan.roles, presets: presets)
             }
             return .success(plan)
         } catch {

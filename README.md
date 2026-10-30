@@ -1253,7 +1253,7 @@ Leave out `--allow-activate` for a read-only server. Desktop apps often do not s
 
 | Tool | What it does |
 | --- | --- |
-| `list_tenants` | Tenants your sign-in can reach |
+| `list_tenants` | Tenants your sign-in can reach (with `--tenant`, only that one) |
 | `list_eligible_roles` | Your eligible roles (filter by resource, role, active/eligible), whether each is active and until when, and its policy: maximum duration, approval, ticket, justification, MFA; `highPrivilege` marks Owner and the access administrator roles |
 | `list_active_roles` | Active roles, soonest-expiring first, with the minutes left |
 | `list_presets` | Your saved presets |
@@ -1302,10 +1302,11 @@ approval*, the failed policy rule, …) goes back to the agent and into the hist
   CLI's read-only commands use.
 - **You confirm every write.** With `--allow-activate`, each activation, deactivation and renewal
   is planned first (read-only), shown to you through MCP *elicitation* (a form in the client: the
-  roles, their scopes by name and full ARM path, durations, the agent's justification and ticket, warnings), and sent only when you
+  roles, their scopes by name and full ARM path, durations, the agent's justification and ticket, warnings, and which roles
+  a keep-alive preset will renew beyond that duration), and sent only when you
   accept with the box ticked. Declining, dismissing, an unticked box, no answer within 10 minutes,
   or the end of the session sends nothing. Before sending, Pimento plans again from fresh data and
-  sends only if the plan is still exactly what you confirmed. On the stateless protocol revision the
+  sends only if the plan is still exactly what you confirmed (also for the same signed-in account). On the stateless protocol revision the
   confirmation is a random, single-use handle that expires after 10 minutes and is bound to the tool
   and its exact arguments; a client cannot forge or replay it.
 - **Clients that cannot ask you.** If the client does not support elicitation, the server refuses to

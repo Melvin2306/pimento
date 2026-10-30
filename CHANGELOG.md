@@ -107,6 +107,12 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- `pimento mcp --tenant`: `list_tenants` lists only the pinned tenant, as the other tools work only
+  there. Error messages shown to the agent now redact a whole file path even when a folder name
+  has spaces (`Application Support`, a user name), not only up to the first space. A confirmation
+  is bound to the signed-in account too, so one given before a switch of account is not used
+  after it. The confirmation names the roles that a keep-alive preset will renew beyond the
+  duration shown. The server no longer keeps finished requests until the end of the session.
 - Keep alive: switching tenant or account while a pass waited for Azure no longer lets that pass
   write the previous session's state (ends, continuations, justifications) back into the new one,
   where the next pass could withdraw the old session's continuations with the new token or reuse

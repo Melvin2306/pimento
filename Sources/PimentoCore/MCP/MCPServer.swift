@@ -89,7 +89,8 @@ public final class MCPServer: @unchecked Sendable {
     /// `run(lines:)` for a reader that refuses overlong lines itself
     /// (`MCPLineReader`), so that they are never held in full.
     public func run(input: AsyncStream<MCPInputLine>) async {
-        await withTaskGroup(of: Void.self) { group in
+        // Discarding: a finished request leaves nothing behind for the session's life.
+        await withDiscardingTaskGroup { group in
             for await item in input {
                 guard case .line(let line) = item else {
                     send(["jsonrpc": "2.0", "id": .null, "error": RPCError(code: MCP.Code.invalidRequest, message: "Message too large").json])
@@ -106,7 +107,7 @@ public final class MCPServer: @unchecked Sendable {
             // End of input: nobody can answer a confirmation any more.
             lock.withLock { finished = true }
             for (_, continuation) in takeAllOutgoing() { continuation.resume(returning: nil) }
-            await group.waitForAll()
+            // The group waits for the requests in flight before it returns.
         }
     }
 
@@ -161,6 +162,10 @@ public final class MCPServer: @unchecked Sendable {
             notification(method, params)
             return nil
         }
+        // Started and registered under the lock: a request that finishes at
+        // once cannot remove itself from `inFlight` before it is added.
+        lock.lock()
+        defer { lock.unlock() }
         let task = Task { [self] in
             let outcome: Result<JSONValue, RPCError>
             do { outcome = .success(try await request(method, params, id: id)) } catch let e as RPCError {
@@ -179,9 +184,12 @@ public final class MCPServer: @unchecked Sendable {
             case .failure(let e): respond(id, error: e)
             }
         }
-        lock.withLock { inFlight[id] = task }
+        inFlight[id] = task
         return task
     }
+
+    /// Requests started and not finished (for tests).
+    var requestsInFlight: Int { lock.withLock { inFlight.count } }
 
     static func isValidId(_ id: JSONValue) -> Bool {
         switch id {

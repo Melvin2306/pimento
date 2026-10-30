@@ -212,15 +212,27 @@ enum MCPText {
         return out
     }
 
-    static let redactions: [(String, String)] = [
-        // JWTs (access and ID tokens) and bearer values.
-        (#"eyJ[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]*"#, "<token>"),
-        (#"(?i)bearer\s+[A-Za-z0-9._~+/=-]{8,}"#, "Bearer <token>"),
-        // POSIX paths under the usual roots, and ~/…
-        (#"(?:~|\$HOME|(?<![A-Za-z0-9_.-])/(?:Users|home|private|var|tmp|opt|usr|etc|Library|Applications|Volumes|root|mnt|run|snap|nix|System))(?:/[^\s'"“”‘’`,;:()<>\[\]{}]*)+"#, "<path>"),
-        // Windows paths: C:\…, \\server\share\…, %APPDATA%\…
-        (#"(?:[A-Za-z]:\\|\\\\[A-Za-z0-9._-]+\\|%[A-Za-z_]+%\\?)[^\s'"“”‘’`,;()<>\[\]{}]*"#, "<path>"),
-    ]
+    static let redactions: [(String, String)] = {
+        // One path component. A folder name may contain spaces (Application
+        // Support, a user "Alex Smith"); the last component may not, so the
+        // words after a path stay.
+        func component(_ separator: String, _ stop: String) -> String {
+            let c = "[^\(separator)\\s\(stop)]"
+            return "(?:\(c)+(?: \(c)+)+(?=\(separator))|\(c)*)"
+        }
+        let posix = component("/", #"'"“”‘’`,;:()<>\[\]{}"#)
+        let windows = component(#"\\"#, #"'"“”‘’`,;()<>\[\]{}"#)
+        return [
+            // JWTs (access and ID tokens) and bearer values.
+            (#"eyJ[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]*"#, "<token>"),
+            (#"(?i)bearer\s+[A-Za-z0-9._~+/=-]{8,}"#, "Bearer <token>"),
+            // POSIX paths under the usual roots, and ~/…
+            (#"(?:~|\$HOME|(?<![A-Za-z0-9_.-])/(?:Users|home|private|var|tmp|opt|usr|etc|Library|Applications|Volumes|root|mnt|run|snap|nix|System))"#
+                + "(?:/\(posix))+", "<path>"),
+            // Windows paths: C:\…, \\server\share\…, %APPDATA%\…
+            (#"(?:[A-Za-z]:\\|\\\\[A-Za-z0-9._-]+\\|%[A-Za-z_]+%\\?)"# + windows + #"(?:\\"# + windows + ")*", "<path>"),
+        ]
+    }()
 
     /// `redact` applied to every string in `value`.
     static func redact(_ value: JSONValue) -> JSONValue {

@@ -182,6 +182,12 @@ struct MCPJSONTests {
         #expect(!s.contains("abcdefghijklmnop"))
         #expect(s.contains("/subscriptions/0000/resourceGroups/rg"))
     }
+
+    @Test func redactsPathsWithSpacesButKeepsTheWordsAfterThem() {
+        let s = MCPText.redact("open /home/Alex Smith/Library/Application Support/Pimento/presets.json failed: "
+            + "C:\\Users\\Jane Wilber\\AppData\\Roaming\\Pimento\\presets.json missing; /tmp/a b")
+        #expect(s == "open <path> failed: <path> missing; <path> b", "\(s)")
+    }
 }
 
 // MARK: - Lifecycle
@@ -304,6 +310,27 @@ struct MCPLifecycleTests {
         h.call(6, "list_tenants", [:])
         #expect(try await h.next().toolText.contains("Fabrikam"))
         #expect(h.methods.writes == 0)
+        await h.finish()
+    }
+
+    @Test func aPinnedServerListsOnlyItsTenant() async throws {
+        for pin in [DemoDirectory.fabrikam.id, "FABRIKAM.example"] {
+            let h = try MCPHarness(MCPConfiguration(tenant: pin))
+            _ = try await h.initialize()
+            h.call(1, "list_tenants", [:])
+            let r = try await h.next()
+            let ids = (r["result"]?["structuredContent"]?["tenants"]?.arrayValue ?? []).compactMap { $0["id"]?.stringValue }
+            #expect(ids == [DemoDirectory.fabrikam.id], "\(pin): \(r.toolText)")
+            await h.finish()
+        }
+    }
+
+    @Test func finishedRequestsAreNotKept() async throws {
+        let h = try MCPHarness()
+        _ = try await h.initialize()
+        for id in 1...200 { h.send(["jsonrpc": "2.0", "id": .int(id), "method": "ping"]) }
+        for _ in 1...200 { _ = try await h.next() }
+        #expect(h.server.requestsInFlight == 0)
         await h.finish()
     }
 
@@ -876,6 +903,27 @@ struct MCPConfirmationTests {
         #expect(MCPText.clip("a\u{FE0F}", 40) == "a\\u{FE0F}")
         #expect(MCPText.clip("⚠️ 1️⃣", 40) == "⚠️ 1️⃣")
         #expect(MCPText.clip("नमस्ते", 40) == "नमस्ते")
+    }
+
+    @Test func aConfirmationIsBoundToTheAccount() {
+        func plan(_ objectId: String) -> MCPWritePlan {
+            MCPWritePlan(kind: .activate, tenantArgument: nil, tenantId: "t", user: Identity(objectId: objectId, name: nil, upn: nil, tenantId: "t"),
+                         justification: "x", ticket: nil, requested: .hours(1), preset: nil)
+        }
+        #expect(plan("a").fingerprint == plan("A").fingerprint)
+        #expect(plan("a").fingerprint != plan("b").fingerprint)
+    }
+
+    @Test func theConfirmationSaysWhichRolesAKeepAlivePresetRenews() throws {
+        let reader = try Fixture.role("Contoso Production", "Reader")
+        let staging = try Fixture.role("Contoso Staging", "Contributor")
+        var kept = Preset(name: "On-call", tenantId: nil, roles: [PresetRole(reader)])
+        kept.keepAlive = true
+        let notKept = Preset(name: "Other", tenantId: nil, roles: [PresetRole(staging)])
+        let notes = MCPToolbox.keepAliveNotes([reader, staging], presets: [kept, notKept])
+        #expect(notes.count == 1)
+        #expect(notes.first?.contains("Reader on Contoso Production is kept alive by the preset “On-call”") == true, "\(notes)")
+        #expect(MCPToolbox.keepAliveNotes([staging], presets: [kept, notKept]).isEmpty)
     }
 
     @Test func aWriteCancelledWhileQueuedIsNotSent() async throws {
