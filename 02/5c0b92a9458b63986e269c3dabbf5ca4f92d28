@@ -1,0 +1,27 @@
+CHANGELOG.md
+  s_4884204a812fec::t_e89fa2f523789b 126-129
+integrations/raycast/src/components.tsx
+  s_4884204a812fec::t_11350f5d8ec9ed 24
+integrations/raycast/src/lib/pimento.ts
+  s_4884204a812fec::t_0fd6e446f1cb8f 389-433
+integrations/raycast/src/presets.tsx
+  s_4884204a812fec::t_48c8a1b34d4645 3,6-7,9,66-76
+integrations/raycast/test/pimento.test.mts
+  s_4884204a812fec::t_e095d707e1ebe5 8,29,80-107
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "025c0b92a9458b63986e269c3dabbf5ca4f92d28",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
