@@ -529,6 +529,42 @@ struct TokenBrokerTests {
         #expect(await transport.requests.count == 1)
     }
 
+    /// A nonce was sent: an id token without one (or no id token) is refused.
+    @Test func aSentNonceMustComeBack() async throws {
+        let (broker, _, store) = broker { _ in (Data(), 500) }
+        func response(_ body: Data) throws -> TokenResponse { try #require(TokenResponse.parse(body)) }
+        await #expect(throws: SignInError.nonceMismatch) {
+            _ = try await broker.complete(try response(tokenAnswer(nonce: nil)), clientId: testClientId, nonce: "n-1")
+        }
+        var withoutIdToken = try #require(try JSONSerialization.jsonObject(with: tokenAnswer(nonce: "n-1")) as? [String: Any])
+        withoutIdToken["id_token"] = nil
+        await #expect(throws: SignInError.nonceMismatch) {
+            _ = try await broker.complete(try response(try JSONSerialization.data(withJSONObject: withoutIdToken)), clientId: testClientId, nonce: "n-1")
+        }
+        await #expect(throws: SignInError.nonceMismatch) {
+            _ = try await broker.complete(try response(tokenAnswer(nonce: "n-2")), clientId: testClientId, nonce: "n-1")
+        }
+        #expect(try store.accounts().isEmpty)
+        // The right nonce, or none asked for (device code): saved.
+        _ = try await broker.complete(try response(tokenAnswer(nonce: "n-1")), clientId: testClientId, nonce: "n-1")
+        _ = try await broker.complete(try response(tokenAnswer(nonce: nil)), clientId: testClientId, nonce: nil)
+        #expect(try store.accounts().count == 1)
+    }
+
+    @Test(.enabled(if: LoopbackListener.isSupported, "no loopback listener on Windows"))
+    func browserSignInRejectsAMissingNonce() async throws {
+        let (broker, _, store) = broker { _ in (tokenAnswer(nonce: nil), 200) }
+        await #expect(throws: SignInError.nonceMismatch) {
+            _ = try await broker.signInWithBrowser(clientId: testClientId, timeout: 10) { url in
+                let q = query(url)
+                let port = UInt16(URL(string: q["redirect_uri"]!)!.port!)
+                DispatchQueue.global().async { browse(port: port, "/?code=c&state=\(q["state"]!)") }
+                return true
+            }
+        }
+        #expect(try store.accounts().isEmpty)
+    }
+
     @Test(.enabled(if: LoopbackListener.isSupported, "no loopback listener on Windows"))
     func browserSignInRejectsAForeignNonce() async throws {
         let (broker, _, store) = broker { _ in (tokenAnswer(nonce: "someone-else"), 200) }

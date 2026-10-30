@@ -2,8 +2,9 @@ import Foundation
 import Testing
 @testable import PimentoCore
 
-/// A fake token endpoint for the CLI: device code, then tokens; refreshes for any tenant.
-func fakeLogin(pendingPolls: Int = 1) -> RecordingTransport {
+/// A fake token endpoint for the CLI: device code, then tokens; refreshes for
+/// any tenant. `nonce`: what the id token echoes (the browser sign-in's).
+func fakeLogin(pendingPolls: Int = 1, nonce: @escaping @Sendable () -> String? = { nil }) -> RecordingTransport {
     let polls = TestBox<Int>(0)
     return RecordingTransport { request in
         if request.url!.path.hasSuffix("/devicecode") {
@@ -14,7 +15,8 @@ func fakeLogin(pendingPolls: Int = 1) -> RecordingTransport {
             polls.value = (polls.value ?? 0) + 1
             if polls.value! <= pendingPolls { return (oauthError("authorization_pending"), 400) }
         }
-        return (tokenAnswer(tenant: request.url!.pathComponents[1] == "organizations" ? homeTenant : request.url!.pathComponents[1]), 200)
+        return (tokenAnswer(tenant: request.url!.pathComponents[1] == "organizations" ? homeTenant : request.url!.pathComponents[1],
+                            nonce: nonce()), 200)
     }
 }
 
@@ -169,10 +171,10 @@ struct CLIAuthTests {
     @Test(.enabled(if: LoopbackListener.isSupported, "no loopback listener on Windows"))
     func loginWithTheBrowserPassesASavedClaimsChallenge() async throws {
         let h = CLIHarness()
-        h.signInTransport = fakeLogin()
+        let opened = TestBox<URL>()
+        h.signInTransport = fakeLogin { opened.value.flatMap { query($0)["nonce"] } }
         let challenge = #"{"access_token":{"acrs":{"essential":true,"value":"c1"}}}"#
         try h.authSettings.save(AuthSettings(clientId: testClientId, claimsChallenge: challenge))
-        let opened = TestBox<URL>()
         h.openURL = { url in
             opened.value = url
             let q = query(url)

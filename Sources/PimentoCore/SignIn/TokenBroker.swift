@@ -117,11 +117,14 @@ public actor TokenBroker {
 
     // MARK: Signing in
 
-    /// Saves the account of a fresh sign-in (checking the id token's nonce)
-    /// and caches its access token.
+    /// Saves the account of a fresh sign-in and caches its access token.
+    /// When a `nonce` was sent, the id token must carry exactly that nonce:
+    /// one without an id token or without a nonce is refused too.
     func complete(_ response: TokenResponse, clientId: String, nonce: String?) throws -> SignedInAccount {
         let id = response.idToken.flatMap(IDTokenClaims.init(token:))
-        if let nonce, let echoed = id?.nonce, echoed != nonce { throw SignInError.nonceMismatch }
+        if let nonce {
+            guard let echoed = id?.nonce, LoopbackRequest.constantTimeEqual(echoed, nonce) else { throw SignInError.nonceMismatch }
+        }
         let access = JWT.identity(fromToken: response.accessToken)
         guard let objectId = response.homeAccount?.objectId ?? id?.objectId ?? access?.objectId.lowercased(),
               let signInTenant = id?.tenantId ?? access?.tenantId?.lowercased() else {
