@@ -68,11 +68,14 @@ function Install-Pimento {
     $Completion = Join-Path $InstallDir 'completions\pimento.ps1'
     $BlockStart = '# >>> pimento completions (install.ps1 -Uninstall removes this block) >>>'
     $BlockEnd = '# <<< pimento completions <<<'
-    $BlockPattern = '(?m)^# >>> pimento completions\b[^\r\n]*(?:\r?\n)(?s:.*?)^# <<< pimento completions\b[^\r\n]*(?:\r?\n)?'
+    # Line by line, never across another start marker: a start whose end was
+    # deleted by hand is left alone, not taken with the lines after it.
+    $BlockPattern = '(?m)^# >>> pimento completions\b[^\r\n]*\r?\n(?:(?!# >>> pimento completions\b)[^\r\n]*\r?\n)*?# <<< pimento completions\b[^\r\n]*(?:\r?\n)?'
 
     # The profiles to add the block to (one) and to remove it from (all of yours).
     function Get-ProfileTargets([bool]$All) {
-        if ($ProfilePath) { return @([IO.Path]::GetFullPath($ProfilePath)) }
+        # Against PowerShell's current location, not the process's directory.
+        if ($ProfilePath) { return @($ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($ProfilePath)) }
         $docs = [Environment]::GetFolderPath('MyDocuments')
         $edition = 'WindowsPowerShell'
         if ($PSVersionTable.PSEdition -eq 'Core') { $edition = 'PowerShell' }

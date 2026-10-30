@@ -177,14 +177,33 @@ try {
     if ($r.Code -ne 0) { Write-Host $r.Out; throw 'uninstall after -NoCompletions failed' }
     Write-Host 'ok: -NoCompletions leaves the profile alone'
 
+    # A start marker whose end marker was deleted by hand: the install adds a
+    # whole block after it, and uninstall removes only that block, never the
+    # profile's own lines after the orphaned marker (nor the profile).
+    $orphan = Join-Path $work 'orphan\profile.ps1'
+    New-Item -ItemType Directory -Path (Split-Path $orphan) -Force | Out-Null
+    $orphanText = "# >>> pimento completions (install.ps1 -Uninstall removes this block) >>>`r`n" +
+        "`$pimentoCompletion = 'old'`r`nSet-Alias ll Get-ChildItem`r`n"
+    [IO.File]::WriteAllText($orphan, $orphanText, (New-Object Text.UTF8Encoding $false))
+    $r = Invoke-Installer 'pwsh' @('-From', $dist, '-InstallDir', $dir, '-ProfilePath', $orphan)
+    if ($r.Code -ne 0) { Write-Host $r.Out; throw 'install next to an orphaned marker failed' }
+    $r = Invoke-Installer 'pwsh' @('-InstallDir', $dir, '-Uninstall', '-ProfilePath', $orphan)
+    if ($r.Code -ne 0) { Write-Host $r.Out; throw 'uninstall next to an orphaned marker failed' }
+    if (-not (Test-Path -LiteralPath $orphan)) { throw 'uninstall deleted a profile with lines of its own' }
+    if ([IO.File]::ReadAllText($orphan) -ne $orphanText) { throw "uninstall changed the profile's own lines after an orphaned marker" }
+    Write-Host 'ok: an orphaned start marker keeps the lines after it'
+
     # As `irm ... | iex` runs it: the script text through Invoke-Expression, options from the environment.
-    # A profile that does not exist yet is created, and removed again on uninstall.
+    # A profile that does not exist yet is created, and removed again on uninstall. Its path is
+    # relative, to PowerShell's location, which is not the process's current directory.
+    $installer = Get-Content -Raw scripts/install.ps1
     $freshProfile = Join-Path $work 'fresh\profile.ps1'
     $env:PIMENTO_FROM = $dist
     $env:PIMENTO_INSTALL_DIR = $dir
     $env:PIMENTO_VERSION = $appVersion
-    $env:PIMENTO_PROFILE = $freshProfile
-    Get-Content -Raw scripts/install.ps1 | Invoke-Expression
+    $env:PIMENTO_PROFILE = 'fresh\profile.ps1'
+    Push-Location $work
+    try { $installer | Invoke-Expression } finally { Pop-Location }
     if ((& (Join-Path $dir 'pimento.exe') version) -ne "pimento $appVersion") { throw 'iex install failed' }
     if ($ErrorActionPreference -ne 'Stop') { throw 'iex changed the session' }
     if (-not (Select-String -LiteralPath $freshProfile -Pattern '^# >>> pimento completions' -Quiet)) { throw 'iex install wrote no profile' }
@@ -204,7 +223,8 @@ try {
     Write-Host 'ok: tampered zip refused'
 
     $env:PIMENTO_UNINSTALL = '1'
-    Get-Content -Raw scripts/install.ps1 | Invoke-Expression
+    Push-Location $work
+    try { $installer | Invoke-Expression } finally { Pop-Location }
     $env:PIMENTO_UNINSTALL = $null
     if (Test-Path $dir) { throw 'iex uninstall left the folder' }
     if (Test-Path $freshProfile) { throw 'iex uninstall left the profile it created' }
