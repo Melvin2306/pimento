@@ -112,6 +112,8 @@ public struct HistorySource: RawRepresentable, Hashable, Codable, Sendable {
 
     public static let app = HistorySource(rawValue: "app")
     public static let cli = HistorySource(rawValue: "cli")
+    /// An AI agent through `pimento mcp` (after the user confirmed).
+    public static let mcp = HistorySource(rawValue: "mcp")
     /// Read from Azure (`pimento history import-azure`, Import from Azure).
     public static let azure = HistorySource(rawValue: "azure")
 
@@ -119,6 +121,7 @@ public struct HistorySource: RawRepresentable, Hashable, Codable, Sendable {
         switch self {
         case .app: "App"
         case .cli: "CLI"
+        case .mcp: "MCP"
         case .azure: "Azure"
         default: rawValue
         }

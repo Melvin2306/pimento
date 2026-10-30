@@ -29,6 +29,7 @@ public enum CLIHelp {
         case "login": login
         case "logout": logout
         case "whoami": whoami
+        case "mcp": mcp
         case "version": "Usage: pimento version\n\nPrints the version."
         case "help": "Usage: pimento help [COMMAND]\n\nShows help for a command."
         default: main
@@ -60,6 +61,7 @@ public enum CLIHelp {
       login        Sign in without the Azure CLI (browser, or --device-code)
       logout       Forget Pimento's sign-in
       whoami       Show the auth source and who you are signed in as
+      mcp          Serve your roles to AI agents (Model Context Protocol, stdio)
       completions  Print a completion script for zsh, bash or fish
       version      Print the version
       help         Show help for a command
@@ -548,6 +550,39 @@ public enum CLIHelp {
     Exit 3 when the source has no valid sign-in.
     """
 
+    static let mcp = """
+    Usage: pimento mcp [--allow-activate [--allow-privileged] [--no-confirm]] [--tenant ID]
+
+    A Model Context Protocol server on stdin/stdout, for AI agents (Claude Code,
+    Claude Desktop, Cursor, …). An MCP client starts it; it is not meant to be
+    run by hand. Read-only by default: tenants, eligible and active roles with
+    their policies, presets, requests awaiting approval, and the history.
+
+    Options:
+          --allow-activate    Also offer activate_roles, deactivate_roles and renew_roles.
+                              Each call is shown to you and sent only after you confirm
+                              it in the client (MCP elicitation).
+          --allow-privileged  Also activate or renew Owner, User Access Administrator and
+                              Role Based Access Control Administrator (refused otherwise).
+          --no-confirm        When the client cannot ask you (no elicitation support),
+                              write anyway and rely on the client's own tool approval.
+                              Without it such clients cannot change roles. Clients that
+                              can ask always ask.
+      -t, --tenant ID         The only tenant tool calls may use ($\(mcpTenantVariable)).
+          --demo              The offline demo (Contoso), to try it without Azure.
+
+    Durations are capped at each role's policy maximum, a justification is
+    required, and every write is recorded in the history (source `mcp`).
+    Tokens and file paths never appear in tool results. Logs go to stderr.
+
+    Claude Code:  claude mcp add pimento -- pimento mcp
+    See README › AI agents (MCP) for other clients and the safety model.
+    """
+
+    /// `PIMENTO_MCP_TENANT`: the same as `pimento mcp --tenant`, for client
+    /// configurations that set environment variables more easily than arguments.
+    static let mcpTenantVariable = "PIMENTO_MCP_TENANT"
+
     static let completions = """
     Usage: pimento completions zsh|bash|fish
 
@@ -594,6 +629,7 @@ public enum CLIHelp {
         'login:Sign in without the Azure CLI'
         'logout:Forget Pimento sign-in'
         'whoami:Show the auth source and who you are signed in as'
+        'mcp:Serve your roles to AI agents (MCP over stdio)'
         'completions:Print a completion script'
         'version:Print the version'
         'help:Show help for a command'
@@ -698,8 +734,13 @@ public enum CLIHelp {
                 '--client-id[Application (client) ID]:client id: ' ;;
             logout) _arguments -s $common '--all[Every account]' ;;
             whoami) _arguments -s $common ;;
+            mcp)
+              _arguments -s $common \
+                '--allow-activate[Offer the activate, deactivate and renew tools]' \
+                '--allow-privileged[Allow Owner and access administrator roles]' \
+                '--no-confirm[Write without elicitation when the client cannot ask]' ;;
             completions) _arguments '1:shell:(zsh bash fish)' ;;
-            help) _arguments '1:command:(list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets history login logout whoami completions version)' ;;
+            help) _arguments '1:command:(list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets history login logout whoami mcp completions version)' ;;
           esac ;;
       esac
     }
@@ -719,7 +760,7 @@ public enum CLIHelp {
       prev="${COMP_WORDS[COMP_CWORD-1]}"
       cmd="${COMP_WORDS[1]}"
       if [[ $COMP_CWORD -eq 1 ]]; then
-        COMPREPLY=($(compgen -W "list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets history login logout whoami completions version help" -- "$cur"))
+        COMPREPLY=($(compgen -W "list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets history login logout whoami mcp completions version help" -- "$cur"))
         return
       fi
       case "$prev" in
@@ -752,8 +793,9 @@ public enum CLIHelp {
         login) opts="--tenant --json --auth --device-code --client-id --help" ;;
         logout) opts="--all --json --help" ;;
         whoami) opts="--tenant --json --auth --help" ;;
+        mcp) opts="--tenant --allow-activate --allow-privileged --no-confirm --help" ;;
         completions) opts="zsh bash fish" ;;
-        help) opts="list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets history login logout whoami completions version" ;;
+        help) opts="list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets history login logout whoami mcp completions version" ;;
         *) opts="" ;;
       esac
       [[ "$cmd" != completions && "$cmd" != help && "$cmd" != logout ]] && opts="$opts --auth"
@@ -785,6 +827,7 @@ public enum CLIHelp {
     complete -c pimento -n __fish_use_subcommand -a login -d 'Sign in without the Azure CLI'
     complete -c pimento -n __fish_use_subcommand -a logout -d 'Forget Pimento sign-in'
     complete -c pimento -n __fish_use_subcommand -a whoami -d 'Show the auth source and who you are signed in as'
+    complete -c pimento -n __fish_use_subcommand -a mcp -d 'Serve your roles to AI agents (MCP over stdio)'
     complete -c pimento -n __fish_use_subcommand -a completions -d 'Print a completion script'
     complete -c pimento -n __fish_use_subcommand -a version -d 'Print the version'
     complete -c pimento -n __fish_use_subcommand -a help -d 'Show help for a command'
@@ -820,14 +863,18 @@ public enum CLIHelp {
     complete -c pimento -n '__fish_seen_subcommand_from history' -s n -l limit -x -d 'At most N records'
     complete -c pimento -n '__fish_seen_subcommand_from history' -l csv -d 'CSV on stdout'
     complete -c pimento -n '__fish_seen_subcommand_from history' -s y -l yes -d 'Do not ask (clear)'
-    complete -c pimento -n '__fish_seen_subcommand_from list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets history login whoami' -l auth -x -a 'az pimento' -d 'Auth source'
+    complete -c pimento -n '__fish_seen_subcommand_from list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets history login whoami mcp' -l auth -x -a 'az pimento' -d 'Auth source'
     complete -c pimento -l demo -d 'Demo mode: simulated Azure, synthetic data'
     complete -c pimento -n '__fish_seen_subcommand_from login whoami' -s t -l tenant -r -d 'Tenant GUID or domain'
     complete -c pimento -n '__fish_seen_subcommand_from login logout whoami' -l json -d 'Machine-readable output'
     complete -c pimento -n '__fish_seen_subcommand_from login' -l device-code -d 'Sign in with a code on another device'
     complete -c pimento -n '__fish_seen_subcommand_from login' -l client-id -r -d 'Application (client) ID'
     complete -c pimento -n '__fish_seen_subcommand_from logout' -l all -d 'Every account'
+    complete -c pimento -n '__fish_seen_subcommand_from mcp' -s t -l tenant -r -d 'The only tenant tool calls may use'
+    complete -c pimento -n '__fish_seen_subcommand_from mcp' -l allow-activate -d 'Offer the activate, deactivate and renew tools'
+    complete -c pimento -n '__fish_seen_subcommand_from mcp' -l allow-privileged -d 'Allow Owner and access administrator roles'
+    complete -c pimento -n '__fish_seen_subcommand_from mcp' -l no-confirm -d 'Write without elicitation when the client cannot ask'
     complete -c pimento -n '__fish_seen_subcommand_from completions' -a 'zsh bash fish'
-    complete -c pimento -n '__fish_seen_subcommand_from help' -a 'list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets history login logout whoami completions version'
+    complete -c pimento -n '__fish_seen_subcommand_from help' -a 'list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets history login logout whoami mcp completions version'
     """#
 }

@@ -320,6 +320,16 @@ public struct WhoamiOptions: Equatable, Sendable {
     public init() {}
 }
 
+/// `pimento mcp`: a Model Context Protocol server on stdin/stdout.
+public struct MCPOptions: Equatable, Sendable {
+    /// The only tenant tool calls may use.
+    public var tenant: String?
+    public var allowActivate = false
+    public var allowPrivileged = false
+    public var noConfirm = false
+    public init() {}
+}
+
 public enum CompletionShell: String, CaseIterable, Sendable {
     case zsh, bash, fish
 }
@@ -347,6 +357,7 @@ public enum CLICommand: Equatable, Sendable {
     case login(LoginOptions)
     case logout(LogoutOptions)
     case whoami(WhoamiOptions)
+    case mcp(MCPOptions)
 
     /// Whether the command needs an access token (and so the auth source).
     /// The others work offline, also with a broken `--auth` / $PIMENTO_AUTH:
@@ -362,7 +373,7 @@ public enum CLICommand: Equatable, Sendable {
 
     public static let names = [
         "list", "activate", "deactivate", "renew", "extend", "scheduled", "cancel", "pending", "wait", "approvals", "approve",
-        "deny", "status", "tenants", "presets", "history", "login", "logout", "whoami", "completions", "version", "help",
+        "deny", "status", "tenants", "presets", "history", "login", "logout", "whoami", "mcp", "completions", "version", "help",
     ]
 }
 
@@ -419,6 +430,7 @@ public enum CLIParseError: Error, Equatable, LocalizedError {
     case invalidClientId(String)
     case ticketSystemWithoutTicket
     case emptyFilter(String)
+    case requiresAllowActivate(String)
 
     public var errorDescription: String? {
         switch self {
@@ -471,6 +483,8 @@ public enum CLIParseError: Error, Equatable, LocalizedError {
             "--client-id takes the Application (client) ID GUID of your app registration, got “\(v)”."
         case .emptyFilter(let what):
             "An empty \(what) (only spaces) would match every name; give a resource name, --role NAME or --all."
+        case .requiresAllowActivate(let flag):
+            "\(flag) only applies with --allow-activate (the server is read-only without it)."
         case .ticketSystemWithoutTicket:
             "--ticket-system goes with --ticket NUMBER (--ticket NUMBER --ticket-system NAME)."
         case .clearNeedsConfirmation:
@@ -611,6 +625,12 @@ public enum CLIParser {
     private static let loginFlags = tenant.merging(json) { a, _ in a }.merging([
         "--client-id": Flag(key: "client-id", takesValue: true),
         "--device-code": Flag(key: "device-code", takesValue: false),
+    ]) { a, _ in a }
+
+    private static let mcpFlags = tenant.merging([
+        "--allow-activate": Flag(key: "allow-activate", takesValue: false),
+        "--allow-privileged": Flag(key: "allow-privileged", takesValue: false),
+        "--no-confirm": Flag(key: "no-confirm", takesValue: false),
     ]) { a, _ in a }
 
     private static let logoutFlags = json.merging([
@@ -781,6 +801,19 @@ public enum CLIParser {
             o.tenant = scan.values["tenant"]?.last
             o.json = scan.values["json"] != nil
             return CLIInvocation(.whoami(o))
+        case "mcp":
+            let scan = try scan(rest, command: first, flags: mcpFlags, positionals: false)
+            if scan.help { return CLIInvocation(.help(topic: first)) }
+            var o = MCPOptions()
+            o.tenant = scan.values["tenant"]?.last?.trimmingCharacters(in: .whitespaces)
+            o.allowActivate = scan.values["allow-activate"] != nil
+            o.allowPrivileged = scan.values["allow-privileged"] != nil
+            o.noConfirm = scan.values["no-confirm"] != nil
+            if let t = o.tenant, !TenantResolver.isValid(t) { throw TenantError.invalid(t) }
+            // Both only widen what --allow-activate allows.
+            if !o.allowActivate, o.allowPrivileged { throw CLIParseError.requiresAllowActivate("--allow-privileged") }
+            if !o.allowActivate, o.noConfirm { throw CLIParseError.requiresAllowActivate("--no-confirm") }
+            return CLIInvocation(.mcp(o))
         case "completions":
             if rest.contains("--help") || rest.contains("-h") { return CLIInvocation(.help(topic: first)) }
             guard let name = rest.first else { throw CLIParseError.missingShell }
