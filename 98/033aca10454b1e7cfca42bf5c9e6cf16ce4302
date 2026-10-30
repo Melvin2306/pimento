@@ -1,0 +1,21 @@
+.github/workflows/ci.yml
+  s_4884204a812fec::t_5e71acb7388356 37-62
+Tests/PimentoCoreTests/MCPTests.swift
+  s_4884204a812fec::t_7bd703ae4d4447 187
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "98033aca10454b1e7cfca42bf5c9e6cf16ce4302",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
