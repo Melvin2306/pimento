@@ -767,6 +767,19 @@ struct MCPConfirmationTests {
         #expect(ask["params"]?["message"]?.stringValue?.contains(scope) == true, "\(ask["params"]?["message"]?.stringValue ?? "")")
         await h.finish()
     }
+
+    @Test func invisibleFillerCharactersAreRefused() async throws {
+        let h = try MCPHarness(MCPConfiguration(allowActivate: true))
+        _ = try await h.initialize()
+        for (n, filler) in ["\u{3164}\u{3164}", "\u{115F}", "\u{1160}", "\u{FFA0}", "\u{2800}\u{2800}"].enumerated() {
+            h.call(n + 1, "activate_roles", ["roles": [["role": "Reader", "scope": "Contoso Production"]], "justification": .string(filler)])
+            let r = try await h.next()
+            #expect(r.isToolError)
+            #expect(r.toolText.contains("not allowed"), "\(r.toolText)")
+        }
+        #expect(h.methods.writes == 0)
+        await h.finish()
+    }
 }
 
 extension MCPHarness {

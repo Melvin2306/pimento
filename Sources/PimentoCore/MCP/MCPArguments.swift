@@ -139,13 +139,16 @@ struct MCPArguments: Sendable {
 /// confirmation, to the human.
 enum MCPText {
     /// Characters refused in arguments: C0/C1 controls (line breaks and tabs
-    /// too), DEL, bidi controls, line and paragraph separators, and zero-width
-    /// or other invisible formatting characters that could make a
-    /// confirmation say something other than what it seems to.
+    /// too), DEL, bidi controls, line and paragraph separators, and zero-width,
+    /// blank or other invisible characters that could make a confirmation say
+    /// something other than what it seems to (or a justification look empty).
     static func isForbidden(_ s: Unicode.Scalar) -> Bool {
         if TerminalText.isUnsafe(s) { return true }
         switch s.value {
         case 0x00AD, 0x180E, 0x200B...0x200D, 0x2060...0x2064, 0xFEFF, 0xFFF9...0xFFFB: return true
+        // Letters and symbols that render as nothing: Hangul fillers, the
+        // combining grapheme joiner, Khmer inherent vowels, the blank Braille cell.
+        case 0x034F, 0x115F, 0x1160, 0x17B4, 0x17B5, 0x2800, 0x3164, 0xFFA0: return true
         default: return s.properties.generalCategory == .format || s.properties.generalCategory == .privateUse
         }
     }
