@@ -369,6 +369,12 @@ private struct PresetEditor: View {
                         .accessibilityLabel("Default ticket system")
                 }
                 GridRow {
+                    Text("Keep alive")
+                    Toggle("Renew its roles before they expire, during working hours", isOn: binding(\.keepAlive, false))
+                        .help("While a role of this preset is active, Pimento continues it shortly before it ends "
+                            + "(Settings › Activation › Keep alive). Roles whose policy requires approval are left alone.")
+                }
+                GridRow {
                     Text("Duration")
                     Picker("Duration", selection: binding(\.duration, nil)) {
                         Text("Not set").tag(RequestedDuration?.none)

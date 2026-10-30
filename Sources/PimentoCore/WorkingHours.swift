@@ -63,7 +63,7 @@ public struct WorkingHours: Equatable, Sendable {
     // MARK: Text
 
     /// Monday first, as people read a week.
-    static let weekOrder = [2, 3, 4, 5, 6, 7, 1]
+    public static let weekOrder = [2, 3, 4, 5, 6, 7, 1]
     static let shortNames = [1: "Sun", 2: "Mon", 3: "Tue", 4: "Wed", 5: "Thu", 6: "Fri", 7: "Sat"]
 
     public static func dayName(_ weekday: Int) -> String { shortNames[weekday] ?? "?" }

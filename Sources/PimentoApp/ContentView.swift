@@ -177,6 +177,7 @@ struct ContentView: View {
             .help("What Pimento sent and how it went; export as CSV (⇧⌘H)")
             .accessibilityLabel("History")
             PresetsMenu()
+            KeepAliveMenu()
             Button("Select All Eligible") { model.selectAllEligible() }
                 .help("Check every role that is not active yet, within the current filter (⇧⌘A)")
                 .disabled(model.isActivating || model.roles.isEmpty)
@@ -221,6 +222,7 @@ struct RoleTable: View {
             Button("Renew…\(suffix)") { model.requestRenewal(active) }
                 .disabled(model.isActivating)
         }
+        keepAliveItem(targets)
         if !eligible.isEmpty {
             Button(eligible.allSatisfy(model.isChecked) ? "Deselect" : "Select for Activation") {
                 let on = !eligible.allSatisfy(model.isChecked)
@@ -234,6 +236,21 @@ struct RoleTable: View {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(role.scope, forType: .string)
             }
+        }
+    }
+
+    /// Keep Alive / Stop Keeping Alive; roles that cannot be kept alive say why.
+    @ViewBuilder private func keepAliveItem(_ targets: [EligibleRole]) -> some View {
+        let kept = targets.filter { model.keepAliveRule(for: $0) != nil }
+        let suffix = targets.count > 1 ? " (\(targets.count))" : ""
+        if !targets.isEmpty, kept.count == targets.count {
+            Button("Stop Keeping Alive\(suffix)") { model.setKeepAlive(targets, on: false) }
+        } else if targets.count == 1, let role = targets.first, let why = model.keepAliveImpossible(role) {
+            Button("Keep Alive: Not Possible, \(why)") {}
+                .disabled(true)
+        } else if !targets.isEmpty {
+            Button("Keep Alive\(suffix)") { model.setKeepAlive(targets, on: true) }
+                .help("Renew automatically before it expires, during working hours (Settings › Activation)")
         }
     }
 
@@ -331,7 +348,10 @@ struct RoleTable: View {
 
             TableColumn("Status", value: \.statusSortKey) { role in
                 StatusCell(role: role, checked: model.isChecked(role),
-                           scheduled: model.scheduledRequests(for: role).first, needsTicket: model.requiresTicket(role))
+                           scheduled: model.scheduledRequests(for: role).first, needsTicket: model.requiresTicket(role),
+                           keepAlive: model.keepAliveRule(for: role) == nil ? nil : KeepAliveBadge(
+                               text: model.keepAliveText(for: role), paused: model.prefs.keepAlivePaused,
+                               attention: model.keepAliveStatus(for: role)?.needsAttention == true))
                     .themedCell(checked: model.isChecked(role))
             }
             .width(min: 110, ideal: 150)
@@ -352,6 +372,15 @@ struct RoleTable: View {
     }
 }
 
+/// A kept-alive role's mark in the Status column.
+struct KeepAliveBadge: Equatable {
+    /// `Kept alive: renews at 15:25`.
+    let text: String
+    let paused: Bool
+    /// Excluded, blocked or failing: shown in the warning colour.
+    let attention: Bool
+}
+
 struct StatusCell: View {
     let role: EligibleRole
     var checked = false
@@ -359,6 +388,8 @@ struct StatusCell: View {
     var scheduled: ScheduledRequest?
     /// Its policy requires ticket information.
     var needsTicket = false
+    /// Kept alive (nil: not).
+    var keepAlive: KeepAliveBadge?
     @Environment(\.appTheme) private var theme
     @Environment(\.colorScheme) private var scheme
     @Environment(\.ultraDark) private var ultra
@@ -377,6 +408,12 @@ struct StatusCell: View {
                     .foregroundStyle(secondary)
                     .help(scheduledHelp(scheduled))
                     .accessibilityLabel(scheduledHelp(scheduled))
+            }
+            if let keepAlive {
+                Image(systemName: keepAlive.paused ? "pause.circle" : "arrow.triangle.2.circlepath")
+                    .foregroundStyle(keepAlive.attention ? Color.orange : secondary)
+                    .help(keepAlive.text)
+                    .accessibilityLabel(keepAlive.text)
             }
             if needsTicket && !role.isActive {
                 Label("needs ticket", systemImage: "ticket")

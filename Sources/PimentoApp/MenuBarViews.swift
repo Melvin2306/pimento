@@ -185,6 +185,10 @@ struct MenuBarPanel: View {
                 MenuBarPresetSection(model: model, colors: colors, openApp: actions.openApp)
                 divider(colors)
                 MenuBarLinks(model: model, colors: colors, actions: actions)
+                if !model.keptRoles.isEmpty || model.prefs.keepAlivePaused {
+                    divider(colors)
+                    MenuBarKeepAliveRow(model: model, colors: colors)
+                }
             }
             divider(colors)
             MenuBarFooter(model: model, colors: colors, actions: actions)
@@ -382,6 +386,13 @@ private struct MenuBarRoleRow: View {
                             .foregroundStyle(colors.warning)
                             .help("Owner role")
                             .accessibilityLabel("Owner")
+                    }
+                    if model.keepAliveRule(for: role) != nil {
+                        Image(systemName: model.prefs.keepAlivePaused ? "pause.circle" : "arrow.triangle.2.circlepath")
+                            .font(.caption)
+                            .foregroundStyle(model.keepAliveStatus(for: role)?.needsAttention == true ? colors.warning : colors.secondary)
+                            .help(model.keepAliveText(for: role))
+                            .accessibilityLabel(model.keepAliveText(for: role))
                     }
                 }
                 .lineLimit(1)

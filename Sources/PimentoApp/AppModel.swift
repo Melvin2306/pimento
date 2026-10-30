@@ -114,7 +114,9 @@ final class AppModel {
 
     // Presets, shared with the CLI through the presets file.
     let presetStore = AppRuntime.demo?.workspace.presetStore ?? PresetStore()
-    var presetLibrary = PresetLibrary()
+    var presetLibrary = PresetLibrary() {
+        didSet { if presetLibrary != oldValue { keepAlivePresetsChanged() } }
+    }
     /// The presets file could not be read (or written).
     var presetFileError: String?
     var showSavePresetSheet = false
@@ -243,6 +245,21 @@ final class AppModel {
     var loginItemState: LoginItemState = .disabled
     var loginItemError: String?
 
+    // Keep alive (`AppModel+KeepAlive.swift`).
+    /// Roles kept alive one by one, by tenant (lower-case, or "default"), as role keys.
+    var keepAliveRolesByTenant: [String: Set<String>] = [:]
+    /// How each kept role is kept alive (per role or by a preset), by role key.
+    var keepAliveRules: [String: KeepAliveRule] = [:]
+    /// Where each kept role stands after the last pass, by role key.
+    var keepAliveItems: [String: KeepAlivePlanner.Item] = [:]
+    /// The last pass failed to read (shown in the menu bar and the toolbar menu).
+    var keepAliveError: String?
+    @ObservationIgnored let keepAliveSession = KeepAliveSession()
+    @ObservationIgnored var keepAliveTimer: Timer?
+    @ObservationIgnored var keepAliveRunning = false
+    /// What the last pass saw of the kept roles (key: end), to notice changes after a refresh.
+    @ObservationIgnored var keepAliveSeen: [String: Date] = [:]
+
     struct Banner: Equatable {
         enum Kind { case info, success, error }
         let kind: Kind
@@ -257,6 +274,8 @@ final class AppModel {
         static let recentTickets = "recentTickets"
         static let lastTicketSystem = "lastTicketSystem"
         static let tableColumns = "tableColumns"
+        /// Roles kept alive one by one: `{tenant: [role key]}`.
+        static let keepAliveRoles = "keepAlive.roles"
     }
 
     /// Table columns the Settings window can show or hide.
@@ -299,8 +318,8 @@ final class AppModel {
 
     var authSource: AuthSource { authSelection.source }
 
-    private var service: PIMService
-    private var tenantGeneration = 0
+    private(set) var service: PIMService
+    private(set) var tenantGeneration = 0
 
     /// `tokenStore` / `authSettingsStore` / `signInTransport`: the Keychain,
     /// `auth.json` and the network unless given.
@@ -360,6 +379,7 @@ final class AppModel {
             tokens: AuthContext(selection: selectedAuth, broker: broker, accountId: auth.accountId, azureCLI: Self.azureCLITokens)
                 .tokens(tenantId: selection.tenantId),
             history: recorder)
+        keepAliveRolesByTenant = Self.loadKeepAliveRoles(from: defaults)
         restartAutoRefresh()
         observeClockChanges()
         scheduleAppearanceChange(after: AppClock.now())
@@ -525,7 +545,9 @@ final class AppModel {
             scheduledRequests = requests
             activationTickets = history.activationTickets
             scheduledLoadState = .loaded
-            Notifier.syncScheduledStarts(requests, tenantId: history.identity.tenantId ?? effectiveTenantId, prefs: prefs)
+            // Keep-alive's continuations get their own notification ("Renewed …").
+            Notifier.syncScheduledStarts(requests.filter { !isKeepAliveContinuation($0) },
+                                         tenantId: history.identity.tenantId ?? effectiveTenantId, prefs: prefs)
             let decided = approvalTracker.update(items: history.items, principalId: history.identity.objectId,
                                                  tenantId: history.identity.tenantId, now: AppClock.now())
             updateApprovalPolling()
@@ -831,6 +853,7 @@ final class AppModel {
             lastRefreshed = AppClock.now()
             loadState = .loaded
             reloadPresets()
+            keepAliveAfterRefresh()
             loadPolicies(retryFailures: true)
             Task { await loadScheduled() }
             Task { await loadApprovals() }
@@ -977,6 +1000,7 @@ final class AppModel {
         banner = nil
         lastRefreshed = nil
         loadState = .idle
+        keepAliveReset()
         Task { await refresh() }
     }
 
@@ -1166,7 +1190,7 @@ final class AppModel {
 
     /// Refreshes now and again shortly: ARM lists a change only after a few
     /// seconds, and the status should come from Azure, not from the overlay.
-    private func refreshAfterChange() async {
+    func refreshAfterChange() async {
         await refresh()
         guard !pending.isEmpty else { return }
         let generation = tenantGeneration
@@ -1883,6 +1907,9 @@ final class AppModel {
         if prefs.notifyScheduledStart != old.notifyScheduledStart {
             Notifier.syncScheduledStarts(scheduledRequests, tenantId: identity?.tenantId ?? effectiveTenantId, prefs: prefs)
         }
+        if prefs.keepAliveHours != old.keepAliveHours || prefs.keepAlivePaused != old.keepAlivePaused {
+            keepAliveSettingsChanged(from: old)
+        }
         if !prefs.expiryReminders, old.expiryReminders {
             Notifier.cancelReminders()
         } else if prefs.expiryReminders, prefs.reminderLeadMinutes != old.reminderLeadMinutes {
@@ -1929,7 +1956,11 @@ final class AppModel {
         ]
         clockObservers = names.map { center, name in
             (center, center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.updateAppearance() }
+                MainActor.assumeIsolated {
+                    self?.updateAppearance()
+                    // Timers do not count time asleep: look at the kept roles now.
+                    self?.keepAliveClockChanged()
+                }
             })
         }
     }
