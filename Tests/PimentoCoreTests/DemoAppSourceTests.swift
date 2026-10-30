@@ -43,6 +43,18 @@ import Testing
         }
     }
 
+    @Test func signInAndAzurePagesOpenThroughTheGuardedOpener() throws {
+        #expect(try Self.source("AccountModel.swift").contains("AzureWebPage.open(url)"))
+        #expect(try Self.source("AccountViews.swift").contains("AzureWebPage.open(challenge.verificationURL)"))
+        for (name, text) in try AppSourceTests.sources() {
+            for line in text.components(separatedBy: "\n") where line.contains("NSWorkspace.shared.open(") {
+                // Only local folders, System Settings and the app's own help links open directly.
+                let local = ["open(dir)", "open(url)", "AppInfo.repositoryURL", "AppInfo.issuesURL", "open($0)"]
+                #expect(local.contains { line.contains($0) }, "\(name): \(line)")
+            }
+        }
+    }
+
     @Test func notificationsAreTaggedAndFilteredByMode() throws {
         let notifier = try Self.source("Notifier.swift")
         #expect(notifier.contains("DemoNotifications.tagged(request.content)"))

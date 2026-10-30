@@ -22,7 +22,9 @@ All notable changes to this project are documented here. The format follows
     in the approver inbox, three presets and about 40 history records.
   - Isolated and offline: its own defaults suite and `…/Pimento/Demo` folder (reset on each start
     unless *Keep demo changes*), tokens in memory (never the Keychain), marked notifications withdrawn
-    when the demo ends, and URLSession, `az` and the sign-in listener refused for the whole process.
+    when the demo ends, and URLSession, `az`, the sign-in listener and the browser openers (macOS
+    LaunchServices, the redirect page on Linux and Windows, the app's sign-in and device-code pages)
+    refused for the whole process.
     Each CLI command uses a temporary folder and ignores `PIMENTO_TENANT` / `PIMENTO_AUTH`.
   - For screenshots: a small *Demo* badge that can be hidden, a *Demo* menu (*Reset Demo Data*,
     *Freeze Clock at 10:30*, *Clock Speed*, *Hide Demo Badge*, *Keep Demo Changes*), and

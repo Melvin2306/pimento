@@ -258,6 +258,16 @@ extension AppModel {
 
 // MARK: - Views
 
+/// Opens a sign-in or Azure page in the browser, unless the network is
+/// blocked (demo mode): then nothing opens (`BrowserLaunch.guarded`).
+@MainActor
+enum AzureWebPage {
+    @discardableResult
+    static func open(_ url: URL) -> Bool {
+        BrowserLaunch.guarded(url) { NSWorkspace.shared.open($0) }
+    }
+}
+
 /// The small "Demo" pill (toolbar, menu bar popover), unless hidden for screenshots.
 struct DemoBadge: View {
     var compact = false

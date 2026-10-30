@@ -95,7 +95,7 @@ extension AppModel {
         signInTask = Task {
             do {
                 let account = try await broker.signInWithBrowser(clientId: clientId, tenant: tenant, loginHint: hint, claims: claims) { url in
-                    await MainActor.run { NSWorkspace.shared.open(url) }
+                    await MainActor.run { AzureWebPage.open(url) }
                 }
                 await finishSignIn(account, clientId: clientId)
             } catch {

@@ -2,8 +2,9 @@ import Foundation
 
 /// Demo mode's promise that nothing leaves the machine: while a monitor is
 /// set (for the process in the demo app and CLI, or for a task in tests),
-/// `URLSessionTransport`, the Azure CLI and the sign-in listener refuse to
-/// start, and the attempt is recorded.
+/// `URLSessionTransport`, the Azure CLI, the sign-in listener and the
+/// browser openers (`BrowserLaunch`) refuse to start, and the attempt is
+/// recorded.
 public enum NetworkGuard {
     public final class Monitor: @unchecked Sendable {
         private let lock = NSLock()
@@ -35,6 +36,11 @@ public enum NetworkGuard {
 
     /// The process-wide monitor, if the network is blocked for the process.
     public static var processWide: Monitor? { processLock.withLock { processMonitor } }
+
+    /// False (and records `what`) while a monitor is set.
+    public static func allows(_ what: @autoclosure () -> String) -> Bool {
+        (try? check(what())) != nil
+    }
 
     /// Throws `Blocked` (and records `what`) while a monitor is set.
     public static func check(_ what: @autoclosure () -> String) throws {

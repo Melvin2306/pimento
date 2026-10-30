@@ -140,6 +140,26 @@ struct NetworkGuardTests {
     }
     #endif
 
+    @Test func noBrowserIsOpened() {
+        let monitor = NetworkGuard.Monitor()
+        let url = URL(string: "https://login.microsoftonline.com/organizations/oauth2/v2.0/authorize?state=x")!
+        let base = TestTemp.url("demo-browser")
+        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        let opened = TestBox<Int>(0)
+        NetworkGuard.$monitor.withValue(monitor) {
+            // The macOS opener (LaunchServices) and any other direct one.
+            #expect(!BrowserLaunch.guarded(url) { _ in opened.value = (opened.value ?? 0) + 1; return true })
+            // The Linux and Windows opener: no redirect page is written either.
+            #expect(BrowserLaunch.openThroughPage(url, in: base) { _ in opened.value = (opened.value ?? 0) + 1; return true } == nil)
+        }
+        #expect(opened.value == 0)
+        #expect((try? FileManager.default.contentsOfDirectory(atPath: base.path))?.isEmpty == true)
+        #expect(monitor.blocked == ["a browser for login.microsoftonline.com", "a browser for login.microsoftonline.com"])
+        // Without a monitor the opener runs.
+        #expect(BrowserLaunch.guarded(url) { _ in opened.value = (opened.value ?? 0) + 1; return true })
+        #expect(opened.value == 1)
+    }
+
     @Test func withoutAMonitorNothingChanges() throws {
         try NetworkGuard.check("anything")
     }

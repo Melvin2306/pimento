@@ -152,7 +152,7 @@ let environment = CLIEnvironment(
         settings: AuthSettingsStore(),
         store: TokenStores.standard(),
         transport: URLSessionTransport(),
-        openURL: { url in openInBrowser(url) },
+        openURL: { url in BrowserLaunch.guarded(url, openInBrowser) },
         endBrowserSignIn: { redirectPages.removeAll() })
 )
 

@@ -665,8 +665,8 @@ and about 40 history records of the past three weeks. Only Microsoft's fictitiou
 suite and its presets, history and sign-in settings in `~/Library/Application Support/Pimento/Demo`;
 both start from the demo data on every launch unless *Keep demo changes* is on. The demo account's
 tokens are in memory, never in the Keychain. Demo notifications are marked as such and withdrawn when
-the demo ends. Requests to the network, the Azure CLI and the sign-in listener are refused for the
-whole process. Launch at login and the command line tool installer are off. Leaving demo mode restarts
+the demo ends. Requests to the network, the Azure CLI, the sign-in listener and the browser (sign-in
+and device-code pages) are refused for the whole process. Launch at login and the command line tool installer are off. Leaving demo mode restarts
 Pimento with your own session. Each `pimento --demo` command starts from the demo data in a temporary
 folder that is removed afterwards, and ignores `PIMENTO_TENANT`, `PIMENTO_AUTH` and the token-store
 variables.
@@ -674,7 +674,7 @@ variables.
 **For screenshots.** The *Demo* menu (only in demo mode) has *Reset Demo Data*, *Freeze Clock at
 10:30* (tidy times; while the clock stands still nothing expires, starts or is decided), *Clock Speed*
 (real time up to 600× faster, to see expiry, scheduled starts and approvals sooner), *Hide Demo Badge*
-(also in *Settings › General*) and *Keep Demo Changes*. In the terminal, `PIMENTO_DEMO_CLOCK=10:30`
+(also in the *Demo mode* card of *Settings › General*) and *Keep Demo Changes*. In the terminal, `PIMENTO_DEMO_CLOCK=10:30`
 freezes the clock (`live` runs it), `PIMENTO_DEMO_SPEED=60` speeds it up in the app, and
 `PIMENTO_DEMO_BADGE=off` hides the CLI's "Demo mode" line. In the CLI the clock is virtual: `wait` and
 Renew's retries take no real time.

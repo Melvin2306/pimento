@@ -181,7 +181,7 @@ struct DeviceCodeSheet: View {
                         NSPasteboard.general.setString(challenge.userCode, forType: .string)
                     }
                     .themedButton(.secondary)
-                    Button("Open Page") { NSWorkspace.shared.open(challenge.verificationURL) }
+                    Button("Open Page") { AzureWebPage.open(challenge.verificationURL) }
                         .themedButton(.secondary)
                 }
                 HStack(spacing: 8) {

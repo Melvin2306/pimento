@@ -100,6 +100,7 @@ public enum BrowserLaunch {
     public static func openThroughPage(
         _ url: URL, in base: URL = FileManager.default.temporaryDirectory, open: (String) -> Bool
     ) -> RedirectPage? {
+        guard NetworkGuard.allows(Self.describe(url)) else { return nil }
         guard let page = try? writeRedirectPage(for: url, in: base) else { return nil }
         guard open(page.file.path) else {
             page.remove()
@@ -107,6 +108,19 @@ public enum BrowserLaunch {
         }
         return page
     }
+}
+
+extension BrowserLaunch {
+    /// Runs `open` (the platform's opener: LaunchServices on macOS, the
+    /// redirect page elsewhere) for `url`, unless the network is blocked
+    /// (demo mode): then nothing is started and the result is false.
+    public static func guarded(_ url: URL, _ open: (URL) -> Bool) -> Bool {
+        guard NetworkGuard.allows(describe(url)) else { return false }
+        return open(url)
+    }
+
+    /// "a browser for login.microsoftonline.com", for `NetworkGuard`.
+    static func describe(_ url: URL) -> String { "a browser for \(url.host ?? url.scheme ?? "?")" }
 }
 
 /// The redirect pages of this process, removed when sign-in is over (and
