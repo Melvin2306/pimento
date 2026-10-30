@@ -198,7 +198,13 @@ final class AppModel {
     let broker: TokenBroker
     /// Saved on every change.
     var authSettings: AuthSettings {
-        didSet { if authSettings != oldValue { try? authSettingsStore.save(authSettings) } }
+        didSet {
+            guard authSettings != oldValue else { return }
+            // The CLI and the next launch read it: say when it did not stick.
+            do { try authSettingsStore.save(authSettings) } catch {
+                banner = Banner(kind: .error, text: "Could not save the sign-in settings (\(authSettingsStore.url.path)): \(error.localizedDescription)")
+            }
+        }
     }
     /// The auth source in use (`$PIMENTO_AUTH` overrides the setting).
     var authSelection: AuthSelection
@@ -1229,7 +1235,10 @@ final class AppModel {
         let requested = asked ?? duration
         await ensurePolicies(for: targets)
         // The tickets the activations were requested with, read fresh: Renew sends them again.
-        if let history = try? await service.loadRequestHistory() { activationTickets = history.activationTickets }
+        var historyError: String?
+        do { activationTickets = try await service.loadRequestHistory().activationTickets } catch {
+            historyError = error.localizedDescription
+        }
         let selection = renewalSelection(targets)
         let plans: [RenewPlan]
         do {
@@ -1255,8 +1264,9 @@ final class AppModel {
                                               message: "Its policy requires approval: after ending it you would wait for an approver. Not renewed."))
         }
         for role in selection.needsTicket {
+            let why = historyError.map { " (reading your requests failed: \($0))" } ?? ""
             progress[role.id] = .done(.failed(code: "TicketRequired",
-                                              message: "Its policy requires a ticket and the current activation's ticket is unknown: fill in ticket number and system, then Renew. Not renewed."))
+                                              message: "Its policy requires a ticket and the current activation's ticket is unknown\(why): fill in ticket number and system, then Renew. Not renewed."))
         }
         if !selection.needsTicket.isEmpty { showTicketFields = true }
         for plan in plans { progress[plan.id] = .queued }
