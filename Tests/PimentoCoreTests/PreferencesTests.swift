@@ -92,6 +92,7 @@ struct PreferencesTests {
         Preferences.reset(in: store)
         #expect(Preferences.load(from: store) == Preferences())
         #expect(store.values.keys.sorted() == ["tenantId"], "reset leaves data that is not a setting alone")
+        #expect(Set(Preferences.Key.all).count == Preferences.Key.all.count, "each setting is listed once")
     }
 
     @Test func themeIsStoredByName() {

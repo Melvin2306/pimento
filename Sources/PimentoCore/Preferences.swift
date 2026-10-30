@@ -258,8 +258,7 @@ public struct Preferences: Equatable, Sendable {
             defaultHours, rememberJustifications, prefillLastJustification, confirmOwnerRoles, maxParallelRequests,
             keepAliveHours, keepAlivePaused,
             launchTenant, refreshOnLaunch, autoRefreshMinutes, theme, appearanceMode, appearanceSchedule,
-            showInMenuBar, menuBarShowsRemainingTime, hideDockIcon, checkForUpdates,
-            showInMenuBar, menuBarShowsRemainingTime, hideDockIcon, fetchTenantLogos,
+            showInMenuBar, menuBarShowsRemainingTime, hideDockIcon, checkForUpdates, fetchTenantLogos,
         ]
     }
 
