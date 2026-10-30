@@ -1,0 +1,25 @@
+CHANGELOG.md
+  s_4884204a812fec::t_99d0540d0e230d 110-113
+Sources/PimentoApp/AppModel+KeepAlive.swift
+  s_4884204a812fec::t_efa1afb9eda843 291-294
+Sources/PimentoCore/KeepAliveSession.swift
+  s_4884204a812fec::t_f7059f2fb856e0 17-23,34-36,48,54-58,75,80,90-92,113-116,118-119,152,191-192,206
+Tests/PimentoCoreTests/KeepAliveSafetyTests.swift
+  s_4884204a812fec::t_805026af6433de 277-317
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "74a21761946a9083fc932c0a577d80cedf80d296",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
