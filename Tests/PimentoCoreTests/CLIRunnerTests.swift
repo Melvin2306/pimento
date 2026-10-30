@@ -34,6 +34,8 @@ final class CLIHarness: @unchecked Sendable {
     let authSettings = AuthSettingsStore(url: temporaryPresetsURL().deletingLastPathComponent().appendingPathComponent("auth.json"))
     var signInTransport: HTTPTransport = OfflineTransport()
     var openURL: @Sendable (URL) async -> Bool = { _ in false }
+    /// How often `login` said a browser sign-in was over.
+    let browserSignInsEnded = TestBox<Int>(0)
     /// Whether `login` may use the browser (false on Windows).
     var browserSignIn = LoopbackListener.isSupported
     /// Use the tokens of the auth source (`--auth`) instead of `tokens`.
@@ -145,7 +147,8 @@ final class CLIHarness: @unchecked Sendable {
             },
             history: historyStore,
             signIn: CLISignIn(settings: authSettings, store: tokenStore, transport: signInTransport, openURL: openURL,
-                              browserSignIn: browserSignIn))
+                              browserSignIn: browserSignIn,
+                              endBrowserSignIn: { [browserSignInsEnded] in browserSignInsEnded.value = (browserSignInsEnded.value ?? 0) + 1 }))
     }
 
     @discardableResult

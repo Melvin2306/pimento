@@ -188,6 +188,8 @@ struct CLIAuthTests {
         #expect(h.err.contains(url.absoluteString))
         #expect(h.out.contains("\"source\" : \"pimento\""))
         #expect(h.authSettings.load().claimsChallenge == nil)
+        // What the opener left behind is removed once the sign-in is over.
+        #expect(h.browserSignInsEnded.value == 1)
     }
 
     /// Windows has no browser sign-in: `login` uses a device code by itself.

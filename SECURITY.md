@@ -47,6 +47,10 @@ anything that requires an attacker to already control your user account or `az` 
   `login.microsoftonline.com`. Refresh tokens are kept in the login Keychain (this device only) or,
   without one, in a file (mode 600 on macOS and Linux; in the user profile on Windows); never logged
   or displayed.
+- The CLI never puts the sign-in URL (`state`, `nonce`, PKCE challenge) in a process's arguments,
+  which other local users can read on Linux: macOS opens it through LaunchServices; Linux gives
+  `xdg-open` only the path of a private redirect page (mode 600 in a new 700 folder), removed when
+  the sign-in is over. The CLI also prints the URL to your terminal, for opening it by hand.
 - `az` is started with an argv array, never through a shell; tenant values are validated.
 - The only write requests are the `roleAssignmentScheduleRequests` `PUT`s (activate, deactivate,
   renew, extend), `POST …/cancel` and the approval `PATCH` (approve, deny), from the app after you

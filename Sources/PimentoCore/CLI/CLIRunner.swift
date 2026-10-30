@@ -98,14 +98,19 @@ public struct CLISignIn: Sendable {
     /// Whether browser sign-in works here (it needs a loopback listener: not
     /// on Windows). Without it, `login` uses a device code.
     public var browserSignIn: Bool
+    /// Called when a browser sign-in is over (signed in, failed or timed out):
+    /// removes what `openURL` left behind (the redirect page).
+    public var endBrowserSignIn: @Sendable () -> Void
 
     public init(settings: AuthSettingsStore?, store: TokenStore, transport: HTTPTransport,
-                openURL: @escaping @Sendable (URL) async -> Bool, browserSignIn: Bool = LoopbackListener.isSupported) {
+                openURL: @escaping @Sendable (URL) async -> Bool, browserSignIn: Bool = LoopbackListener.isSupported,
+                endBrowserSignIn: @escaping @Sendable () -> Void = {}) {
         self.settings = settings
         self.store = store
         self.transport = transport
         self.openURL = openURL
         self.browserSignIn = browserSignIn
+        self.endBrowserSignIn = endBrowserSignIn
     }
 
     /// No settings, an empty in-memory store, no network, no browser.

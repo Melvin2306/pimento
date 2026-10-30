@@ -13,6 +13,9 @@ import Foundation
 #if canImport(FoundationNetworking)
 import FoundationNetworking
 #endif
+#if os(macOS)
+import CoreServices
+#endif
 import PimentoCore
 
 /// Whether file descriptor 0, 1 or 2 is a terminal (a console on Windows;
@@ -63,29 +66,49 @@ if (stdoutIsTTY && !enableVirtualTerminal(STD_OUTPUT_HANDLE)) || (stderrIsTTY &&
 }
 #endif
 
-/// `open URL` on macOS, `xdg-open URL` (from PATH) on Linux; false when that
-/// fails. Windows has no browser sign-in yet (`LoopbackListener.isSupported`),
-/// so nothing is opened there.
+/// Redirect pages written for the browser; removed when sign-in is over.
+let redirectPages = RedirectPages()
+
+/// Opens the sign-in page; false when that fails. The authorize URL (state,
+/// nonce, PKCE challenge) never becomes a process argument, where other local
+/// users could read it: macOS asks LaunchServices directly (no child process);
+/// Linux runs `xdg-open` (from PATH) on a private redirect page that holds the
+/// URL (`BrowserLaunch`). Windows has no browser sign-in yet
+/// (`LoopbackListener.isSupported`); its opener uses the same redirect page.
 func openInBrowser(_ url: URL) -> Bool {
     #if os(macOS)
-    let tool: String? = "/usr/bin/open"
+    return LSOpenCFURLRef(url as CFURL, nil) == noErr
     #elseif os(Windows)
-    let tool: String? = nil
+    guard let page = BrowserLaunch.openThroughPage(url, open: { path in
+        let result = path.withCString(encodedAs: UTF16.self) { file in
+            "open".withCString(encodedAs: UTF16.self) { verb in
+                ShellExecuteW(nil, verb, file, nil, nil, SW_SHOWNORMAL)
+            }
+        }
+        // ShellExecute reports success as a value above 32.
+        return Int(bitPattern: result) > 32
+    }) else { return false }
+    redirectPages.add(page)
+    return true
     #else
     let path = ProcessInfo.processInfo.environment["PATH"] ?? "/usr/bin:/bin"
     let tool = (path.split(separator: ":").map { "\($0)/xdg-open" } + ["/usr/bin/xdg-open"])
         .first { FileManager.default.isExecutableFile(atPath: $0) }
+    guard let tool else { return false }
+    guard let page = BrowserLaunch.openThroughPage(url, open: { file in
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: tool)
+        process.arguments = [file]
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        do { try process.run() } catch { return false }
+        process.waitUntilExit()
+        return process.terminationStatus == 0
+    }) else { return false }
+    redirectPages.add(page)
+    return true
     #endif
-    guard let tool, FileManager.default.isExecutableFile(atPath: tool) else { return false }
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: tool)
-    process.arguments = [url.absoluteString]
-    process.standardInput = FileHandle.nullDevice
-    process.standardOutput = FileHandle.nullDevice
-    process.standardError = FileHandle.nullDevice
-    do { try process.run() } catch { return false }
-    process.waitUntilExit()
-    return process.terminationStatus == 0
 }
 
 /// EPIPE, as `FileHandle` reports it (directly or as the underlying error).
@@ -129,7 +152,8 @@ let environment = CLIEnvironment(
         settings: AuthSettingsStore(),
         store: TokenStores.standard(),
         transport: URLSessionTransport(),
-        openURL: { url in openInBrowser(url) })
+        openURL: { url in openInBrowser(url) },
+        endBrowserSignIn: { redirectPages.removeAll() })
 )
 
 #if !os(Windows)
@@ -138,4 +162,5 @@ signal(SIGPIPE, SIG_IGN)
 #endif
 
 let status = await CLIRunner(environment: environment).run(Array(CommandLine.arguments.dropFirst()))
+redirectPages.removeAll()
 exit(status)

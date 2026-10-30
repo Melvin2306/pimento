@@ -381,6 +381,11 @@ All notable changes to this project are documented here. The format follows
   reviewed request and submitted another under the same prefix (for example for Owner) could have it
   decided without the approver seeing it. On a terminal a prefix still works: the prompt shows the
   request it matched. `pimento approvals` and the decision table show the whole id.
+- `pimento login` no longer passes the sign-in URL (with its `state`, `nonce` and PKCE challenge) as
+  a process argument, where other local users can read it (`/proc/PID/cmdline` on Linux) and could
+  answer the loopback redirect with a code for their own account. macOS opens it through
+  LaunchServices without a child process; Linux runs `xdg-open` on a private redirect page (mode 600
+  in a new 700 folder in the temporary directory), removed when the sign-in is over.
 
 ## [0.1.0] - 2026-10-29
 

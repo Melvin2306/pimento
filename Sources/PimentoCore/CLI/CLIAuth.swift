@@ -23,6 +23,7 @@ extension CLIRunner {
             account = try await broker.finishDeviceCode(challenge, clientId: clientId, tenant: tenant, sleep: env.sleep)
         } else {
             let open = env.signIn.openURL, runner = self
+            defer { env.signIn.endBrowserSignIn() }
             account = try await broker.signInWithBrowser(
                 clientId: clientId, tenant: tenant, loginHint: previous?.username, claims: settings.claimsChallenge,
                 timeout: Self.browserTimeout

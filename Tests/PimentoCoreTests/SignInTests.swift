@@ -948,3 +948,67 @@ struct SignInStorageTests {
         #expect(store.load() == AuthSettings())
     }
 }
+
+@Suite("Sign-in: opening the browser")
+struct BrowserLaunchTests {
+    static let authorizeURL = URL(string: "https://login.microsoftonline.com/organizations/oauth2/v2.0/authorize?client_id=00000000-0000-4000-8000-000000000001"
+        + "&redirect_uri=http%3A%2F%2F127.0.0.1%3A50123&state=STATE-abc123&nonce=NONCE-def456&code_challenge=CHALLENGE-ghi789"
+        + "&code_challenge_method=S256&login_hint=o'brien%40example.com")!
+
+    /// The opener gets only a file path: no part of the authorize URL is a process argument.
+    @Test func theAuthorizeURLNeverAppearsInTheOpenersArguments() throws {
+        let base = TestTemp.url("browser")
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        let argv = TestBox<[String]>([])
+        let page = try #require(BrowserLaunch.openThroughPage(Self.authorizeURL, in: base) { path in
+            argv.value = (argv.value ?? []) + [path]
+            return true
+        })
+        let args = try #require(argv.value)
+        #expect(args == [page.file.path])
+        for secret in ["STATE-abc123", "NONCE-def456", "CHALLENGE-ghi789", "login.microsoftonline.com", "authorize", "?", "&", "127.0.0.1"] {
+            #expect(!args.joined(separator: " ").contains(secret), "\(secret)")
+        }
+        // The page sends the browser on: the whole URL, escaped for HTML.
+        let html = try String(contentsOf: page.file, encoding: .utf8)
+        #expect(html.contains("http-equiv=\"refresh\""))
+        #expect(html.contains("state=STATE-abc123&amp;nonce=NONCE-def456&amp;code_challenge=CHALLENGE-ghi789"))
+        #expect(html.contains("o%27brien") && !html.contains("o'brien"))
+        #expect(!html.contains("&nonce"))
+        // Private to the user: 0600 in a 0700 folder of its own.
+        #expect(hasMode(page.file.path, 0o600))
+        #expect(hasMode(page.directory.path, 0o700))
+        #expect(page.directory.deletingLastPathComponent().standardizedFileURL.path == base.standardizedFileURL.path)
+        #expect(page.directory.lastPathComponent.hasPrefix("pimento-signin-"))
+        page.remove()
+        #expect(!FileManager.default.fileExists(atPath: page.directory.path))
+    }
+
+    @Test func aFailedOpenLeavesNothingBehind() throws {
+        let base = TestTemp.url("browser")
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        #expect(BrowserLaunch.openThroughPage(Self.authorizeURL, in: base) { _ in false } == nil)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: base.path).isEmpty)
+        // Two pages never share a folder.
+        let a = try BrowserLaunch.writeRedirectPage(for: Self.authorizeURL, in: base)
+        let b = try BrowserLaunch.writeRedirectPage(for: Self.authorizeURL, in: base)
+        #expect(a.directory != b.directory)
+        let pages = RedirectPages()
+        pages.add(a)
+        pages.add(b)
+        pages.removeAll()
+        #expect(try FileManager.default.contentsOfDirectory(atPath: base.path).isEmpty)
+    }
+
+    /// The CLI's opener: LaunchServices on macOS, a redirect page elsewhere;
+    /// never `process.arguments = [url…]`.
+    @Test func theCLIOpenerPassesNoURLAsAnArgument() throws {
+        let main = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Sources/pimento/main.swift")
+        let text = try String(contentsOf: main, encoding: .utf8)
+        #expect(!text.contains("url.absoluteString"))
+        #expect(text.contains("LSOpenCFURLRef(url as CFURL, nil)"))
+        #expect(text.contains("BrowserLaunch.openThroughPage(url"))
+        #expect(text.contains("redirectPages.removeAll()"))
+    }
+}

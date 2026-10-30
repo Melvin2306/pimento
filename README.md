@@ -887,7 +887,7 @@ The CLI works the same on Linux and Windows, with these differences:
 | Files (presets, history, `auth.json`) | `~/Library/Application Support/Pimento` | `$XDG_CONFIG_HOME/pimento`, else `~/.config/pimento` | `%APPDATA%\Pimento` |
 | Refresh token (`pimento login`) | Keychain (`PIMENTO_TOKEN_STORE=file`: `~/.config/pimento/tokens.json`) | `tokens.json` in the folder above | `tokens.json` in the folder above |
 | File permissions | mode 600 (folder 700 for the token file) | mode 600 (folder 700) | none of its own: your profile's permissions |
-| Browser sign-in | yes | yes (`xdg-open`; `--device-code` without a desktop) | **no**: `pimento login` uses a device code |
+| Browser sign-in | yes (LaunchServices) | yes (`xdg-open` on a private redirect page in the temporary folder, removed afterwards; a sandboxed browser that cannot read it shows an error: open the URL the CLI prints, or use `--device-code`) | **no**: `pimento login` uses a device code |
 | `az` | Homebrew paths, then `PATH` | `PATH` | `az.cmd` from `PATH` (the installer's Python is run directly, never through `cmd.exe` with your arguments) |
 | Colours | terminals | terminals | consoles with ANSI support (Windows Terminal, Windows 10+); `NO_COLOR` turns them off |
 | Completions | zsh, bash, fish | zsh, bash, fish | none |
