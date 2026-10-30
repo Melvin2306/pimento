@@ -543,8 +543,16 @@ final class LogoSessionDelegate: NSObject, URLSessionTaskDelegate, @unchecked Se
         completionHandler(disposition, credential)
     }
 
+    /// The server's certificate check (swift-corelibs-foundation has no such
+    /// challenge and marks the constant unavailable).
+    #if canImport(Darwin)
+    static let serverTrust = NSURLAuthenticationMethodServerTrust
+    #else
+    static let serverTrust = "NSURLAuthenticationMethodServerTrust"
+    #endif
+
     /// The certificate check runs as usual; anything else is cancelled.
     static func answer(_ authenticationMethod: String) -> (URLSession.AuthChallengeDisposition, URLCredential?) {
-        authenticationMethod == NSURLAuthenticationMethodServerTrust ? (.performDefaultHandling, nil) : (.cancelAuthenticationChallenge, nil)
+        authenticationMethod == serverTrust ? (.performDefaultHandling, nil) : (.cancelAuthenticationChallenge, nil)
     }
 }

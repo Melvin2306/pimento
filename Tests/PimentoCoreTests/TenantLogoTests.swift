@@ -477,13 +477,18 @@ struct TenantLogoTests {
     }
 
     @Test func theLogoTransportOffersNoCredentials() {
-        for method in [NSURLAuthenticationMethodHTTPBasic, NSURLAuthenticationMethodHTTPDigest, NSURLAuthenticationMethodNTLM,
-                       NSURLAuthenticationMethodNegotiate, NSURLAuthenticationMethodClientCertificate, NSURLAuthenticationMethodDefault] {
+        var methods = [NSURLAuthenticationMethodHTTPBasic, NSURLAuthenticationMethodHTTPDigest, NSURLAuthenticationMethodNTLM,
+                       NSURLAuthenticationMethodNegotiate, NSURLAuthenticationMethodDefault]
+        #if canImport(Darwin)
+        methods.append(NSURLAuthenticationMethodClientCertificate)
+        #expect(LogoSessionDelegate.serverTrust == NSURLAuthenticationMethodServerTrust)
+        #endif
+        for method in methods {
             #expect(LogoSessionDelegate.answer(method).0 == .cancelAuthenticationChallenge, "\(method)")
             #expect(LogoSessionDelegate.answer(method).1 == nil)
         }
         // The server's certificate is still checked as usual.
-        #expect(LogoSessionDelegate.answer(NSURLAuthenticationMethodServerTrust).0 == .performDefaultHandling)
+        #expect(LogoSessionDelegate.answer(LogoSessionDelegate.serverTrust).0 == .performDefaultHandling)
     }
 
     @Test func aCancelledFetchSendsNothingMoreAndCachesNothing() async {
