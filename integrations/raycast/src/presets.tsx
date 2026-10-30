@@ -1,7 +1,15 @@
 import { Action, ActionPanel, Keyboard, Color, Icon, List } from "@raycast/api";
 import { usePromise } from "@raycast/utils";
 import { activatePreset, ActivatePresetForm, presetRoleLines, presetSummary } from "./components";
-import { formatDuration, PimentoError, presetsArgs, readJSON, type Preset, type PresetList } from "./lib/pimento";
+import {
+  formatDuration,
+  PimentoError,
+  presetIsAmbiguous,
+  presetsArgs,
+  readJSON,
+  type Preset,
+  type PresetList,
+} from "./lib/pimento";
 import { binary, demoNote, settings, showError } from "./lib/raycast";
 
 export default function Command() {
@@ -38,16 +46,23 @@ export default function Command() {
       )}
       <List.Section title="Presets" subtitle={s.demo ? demoNote : undefined}>
         {presets.map((preset) => (
-          <PresetItem key={preset.id} preset={preset} />
+          <PresetItem key={preset.id} preset={preset} ambiguous={presetIsAmbiguous(preset, presets)} />
         ))}
       </List.Section>
     </List>
   );
 }
 
-function PresetItem(props: { preset: Preset }) {
-  const { preset } = props;
+function PresetItem(props: { preset: Preset; ambiguous: boolean }) {
+  const { preset, ambiguous } = props;
   const markdown = [
+    ...(ambiguous
+      ? [
+          "> Another preset is also named “" + preset.name + "”. This one has no tenant, so `--preset` would pick",
+          "> the other one in its tenant. Rename one in Pimento to activate it here.",
+          "",
+        ]
+      : []),
     `## ${preset.name}`,
     "",
     ...presetRoleLines(preset).map((l) => `- ${l}`),
@@ -69,7 +84,7 @@ function PresetItem(props: { preset: Preset }) {
       detail={<List.Item.Detail markdown={markdown} />}
       actions={
         <ActionPanel>
-          {preset.justification ? (
+          {ambiguous ? null : preset.justification ? (
             <>
               <Action title="Activate Preset" icon={Icon.Bolt} onAction={() => activatePreset(preset)} />
               <Action.Push

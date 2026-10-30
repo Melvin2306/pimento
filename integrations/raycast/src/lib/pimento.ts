@@ -3,9 +3,9 @@
 // can load this file with plain Node.
 
 import { execFile } from "node:child_process";
-import { accessSync, constants } from "node:fs";
+import { accessSync, constants, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { delimiter, join } from "node:path";
+import { delimiter, isAbsolute, join } from "node:path";
 
 // MARK: - JSON shapes (README › The command line › Output)
 
@@ -127,7 +127,7 @@ export function expandHome(path: string, home = homedir()): string {
 function isExecutable(path: string): boolean {
   try {
     accessSync(path, constants.X_OK);
-    return true;
+    return statSync(path).isFile();
   } catch {
     return false;
   }
@@ -145,7 +145,8 @@ export function candidatePaths(
 ): string[] {
   const own = configured?.trim();
   if (own) return [expandHome(own, home)];
-  const dirs = (env.PATH ?? "").split(delimiter).filter(Boolean);
+  // Absolute folders only: a relative PATH entry would depend on the working directory.
+  const dirs = (env.PATH ?? "").split(delimiter).filter((d) => isAbsolute(d));
   for (const d of extraPathDirectories) if (!dirs.includes(d)) dirs.push(d);
   return [join(home, ".local/bin/pimento"), ...dirs.map((d) => join(d, "pimento")), appHelperPath];
 }
@@ -375,6 +376,23 @@ export function activatePresetArgs(
     "--yes",
     "--json",
   ];
+}
+
+/** Same rule as the CLI's preset lookup: trimmed, case-insensitive. */
+function sameName(a: string, b: string): boolean {
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
+}
+
+/**
+ * `--preset NAME` picks the preset of the signed-in tenant before one without
+ * a tenant, so a preset without a tenant that shares its name with another
+ * cannot be activated by name: it could run the other one.
+ */
+export function presetIsAmbiguous(
+  preset: Pick<Preset, "id" | "name" | "tenantId">,
+  all: Pick<Preset, "id" | "name">[],
+): boolean {
+  return !preset.tenantId && all.some((p) => p.id !== preset.id && sameName(p.name, preset.name));
 }
 
 export function deactivateArgs(settings: Settings, role: Pick<Role, "id">): string[] {

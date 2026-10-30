@@ -26,6 +26,7 @@ import {
   formatTimeLeft,
   listArgs,
   PimentoError,
+  presetIsAmbiguous,
   presetsArgs,
   readJSON,
   run,
@@ -62,6 +63,29 @@ suite("finding pimento", () => {
       findPimento(undefined, { PATH: "" }, () => false),
       undefined,
     );
+  });
+
+  test("relative PATH entries are never searched", () => {
+    const paths = candidatePaths("", { PATH: ".:bin::/usr/bin" }, "/home/a");
+    assert.deepEqual(paths, [
+      "/home/a/.local/bin/pimento",
+      "/usr/bin/pimento",
+      "/opt/homebrew/bin/pimento",
+      "/usr/local/bin/pimento",
+      appHelperPath,
+    ]);
+  });
+});
+
+suite("presets", () => {
+  test("a preset without a tenant that shares its name cannot be targeted by name", () => {
+    const anyTenant = { id: "a", name: "On-call" };
+    const inTenant = { id: "b", name: " on-call ", tenantId: "00000000-0000-0000-0000-00000000000a" };
+    const other = { id: "c", name: "Release day" };
+    assert.equal(presetIsAmbiguous(anyTenant, [anyTenant, inTenant, other]), true);
+    // With its tenant, --tenant picks exactly it.
+    assert.equal(presetIsAmbiguous(inTenant, [anyTenant, inTenant, other]), false);
+    assert.equal(presetIsAmbiguous(anyTenant, [anyTenant, other]), false);
   });
 });
 
