@@ -364,16 +364,21 @@ public struct PresetStore: Sendable {
     /// Writes atomically, readable only by you from the start (mode 600; a
     /// new folder 700).
     public func save(_ library: PresetLibrary) throws {
-        try PrivateFile.write(try library.encoded(), to: url)
+        try locked { try PrivateFile.write(try library.encoded(), to: url) }
     }
 
-    /// Reads the file, applies `change` and writes it back, so that a preset
-    /// saved meanwhile by the CLI or the app is not lost.
+    /// Reads the file, applies `change` and writes it back, holding
+    /// `presets.json.lock` throughout, so that a preset saved meanwhile by the
+    /// CLI or the app is not lost.
     @discardableResult
     public func update<T>(_ change: (inout PresetLibrary) throws -> T) throws -> (PresetLibrary, T) {
-        var library = try load()
-        let result = try change(&library)
-        try save(library)
-        return (library, result)
+        try locked {
+            var library = try load()
+            let result = try change(&library)
+            try PrivateFile.write(try library.encoded(), to: url)
+            return (library, result)
+        }
     }
+
+    func locked<T>(_ body: () throws -> T) throws -> T { try FileLock.withLock(for: url, body) }
 }

@@ -797,16 +797,38 @@ struct SignInStorageTests {
         #expect(hasMode(url.deletingLastPathComponent().path, 0o700))
         #expect(try store.accounts() == [account])
         #expect(try store.refreshToken(for: account.id) == "secret-rt")
-        // Rewrites keep the mode, and leave no temporary files behind.
+        // Rewrites keep the mode, and leave no temporary files behind (only the empty lock file).
         try store.save(account, refreshToken: "rotated")
         #expect(hasMode(url.path, 0o600))
-        #expect(try FileManager.default.contentsOfDirectory(atPath: url.deletingLastPathComponent().path) == ["tokens.json"])
+        #expect(try FileManager.default.contentsOfDirectory(atPath: url.deletingLastPathComponent().path).sorted() == ["tokens.json", "tokens.json.lock"])
+        #expect(hasMode(url.path + ".lock", 0o600))
         #expect(try FileTokenStore(url: url).refreshToken(for: account.id) == "rotated")
         try store.remove(account.id)
         #expect(!FileManager.default.fileExists(atPath: url.path))
 
         try Data("not json".utf8).write(to: url)
         #expect(throws: SignInError.self) { try store.accounts() }
+    }
+
+    /// The app and the CLI (each its own store value) saving at the same time.
+    @Test func concurrentFileStoreWritersLoseNoAccount() async throws {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("pimento/tokens.json")
+        let writers = 8, perWriter = 10
+        await withTaskGroup(of: Void.self) { group in
+            for w in 0..<writers {
+                group.addTask {
+                    let store = FileTokenStore(url: url)
+                    for i in 0..<perWriter {
+                        let a = SignedInAccount(objectId: "o\(w)-\(i)", homeTenantId: "t", tenantId: "t", username: nil, name: nil,
+                                                clientId: testClientId, signedInAt: Date())
+                        try? store.save(a, refreshToken: "rt")
+                    }
+                }
+            }
+        }
+        #expect(try FileTokenStore(url: url).accounts().count == writers * perWriter)
     }
 
     #if !os(Windows)

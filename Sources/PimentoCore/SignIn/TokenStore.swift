@@ -164,14 +164,31 @@ public struct FileTokenStore: TokenStore {
         try read().accounts.first { $0.account.id == accountId }?.refreshToken
     }
 
+    /// Runs a read-modify-write of the file holding `tokens.json.lock`, so
+    /// the app and the CLI saving at the same time do not lose an account.
+    func locked<T>(_ body: () throws -> T) throws -> T {
+        let lock: FileLock
+        do { lock = try FileLock(url: FileLock.lockURL(for: url)) } catch {
+            throw SignInError.storage("\(label): \(error.localizedDescription)")
+        }
+        defer { lock.unlock() }
+        return try body()
+    }
+
     public func save(_ account: SignedInAccount, refreshToken: String) throws {
-        var file = try read()
-        file.accounts.removeAll { $0.account.id == account.id }
-        file.accounts.append(Entry(account: account, refreshToken: refreshToken))
-        try write(file)
+        try locked {
+            var file = try read()
+            file.accounts.removeAll { $0.account.id == account.id }
+            file.accounts.append(Entry(account: account, refreshToken: refreshToken))
+            try write(file)
+        }
     }
 
     public func remove(_ accountId: String) throws {
+        try locked { try removeUnlocked(accountId) }
+    }
+
+    private func removeUnlocked(_ accountId: String) throws {
         var file = try read()
         let before = file.accounts.count
         file.accounts.removeAll { $0.account.id == accountId }
@@ -192,15 +209,22 @@ public struct FileTokenStore: TokenStore {
 /// Windows there are no POSIX modes: the file is written atomically into the
 /// folder, which is in your user profile (`%APPDATA%`) and inherits its ACL.
 enum PrivateFile {
-    static func write(_ data: Data, to url: URL) throws {
+    /// Creates `dir` (700 on POSIX) when it does not exist yet.
+    static func createDirectory(_ dir: URL) throws {
+        guard !FileManager.default.fileExists(atPath: dir.path) else { return }
         #if os(Windows)
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        #else
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        #endif
+    }
+
+    static func write(_ data: Data, to url: URL) throws {
+        let dir = url.deletingLastPathComponent()
+        try createDirectory(dir)
+        #if os(Windows)
         try data.write(to: url, options: .atomic)
         #else
-        let dir = url.deletingLastPathComponent()
-        if !FileManager.default.fileExists(atPath: dir.path) {
-            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
-        }
         let temp = dir.appendingPathComponent(".\(url.lastPathComponent).\(UUID().uuidString.prefix(8))")
         let fd = open(temp.path, O_WRONLY | O_CREAT | O_EXCL, 0o600)
         guard fd >= 0 else { throw CocoaError(.fileWriteNoPermission, userInfo: [NSFilePathErrorKey: temp.path]) }

@@ -88,7 +88,7 @@ extension HistoryStore {
 extension HistoryStore {
     /// `history.jsonl.lock`: Windows locks a separate file, which is never
     /// replaced, so the history itself can be renamed and replaced under it.
-    var lockURL: URL { url.deletingLastPathComponent().appendingPathComponent(url.lastPathComponent + ".lock") }
+    var lockURL: URL { FileLock.lockURL(for: url) }
 
     /// Runs `body` with the history exclusively locked (`LockFileEx` on
     /// `lockURL`). Rotates first when the file has grown past `maxBytes`. The
@@ -96,7 +96,8 @@ extension HistoryStore {
     /// replace it (prune, clear) while no handle is open on it.
     func withLockedFile(_ body: (_ write: (Data) throws -> Void) throws -> Void) throws {
         try createDirectory()
-        let lock = try WindowsFileLock(url: lockURL)
+        let lock: FileLock
+        do { lock = try FileLock(url: lockURL) } catch { throw HistoryError.io(error.localizedDescription) }
         defer { lock.unlock() }
         let files = FileManager.default
         let size = ((try? files.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.intValue ?? 0
@@ -144,34 +145,4 @@ extension HistoryStore {
     }
 }
 
-/// An exclusive `LockFileEx` lock on a small file, held until `unlock()`:
-/// what `flock` is elsewhere. Blocks while another process holds it.
-final class WindowsFileLock {
-    private let handle: HANDLE
-
-    init(url: URL) throws {
-        let path = url.withUnsafeFileSystemRepresentation { String(cString: $0!) }
-        let opened = path.withCString(encodedAs: UTF16.self) {
-            CreateFileW($0, DWORD(GENERIC_READ) | DWORD(GENERIC_WRITE),
-                        DWORD(FILE_SHARE_READ) | DWORD(FILE_SHARE_WRITE) | DWORD(FILE_SHARE_DELETE),
-                        nil, DWORD(OPEN_ALWAYS), DWORD(FILE_ATTRIBUTE_NORMAL), nil)
-        }
-        guard let opened, opened != INVALID_HANDLE_VALUE else {
-            throw HistoryError.io("could not open \(path) (Windows error \(GetLastError()))")
-        }
-        var overlapped = OVERLAPPED()
-        if !LockFileEx(opened, DWORD(LOCKFILE_EXCLUSIVE_LOCK), 0, DWORD.max, DWORD.max, &overlapped) {
-            let code = GetLastError()
-            CloseHandle(opened)
-            throw HistoryError.io("could not lock \(path) (Windows error \(code))")
-        }
-        handle = opened
-    }
-
-    func unlock() {
-        var overlapped = OVERLAPPED()
-        _ = UnlockFileEx(handle, 0, DWORD.max, DWORD.max, &overlapped)
-        CloseHandle(handle)
-    }
-}
 #endif

@@ -146,6 +146,42 @@ struct PresetLibraryTests {
 
 @Suite("Presets file")
 struct PresetFileTests {
+    /// The app and the CLI (each its own store value) saving at the same time.
+    @Test func concurrentUpdatesLoseNoPreset() async throws {
+        let url = temporaryPresetsURL()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let writers = 8, perWriter = 10
+        await withTaskGroup(of: Void.self) { group in
+            for w in 0..<writers {
+                group.addTask {
+                    let store = PresetStore(url: url)
+                    for i in 0..<perWriter {
+                        let preset = Preset(name: "p\(w)-\(i)", tenantId: nil, match: [PresetRule(filters: ["x"])])
+                        _ = try? store.update { try $0.save(preset) }
+                    }
+                }
+            }
+        }
+        let names = try PresetStore(url: url).load().presets.map(\.name)
+        #expect(names.count == writers * perWriter)
+        #expect(Set(names).count == writers * perWriter)
+        #expect(hasMode(url.path + ".lock", 0o600))
+    }
+
+    @Test func aHeldLockMakesAWriterWait() throws {
+        let url = temporaryPresetsURL()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let lock = try FileLock(url: FileLock.lockURL(for: url))
+        let done = DispatchSemaphore(value: 0)
+        Thread {
+            _ = try? PresetStore(url: url).update { try $0.save(Preset(name: "late", tenantId: nil, match: [PresetRule(filters: ["x"])])) }
+            done.signal()
+        }.start()
+        #expect(done.wait(timeout: .now() + 0.3) == .timedOut)
+        lock.unlock()
+        #expect(done.wait(timeout: .now() + 10) == .success)
+        #expect(try PresetStore(url: url).load().presets.map(\.name) == ["late"])
+    }
     @Test func roundTripsWithAVersionedSchema() throws {
         let p = Preset(
             id: UUID(uuidString: "6F9619FF-8B86-D011-B42D-00C04FC964FF")!, name: "On-call", tenantId: contoso,
@@ -196,9 +232,10 @@ struct PresetFileTests {
         #expect(library.presets.map(\.name) == ["A", "B", "C"])
         #expect(try store.load().presets.map(\.name) == ["A", "B", "C"])
         #expect(hasMode(url.path, 0o600))
-        // The folder it created is yours only, and no temporary file is left.
+        // The folder it created is yours only, and no temporary file is left (only the empty lock file).
         #expect(hasMode(url.deletingLastPathComponent().path, 0o700))
-        #expect(try FileManager.default.contentsOfDirectory(atPath: url.deletingLastPathComponent().path) == [url.lastPathComponent])
+        #expect(try FileManager.default.contentsOfDirectory(atPath: url.deletingLastPathComponent().path).sorted()
+            == [url.lastPathComponent, url.lastPathComponent + ".lock"])
     }
 
     @Test func locationDefaultAndOverride() {
