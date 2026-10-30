@@ -463,6 +463,56 @@ struct TenantLogoTests {
         #expect(LogoTransport.userAgent == "Pimento/\(AppInfo.version)")
     }
 
+    @Test func theLogoTransportSendsOnlyFixedHeaders() {
+        // Foundation would otherwise add the user's preferred languages (Accept-Language: de-DE,…).
+        for request in [TenantLogoPolicy.brandingRequest(domain: "contoso.onmicrosoft.com"),
+                        TenantLogoPolicy.imageRequest(URL(string: "https://contoso.com/favicon.ico")!)] {
+            let sent = LogoTransport.prepared(request)
+            #expect(sent.value(forHTTPHeaderField: "User-Agent") == "Pimento/\(AppInfo.version)")
+            #expect(sent.value(forHTTPHeaderField: "Accept-Language") == "en")
+            #expect(!sent.httpShouldHandleCookies)
+            let names = Set((sent.allHTTPHeaderFields ?? [:]).keys.map { $0.lowercased() })
+            #expect(names.isSubset(of: ["user-agent", "accept-language", "accept", "content-type"]), "\(names)")
+        }
+    }
+
+    @Test func theLogoTransportOffersNoCredentials() {
+        for method in [NSURLAuthenticationMethodHTTPBasic, NSURLAuthenticationMethodHTTPDigest, NSURLAuthenticationMethodNTLM,
+                       NSURLAuthenticationMethodNegotiate, NSURLAuthenticationMethodClientCertificate, NSURLAuthenticationMethodDefault] {
+            #expect(LogoSessionDelegate.answer(method).0 == .cancelAuthenticationChallenge, "\(method)")
+            #expect(LogoSessionDelegate.answer(method).1 == nil)
+        }
+        // The server's certificate is still checked as usual.
+        #expect(LogoSessionDelegate.answer(NSURLAuthenticationMethodServerTrust).0 == .performDefaultHandling)
+    }
+
+    @Test func aCancelledFetchSendsNothingMoreAndCachesNothing() async {
+        final class Box: @unchecked Sendable {
+            private let lock = NSLock()
+            private var task: Task<TenantLogo?, Never>?
+            var value: Task<TenantLogo?, Never>? {
+                get { lock.withLock { task } }
+                set { lock.withLock { task = newValue } }
+            }
+        }
+        let clock = LogoTestClock(Fixture.now)
+        let box = Box()
+        // The setting is turned off while the lookup is under way.
+        let transport = RecordingTransport { r in
+            if isBrandingLookup(r) { box.value?.cancel() }
+            return (fakeImage(), 200)
+        }
+        let s = service(transport, clock: clock)
+        let task = Task { () -> TenantLogo? in
+            while box.value == nil { await Task.yield() }
+            return await s.logo(for: tenant(), enabled: true, demo: false)
+        }
+        box.value = task
+        #expect(await task.value == nil)
+        #expect(await transport.requests.count == 1, "no image or website request after the cancel")
+        #expect(s.cache.lookup(tenantId: contosoId, now: clock.now) == .missing, "not cached as \"no logo\"")
+    }
+
     @Test func aTenantWithoutDomainsSendsAndCachesNothing() async {
         let clock = LogoTestClock(Fixture.now)
         let transport = brandingTransport()
@@ -501,6 +551,35 @@ struct TenantLogoTests {
         CGImageDestinationAddImage(dest, image, nil)
         #expect(CGImageDestinationFinalize(dest))
         return out as Data
+    }
+
+    private func encoded(_ type: String, width: Int = 64, height: Int = 64) throws -> Data {
+        let ctx = try #require(CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                                         space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        ctx.setFillColor(CGColor(red: 0.8, green: 0.2, blue: 0.1, alpha: 1))
+        ctx.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        let image = try #require(ctx.makeImage())
+        let out = NSMutableData()
+        let dest = try #require(CGImageDestinationCreateWithData(out, type as CFString, 1, nil))
+        CGImageDestinationAddImage(dest, image, nil)
+        #expect(CGImageDestinationFinalize(dest))
+        return out as Data
+    }
+
+    @Test func everyAcceptedFormatDecodes() throws {
+        for type in ["public.png", "public.jpeg", "com.compuserve.gif", "com.microsoft.bmp", "com.microsoft.ico"] {
+            #expect(LogoImageCheck.inspect(try encoded(type)) == LogoImageInfo(width: 64, height: 64), "\(type)")
+        }
+    }
+
+    @Test func imageIOMustReadTheFormatTheMagicNames() {
+        // Starts with the ICO magic (00 00 01 00), yet ImageIO hands it to its TGA parser.
+        let tga = Data([0x00, 0x00, 0x01, 0x00, 0x10, 0x10, 0x80, 0x10, 0x00, 0x20, 0x20, 0x00, 0x00, 0x10, 0x80, 0x10, 0x20, 0x10])
+        #expect(LogoImageCheck.format(of: tga) == .ico)
+        let picked = CGImageSourceCreateWithData(tga as CFData, nil).flatMap { CGImageSourceGetType($0) as String? }
+        #expect(LogoImageCheck.source(tga) == nil, "ImageIO reads it as \(picked ?? "nothing")")
+        #expect(LogoImageCheck.inspect(tga) == nil)
+        #expect(LogoImageCheck.thumbnail(tga, maxPixels: 64) == nil)
     }
 
     @Test func realImagesAreDecodedAndSized() throws {
