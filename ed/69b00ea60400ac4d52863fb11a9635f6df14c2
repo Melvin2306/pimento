@@ -1,0 +1,48 @@
+Sources/PimentoCore/KeepAlive.swift
+  s_4884204a812fec::t_5d74fc8a1fdd70 169-174
+  s_4884204a812fec::t_4e9d644aebc766 66-82,87-88,90,93-94,98,100-106,109-110,113,115,118,122-123,128-129,334,417,523,525
+  s_4884204a812fec::t_cb85b52c5e589d 116-117,119-121,563,747
+  s_4884204a812fec::t_78a0bc0f5afde4 83-86,89,91-92,95-97,99
+  s_4884204a812fec::t_b46d74513ba773 331-333
+  s_4884204a812fec::t_c69d648acfaef9 335
+  s_4884204a812fec::t_6bc57b3fbcd44c 416
+  s_4884204a812fec::t_6385f54b32c629 418-420
+  s_4884204a812fec::t_f4a9e105b95384 520-522
+  s_4884204a812fec::t_7a3552d79ae4fb 524
+  s_4884204a812fec::t_cb7eafd58af62c 526
+  s_4884204a812fec::t_239ac09b6fed84 560-562
+  s_4884204a812fec::t_f4da6f60ce531b 744-746
+  s_7d2619c3c69a01::t_6b82d2196f731b 286,330,356-359,373,407-408,410,421-422,428-429,450,512-519,553-555,580-581,586-587,599-601,646,685-686,714-715,739-741,743
+CHANGELOG.md
+  s_4884204a812fec::t_297072d0987d23 19-21
+README.md
+  s_4884204a812fec::t_361ecdd31becf7 402,404,1276
+Sources/PimentoCore/CLI/CLIKeepAlive.swift
+  s_4884204a812fec::t_bf4097af54f18c 158
+Sources/PimentoCore/KeepAliveSession.swift
+  s_4884204a812fec::t_0fe9f5eaae17f7 23-26,40,68,71-84,87,90,93,98-106,108-110
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ed69b00ea60400ac4d52863fb11a9635f6df14c2",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    },
+    "s_7d2619c3c69a01": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a7097578d17d0862c",
+        "model": "unknown"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
