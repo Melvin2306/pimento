@@ -1,0 +1,30 @@
+Sources/PimentoCore/MCP/MCPLineReader.swift
+  s_4884204a812fec::t_a3e3f58b1c137f 1-87
+  s_4884204a812fec::t_672d51867f21ae 88-105
+Sources/PimentoCore/CLI/CLIMCP.swift
+  s_4884204a812fec::t_a6df7bb9253190 27-31,53-65
+Sources/PimentoCore/CLI/CLIRunner.swift
+  s_4884204a812fec::t_c62c905d373895 15-17
+Sources/PimentoCore/MCP/MCPServer.swift
+  s_4884204a812fec::t_a2cc6067ef8603 81-91,93-97
+Sources/pimento/main.swift
+  s_4884204a812fec::t_4a92206bb89b07 125-140,175-176
+Tests/PimentoCoreTests/MCPTests.swift
+  s_4884204a812fec::t_98763467f63191 981-985,996-1071
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0fcd70aa31c123261e0ff0d832f1ce7d365b5ea4",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
