@@ -1,0 +1,14 @@
+Sources/PimentoApp/DemoSupport.swift
+  h_464ee3ce4ea982 300,302
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "baf9f1b19ae2f798169e720d33d7a0f802d4cc4a",
+  "prompts": {},
+  "humans": {
+    "h_464ee3ce4ea982": {
+      "author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
