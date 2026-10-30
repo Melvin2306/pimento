@@ -1152,7 +1152,7 @@ investigation."* The agent calls
 and your client shows Pimento's confirmation, with a checkbox you have to tick:
 
 ```text
-An AI agent asks Pimento to ACTIVATE this Azure role for alex.wilber@contoso.example in tenant …:
+An AI agent asks Pimento to ACTIVATE this Azure role for alex@example.com in tenant …:
 
 1. Reader on "Contoso Production" (Subscription) for 8 h
 
