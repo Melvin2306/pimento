@@ -8,11 +8,12 @@
 // Output: Assets/AppIcon.iconset/*.png and Assets/AppIcon.icns, plus the menu
 // bar glyph Assets/MenuBarIcon.png and MenuBarIcon@2x.png (18 pt).
 //
-// Design ("Countdown pepper"): a Big Sur-style squircle in deep wine, a flat
-// two-tone pimento with an up-chevron cut out of it (elevated privilege),
-// inside an amber countdown arc with 70 % left (the elevation is temporary).
-// At 32 px and below the arc is dropped and the pepper fills the squircle; at
-// 16 px the chevron goes too.
+// Design ("Pepper shield"): a Big Sur-style squircle in midnight navy with a
+// faint red glow, a glossy red pimento shaped like a heraldic shield (guarded,
+// privileged access) with gold edging, a keyhole punched through it, and a
+// green calyx with a curled stem on top. At 32 px and below the shield fills
+// the squircle, the keyhole grows, and the rim, stem and secondary highlights
+// are dropped.
 
 import CoreGraphics
 import Foundation
@@ -43,8 +44,8 @@ var S: CGFloat = 1
 
 extension CGContext {
     func with(_ body: () -> Void) { saveGState(); body(); restoreGState() }
-    func shadow(_ dy: CGFloat, _ blur: CGFloat, _ color: CGColor) {
-        setShadow(offset: CGSize(width: 0, height: dy * S), blur: blur * S, color: color)
+    func shadow(_ dy: CGFloat, _ blur: CGFloat, _ color: CGColor, dx: CGFloat = 0) {
+        setShadow(offset: CGSize(width: dx * S, height: dy * S), blur: blur * S, color: color)
     }
     func fill(_ path: CGPath, _ color: CGColor) { addPath(path); setFillColor(color); fillPath() }
     func linear(_ path: CGPath, _ g: CGGradient, _ a: CGPoint, _ b: CGPoint) {
@@ -52,6 +53,17 @@ extension CGContext {
     }
     func radial(_ path: CGPath, _ g: CGGradient, _ c: CGPoint, _ r: CGFloat) {
         with { addPath(path); clip(); drawRadialGradient(g, startCenter: c, startRadius: 0, endCenter: c, endRadius: r, options: [.drawsAfterEndLocation]) }
+    }
+    /// A shadow cast inwards from the path's edge.
+    func innerShadow(_ path: CGPath, _ color: CGColor, blur: CGFloat, dy: CGFloat = 0, dx: CGFloat = 0) {
+        with {
+            addPath(path); clip()
+            let ring = CGMutablePath()
+            ring.addRect(path.boundingBox.insetBy(dx: -400, dy: -400))
+            ring.addPath(path)
+            shadow(dy, blur, color, dx: dx)
+            addPath(ring); setFillColor(rgb(0x000000)); fillPath(using: .evenOdd)
+        }
     }
 }
 
@@ -73,26 +85,46 @@ func squircle(in rect: CGRect, exponent n: CGFloat = 5) -> CGPath {
     return path
 }
 
-func place(_ p: CGPath, at c: CGPoint, scale s: CGFloat) -> CGPath {
-    var t = CGAffineTransform(translationX: c.x, y: c.y).scaledBy(x: s, y: s)
+/// `p` scaled by `s` (`s * sx` horizontally), rotated by `r` and moved to `c`.
+func place(_ p: CGPath, at c: CGPoint, scale s: CGFloat, sx: CGFloat = 1, rotate r: CGFloat = 0) -> CGPath {
+    var t = CGAffineTransform(translationX: c.x, y: c.y).rotated(by: r).scaledBy(x: s * sx, y: s)
     return p.copy(using: &t)!
 }
 
-/// A pimento: broad rounded shoulders with a dip for the stem, tapering to a
-/// blunt bottom with two gentle lobes. Unit space (y up): about 1.0 wide,
-/// y from -0.53 to +0.47.
-let pepperUnit: CGPath = {
+/// `path` with its corners rounded off: outset by half of `width` with round joins.
+func rounded(_ path: CGPath, _ width: CGFloat) -> CGPath {
+    path.copy(strokingWithWidth: width, lineCap: .round, lineJoin: .round, miterLimit: 10).union(path)
+}
+
+/// A pimento shaped like a heraldic shield: the pepper's two lobed shoulders
+/// with a dip for the stem, straight-ish flanks, and a blunt point. Unit space
+/// (y up): about 1.0 wide, y from -0.60 to +0.51.
+let shieldPepperUnit: CGPath = {
     let p = CGMutablePath()
-    p.move(to: pt(0, 0.36))
-    p.addCurve(to: pt(0.50, 0.16), control1: pt(0.14, 0.50), control2: pt(0.48, 0.52))
-    p.addCurve(to: pt(0.30, -0.42), control1: pt(0.53, -0.10), control2: pt(0.44, -0.30))
-    p.addCurve(to: pt(0, -0.48), control1: pt(0.22, -0.50), control2: pt(0.08, -0.54))
-    p.addCurve(to: pt(-0.30, -0.42), control1: pt(-0.08, -0.54), control2: pt(-0.22, -0.50))
-    p.addCurve(to: pt(-0.50, 0.16), control1: pt(-0.44, -0.30), control2: pt(-0.53, -0.10))
-    p.addCurve(to: pt(0, 0.36), control1: pt(-0.48, 0.52), control2: pt(-0.14, 0.50))
+    p.move(to: pt(0, 0.40))
+    p.addCurve(to: pt(0.46, 0.42), control1: pt(0.10, 0.52), control2: pt(0.34, 0.54))
+    p.addCurve(to: pt(0.50, 0.04), control1: pt(0.52, 0.34), control2: pt(0.50, 0.20))
+    p.addCurve(to: pt(0.04, -0.58), control1: pt(0.50, -0.26), control2: pt(0.30, -0.46))
+    p.addQuadCurve(to: pt(-0.04, -0.58), control: pt(0, -0.62))
+    p.addCurve(to: pt(-0.50, 0.04), control1: pt(-0.30, -0.46), control2: pt(-0.50, -0.26))
+    p.addCurve(to: pt(-0.46, 0.42), control1: pt(-0.50, 0.20), control2: pt(-0.52, 0.34))
+    p.addCurve(to: pt(0, 0.40), control1: pt(-0.34, 0.54), control2: pt(-0.10, 0.52))
     p.closeSubpath()
     return p
 }()
+
+/// A keyhole: a round head of radius `r` at `c` over a slot that widens to
+/// `foot` at `length` below the centre, corners softened.
+func keyhole(center c: CGPoint, radius r: CGFloat, length l: CGFloat, foot: CGFloat) -> CGPath {
+    let head = CGPath(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: 2 * r, height: 2 * r), transform: nil)
+    let slot = CGMutablePath()
+    slot.move(to: pt(c.x - r * 0.42, c.y - r * 0.2))
+    slot.addLine(to: pt(c.x + r * 0.42, c.y - r * 0.2))
+    slot.addLine(to: pt(c.x + foot / 2, c.y - l))
+    slot.addLine(to: pt(c.x - foot / 2, c.y - l))
+    slot.closeSubpath()
+    return rounded(head.union(slot), r * 0.18)
+}
 
 /// Calyx: a flattened rosette of `n` rounded sepals around the stem, their
 /// tips drooping over the pepper's shoulders.
@@ -111,38 +143,32 @@ func calyx(center c: CGPoint, radius r: CGFloat, n: Int = 5, flatten: CGFloat = 
     return path
 }
 
-/// An up-chevron centred on `c`, `w` wide and `h` tall (centre line), drawn
-/// with round caps and joins at `stroke` width.
-func chevron(center c: CGPoint, width w: CGFloat, height h: CGFloat, stroke: CGFloat) -> CGPath {
-    let p = CGMutablePath()
-    p.move(to: pt(c.x - w / 2, c.y - h / 2))
-    p.addLine(to: pt(c.x, c.y + h / 2))
-    p.addLine(to: pt(c.x + w / 2, c.y - h / 2))
-    return p.copy(strokingWithWidth: stroke, lineCap: .round, lineJoin: .round, miterLimit: 10)
-}
-
-/// The stem: from the pepper's top dip, curling up and to the right.
-func stem(from top: CGPoint, scale s: CGFloat, width: CGFloat) -> CGPath {
-    let p = CGMutablePath()
-    p.move(to: top)
-    p.addCurve(to: pt(top.x + s * 0.20, top.y + s * 0.30),
-               control1: pt(top.x - s * 0.02, top.y + s * 0.20),
-               control2: pt(top.x + s * 0.08, top.y + s * 0.30))
-    return p.copy(strokingWithWidth: width, lineCap: .round, lineJoin: .round, miterLimit: 10)
+/// A soft white specular streak: an elongated ellipse, tilted by `angle`,
+/// fading from top to bottom, clipped to `clip`.
+func highlight(_ ctx: CGContext, clip: CGPath, center c: CGPoint, w: CGFloat, h: CGFloat, angle: CGFloat, alpha: CGFloat) {
+    let e = place(CGPath(ellipseIn: CGRect(x: -0.5, y: -0.5, width: 1, height: 1), transform: nil), at: c, scale: h, sx: w / h, rotate: angle)
+    ctx.with {
+        ctx.addPath(clip); ctx.clip()
+        let up = pt(c.x - sin(angle) * h * 0.5, c.y + cos(angle) * h * 0.5)
+        let down = pt(c.x + sin(angle) * h * 0.5, c.y - cos(angle) * h * 0.5)
+        ctx.linear(e, gradient([(0, rgb(0xFFFFFF, alpha)), (1, rgb(0xFFFFFF, 0))]), up, down)
+    }
 }
 
 // MARK: - Drawing (in a 1024 × 1024 design space)
 
 let background = gradient([
-    (0.0, rgb(0x7A1838)),   // wine (top)
-    (0.5, rgb(0x4A0C26)),
-    (1.0, rgb(0x1E0612)),   // near-black (bottom)
+    (0.0, rgb(0x34407A)),   // midnight navy (top)
+    (0.55, rgb(0x1A2150)),
+    (1.0, rgb(0x0B0F2E)),   // near-black (bottom)
 ])
-let amber = gradient([(0, rgb(0xFFD25A)), (0.5, rgb(0xFF9A3C)), (1, rgb(0xFF5E3A))])
-let flesh = gradient([(0, rgb(0xFF7A4A)), (1, rgb(0xF2303A))])
+let flesh = gradient([(0, rgb(0xFF6A4D)), (0.45, rgb(0xE8202E)), (1, rgb(0x8E0A22))])
+let green = gradient([(0, rgb(0x9BE15D)), (0.5, rgb(0x46B04A)), (1, rgb(0x1E6E35))])
+let keyholeDark = gradient([(0, rgb(0x0B0F2E)), (1, rgb(0x2A2F5A))])
 
 func drawIcon(in ctx: CGContext, pixels: Int) {
-    // At 16 and 32 px the arc turns to mush: drop it and enlarge the pepper.
+    // At 16 and 32 px the rim, stem and fine highlights turn to mush: drop
+    // them, enlarge the shield and its keyhole.
     let small = pixels <= 32
 
     // Body with a soft drop shadow (Big Sur grid: 824 pt body, 100 pt margin),
@@ -150,94 +176,103 @@ func drawIcon(in ctx: CGContext, pixels: Int) {
     let body = squircle(in: CGRect(x: 100, y: 100, width: 824, height: 824))
     ctx.with {
         ctx.shadow(-10, 24, rgb(0x000000, 0.30))
-        ctx.fill(body, rgb(0x4A0C26))
+        ctx.fill(body, rgb(0x1A2150))
     }
     ctx.linear(body, background, pt(330, 924), pt(694, 100))
-    ctx.radial(body, gradient([(0, rgb(0xFFFFFF, 0.14)), (1, rgb(0xFFFFFF, 0))]), pt(330, 900), 640)
+    ctx.radial(body, gradient([(0, rgb(0xFFFFFF, 0.16)), (1, rgb(0xFFFFFF, 0))]), pt(330, 900), 640)
     if !small {
         ctx.with {
             ctx.addPath(body); ctx.clip()
-            ctx.addPath(body); ctx.setStrokeColor(rgb(0xFFFFFF, 0.12)); ctx.setLineWidth(6); ctx.strokePath()
+            ctx.addPath(body); ctx.setStrokeColor(rgb(0xFFFFFF, 0.18)); ctx.setLineWidth(6); ctx.strokePath()
+        }
+        // A faint red glow behind the shield.
+        ctx.radial(body, gradient([(0, rgb(0xFF5A4A, 0.30)), (1, rgb(0xFF5A4A, 0))]), pt(512, 470), 400)
+    }
+
+    // The shield-shaped pepper: drop shadow, glossy red flesh lit from the top
+    // left, an inner shadow along its lower right edge, and a gold rim.
+    let s: CGFloat = small ? 640 : 530
+    let c = small ? pt(512, 470) : pt(512, 476)
+    let shield = place(shieldPepperUnit, at: c, scale: s)
+    ctx.with {
+        ctx.shadow(-20, 40, rgb(0x000000, small ? 0.3 : 0.5))
+        ctx.fill(shield, rgb(0xC81A2A))
+    }
+    let box = shield.boundingBox
+    ctx.radial(shield, flesh, pt(box.minX + box.width * 0.36, box.minY + box.height * 0.72), max(box.width, box.height) * 0.85)
+    if !small {
+        ctx.innerShadow(shield, rgb(0x4A0010, 0.55), blur: 46, dy: 18, dx: -10)
+        ctx.with {
+            ctx.addPath(shield); ctx.clip()
+            ctx.addPath(shield); ctx.setLineWidth(18)
+            ctx.setStrokeColor(rgb(0xFFB36B, 0.55)); ctx.strokePath()
         }
     }
 
-    // Countdown arc: a faint full track, and an amber arc with a glow from
-    // 12 o'clock running clockwise, 70 % of the way round.
+    // The keyhole, punched through to a dark interior; larger when small, and
+    // bolder still at 16 px, where it is little more than a dark slot.
+    let hole = pixels <= 16
+        ? keyhole(center: pt(512, c.y + 40), radius: 104, length: 240, foot: 150)
+        : small
+        ? keyhole(center: pt(512, c.y + 30), radius: 82, length: 200, foot: 120)
+        : keyhole(center: pt(512, c.y + 40), radius: 62, length: 170, foot: 86)
+    ctx.linear(hole, keyholeDark, pt(0, hole.boundingBox.maxY), pt(0, hole.boundingBox.minY))
     if !small {
-        let center = pt(512, 506), r: CGFloat = 306
-        ctx.addArc(center: center, radius: r, startAngle: 0, endAngle: 2 * .pi, clockwise: false)
-        ctx.setStrokeColor(rgb(0xFFFFFF, 0.10)); ctx.setLineWidth(44); ctx.strokePath()
-        let start = CGFloat.pi / 2, end = start - 2 * .pi * 0.70
-        let arc = CGMutablePath()
-        arc.addArc(center: center, radius: r, startAngle: start, endAngle: end, clockwise: true)
-        let arcShape = arc.copy(strokingWithWidth: 44, lineCap: .round, lineJoin: .round, miterLimit: 10)
-        ctx.with { ctx.shadow(0, 30, rgb(0xFF8A3C, 0.55)); ctx.fill(arcShape, rgb(0xFF9A3C)) }
-        ctx.linear(arcShape, amber, pt(512, 830), pt(300, 300))
+        ctx.innerShadow(hole, rgb(0x000000, 0.9), blur: 16, dy: -10)
+        // The hole's lit lower lip.
+        ctx.with {
+            ctx.addPath(hole); ctx.setLineWidth(6); ctx.setStrokeColor(rgb(0xFF8A70, 0.5))
+            ctx.translateBy(x: 0, y: -3); ctx.strokePath()
+        }
+        highlight(ctx, clip: shield, center: pt(c.x - s * 0.30, c.y + s * 0.12), w: 64, h: 250, angle: 0.18, alpha: 0.85)
+        highlight(ctx, clip: shield, center: pt(c.x + s * 0.30, c.y + s * 0.33), w: 34, h: 90, angle: -1.1, alpha: 0.5)
+    } else if pixels > 16 {
+        highlight(ctx, clip: shield, center: pt(c.x - s * 0.30, c.y + s * 0.10), w: 80, h: 240, angle: 0.18, alpha: 0.6)
     }
 
-    // Flat two-tone pepper: lit left half, shaded right half.
-    let s: CGFloat = small ? 620 : 400
-    let pc = small ? pt(512, 450) : pt(512, 478)
-    let pepper = place(pepperUnit, at: pc, scale: s)
+    // A short stem curling up to the right, then the calyx over the dip.
+    let top = c.y + 0.40 * s
+    if !small {
+        let stem = CGMutablePath()
+        stem.move(to: pt(512, top + 10))
+        stem.addCurve(to: pt(582, top + 128), control1: pt(510, top + 80), control2: pt(540, top + 120))
+        let stemShape = stem.copy(strokingWithWidth: 44, lineCap: .round, lineJoin: .round, miterLimit: 10)
+        ctx.with { ctx.shadow(-4, 8, rgb(0x000000, 0.4)); ctx.fill(stemShape, rgb(0x2F8F3E)) }
+        ctx.linear(stemShape, green, pt(480, 0), pt(600, 0))
+    }
+    let r: CGFloat = small ? 170 : 150
+    let cap = calyx(center: pt(512, top + 4), radius: r)
     ctx.with {
-        ctx.shadow(-10, 26, rgb(0x000000, small ? 0 : 0.45))
-        ctx.fill(pepper, rgb(0xF2403A))
+        ctx.shadow(-6, 12, rgb(0x3A0010, small ? 0 : 0.45))
+        ctx.fill(cap, rgb(0x2F8F3E))
     }
-    ctx.linear(pepper, flesh, pt(0, pepper.boundingBox.maxY), pt(0, pepper.boundingBox.minY))
-    let shade = CGMutablePath()
-    shade.move(to: pt(pc.x + s * 0.02, pc.y + s * 0.6))
-    shade.addCurve(to: pt(pc.x + s * 0.02, pc.y - s * 0.7),
-                   control1: pt(pc.x + s * 0.20, pc.y + s * 0.1),
-                   control2: pt(pc.x + s * 0.18, pc.y - s * 0.3))
-    shade.addLine(to: pt(pc.x + s, pc.y - s * 0.7))
-    shade.addLine(to: pt(pc.x + s, pc.y + s * 0.6))
-    shade.closeSubpath()
-    ctx.with { ctx.addPath(pepper); ctx.clip(); ctx.fill(shade, rgb(0xB0102E, 0.45)) }
-
-    // Up-chevron cut out of the pepper (elevation); at 16 px it only muddies.
-    if pixels > 16 {
-        let chev = chevron(center: pt(pc.x, pc.y - s * (small ? 0.04 : 0.05)),
-                           width: s * (small ? 0.48 : 0.40), height: s * (small ? 0.24 : 0.20),
-                           stroke: s * (small ? 0.15 : 0.105))
-        ctx.fill(chev, rgb(0xFFF1E0))
-    }
-
-    // Stem curling up to the right, then a flat calyx cap with a shaded half.
-    let top = pt(pc.x, pc.y + s * 0.36)
-    ctx.fill(stem(from: top, scale: s, width: s * (small ? 0.14 : 0.10)), rgb(0x3FA34A))
-    let cap = calyx(center: pt(top.x, top.y + s * 0.01), radius: s * (small ? 0.30 : 0.27))
-    ctx.fill(cap, rgb(0x5CC24D))
-    ctx.with {
-        ctx.addPath(cap); ctx.clip()
-        ctx.fill(CGPath(rect: CGRect(x: top.x + 4, y: 0, width: 1024, height: 1024), transform: nil), rgb(0x2E8B3A, 0.6))
-    }
+    ctx.linear(cap, green, pt(512, top + 4 + r * 0.5), pt(512, top + 4 - r * 0.5))
 }
 
-/// The menu bar glyph: the pepper's silhouette with its stem, black on
-/// transparent (macOS tints template images for the menu bar), the up-chevron
-/// cut out. No squircle, calyx or arc: at 18 pt only the silhouette and one
-/// cut-out read, and the countdown is the text next to it.
+/// The menu bar glyph: the pepper shield's silhouette, black on transparent
+/// (macOS tints template images for the menu bar), with a short, thick stem
+/// from the top dip and the keyhole cut out. No squircle, colour or calyx: at
+/// 18 pt only the silhouette and one cut-out read, a calyx line turns it into
+/// an acorn, and a thin curled stem into an apple.
 func drawMenuBarGlyph(in ctx: CGContext, pixels: Int) {
     let black = rgb(0x000000)
-    let retina = pixels > 18
-    let s: CGFloat = 750
-    let pc = pt(512, 430)
-    ctx.fill(place(pepperUnit, at: pc, scale: s), black)
+    // One point of the 18 pt glyph, in design units.
+    let u: CGFloat = 1024 / 18
+    let c = pt(9 * u, 8.4 * u)
+    let s = 13 * u
+    ctx.fill(place(shieldPepperUnit, at: c, scale: s), black)
 
-    // A slim stem from the top dip, curling up to the right.
-    let top = pt(pc.x, pc.y + s * 0.30)
-    let stemPath = CGMutablePath()
-    stemPath.move(to: top)
-    stemPath.addCurve(to: pt(top.x + s * 0.20, top.y + s * 0.31),
-                      control1: pt(top.x - s * 0.02, top.y + s * 0.20),
-                      control2: pt(top.x + s * 0.07, top.y + s * 0.31))
-    ctx.fill(stemPath.copy(strokingWithWidth: retina ? 100 : 112, lineCap: .round, lineJoin: .round, miterLimit: 10), black)
+    // The stem: a stub from the top dip, leaning slightly right.
+    let top = pt(c.x, c.y + 0.40 * s)
+    let stem = CGMutablePath()
+    stem.move(to: pt(top.x, top.y - 0.5 * u))
+    stem.addLine(to: pt(top.x + 0.4 * u, top.y + 2.4 * u))
+    ctx.fill(stem.copy(strokingWithWidth: 2.2 * u, lineCap: .round, lineJoin: .round, miterLimit: 10), black)
 
-    // The chevron, cut out.
+    // The keyhole, cut out.
     ctx.with {
         ctx.setBlendMode(.clear)
-        ctx.addPath(chevron(center: pt(pc.x, pc.y - s * 0.04), width: s * 0.44, height: s * 0.22,
-                            stroke: retina ? 116 : 120))
+        ctx.addPath(keyhole(center: pt(c.x, c.y + 1.0 * u), radius: 2.3 * u, length: 5.0 * u, foot: 2.4 * u))
         ctx.fillPath()
     }
 }

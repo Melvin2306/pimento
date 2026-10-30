@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="Assets/AppIcon.iconset/icon_256x256.png" width="128" height="128" alt="Pimento app icon: a red pepper with an upward chevron inside an amber countdown arc">
+  <img src="Assets/AppIcon.iconset/icon_256x256.png" width="128" height="128" alt="Pimento app icon: a red pepper shaped like a shield, with a keyhole, on a midnight-blue background">
 </p>
 
 <h1 align="center">Pimento</h1>
@@ -59,7 +59,7 @@ does the whole list in one go, as you, using the Azure CLI session you already h
   searchable **History** window (<kbd>⇧</kbd><kbd>⌘</kbd><kbd>H</kbd>) and `pimento history`. Export it as CSV,
   import your past requests from Azure (portal activity too), and *Activate Again* from a row.
   See [History](#history).
-- **Menu bar**: a pepper icon with the number of active roles (optionally the soonest end, *2 · 1:24*).
+- **Menu bar**: a pepper-shield icon with the number of active roles (optionally the soonest end, *2 · 1:24*).
   Click it for a live countdown of each active role, **Renew** and **End Now**, one-click preset
   activation and links to Scheduled and Approvals; Pimento keeps running there when you close the
   window, optionally without a Dock icon. See [Menu bar](#menu-bar).
@@ -419,7 +419,7 @@ The app and the `pimento` CLI share one file (see [Preset file](#preset-file)).
 
 ### Menu bar
 
-Pimento shows a pepper icon in the menu bar (Settings › General › Menu bar › *Show in menu bar*, on by
+Pimento shows a pepper-shield icon in the menu bar (Settings › General › Menu bar › *Show in menu bar*, on by
 default). While roles are active, the number of them follows the icon; with *Show remaining time in
 menu bar* the soonest end too: `1:24` for one role, `2 · 1:24` for more (hours:minutes, a day or more as
 `2d 3h`). Click the icon for:

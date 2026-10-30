@@ -11,7 +11,7 @@ import SwiftUI
 
 // MARK: - Icon
 
-/// The template glyph (pepper with an up-chevron) from `scripts/make-icon.swift`,
+/// The template glyph (pepper shield with a keyhole) from `scripts/make-icon.swift`,
 /// bundled as MenuBarIcon.png; a system symbol when run unbundled.
 @MainActor
 enum MenuBarIcon {
