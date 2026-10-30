@@ -348,6 +348,18 @@ public enum CLICommand: Equatable, Sendable {
     case logout(LogoutOptions)
     case whoami(WhoamiOptions)
 
+    /// Whether the command needs an access token (and so the auth source).
+    /// The others work offline, also with a broken `--auth` / $PIMENTO_AUTH:
+    /// help, presets, the local history, and `logout`, the way out.
+    public var needsAzure: Bool {
+        switch self {
+        case .help, .version, .completions, .logout: false
+        case .presets(let p): if case .save = p { true } else { false }
+        case .history(let h): if case .importAzure = h { true } else { false }
+        default: true
+        }
+    }
+
     public static let names = [
         "list", "activate", "deactivate", "renew", "extend", "scheduled", "cancel", "pending", "wait", "approvals", "approve",
         "deny", "status", "tenants", "presets", "history", "login", "logout", "whoami", "completions", "version", "help",

@@ -43,6 +43,19 @@ struct CLIAuthTests {
         #expect(throws: CLIParseError.missingValue("--auth")) { try CLIParser.parse(["list", "--auth="]) }
     }
 
+    @Test func aBadAuthSourceBlocksOnlyCommandsThatNeedAzure() async {
+        for args in [["help"], ["version"], ["presets", "list"], ["history"], ["logout"], ["completions", "zsh"]] {
+            let h = CLIHarness()
+            h.variables[AuthSourceResolver.environmentVariable] = "bogus"
+            #expect(await h.run(args) == 0, "\(args)")
+            #expect(h.err.contains("not an auth source"))
+        }
+        let list = CLIHarness()
+        list.variables[AuthSourceResolver.environmentVariable] = "bogus"
+        #expect(await list.run("list") == 2)
+        #expect(await list.transport.requests.isEmpty)
+    }
+
     @Test func parseLoginLogoutWhoami() throws {
         var login = LoginOptions()
         login.deviceCode = true

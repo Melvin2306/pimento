@@ -150,8 +150,12 @@ public struct CLIRunner: Sendable {
             let selection = try AuthSourceResolver.resolve(commandLine: invocation.auth, environment: env.variables, saved: settings.source)
             runner.auth = AuthContext(selection: selection, broker: broker, accountId: settings.accountId)
         } catch {
-            err(errStyle.red("error:") + " " + error.localizedDescription)
-            return CLIExit.usage.rawValue
+            guard !invocation.command.needsAzure else {
+                err(errStyle.red("error:") + " " + error.localizedDescription)
+                return CLIExit.usage.rawValue
+            }
+            // This command needs no token: say so, and go on.
+            err(errStyle.yellow("note:") + " " + error.localizedDescription)
         }
         do {
             return try await runner.run(invocation.command).rawValue
