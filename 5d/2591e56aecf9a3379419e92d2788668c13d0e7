@@ -1,0 +1,33 @@
+Tests/PimentoCoreTests/HistoryTests.swift
+  s_4884204a812fec::t_43da8a98c74cf1 7
+Tests/PimentoCoreTests/Support.swift
+  s_4884204a812fec::t_43da8a98c74cf1 97-124,127
+Tests/PimentoCoreTests/OutcomeAndServiceTests.swift
+  s_4884204a812fec::t_43da8a98c74cf1 101,123,158
+  h_464ee3ce4ea982 136,141-153
+Tests/PimentoCoreTests/CLIRunnerTests.swift
+  s_4884204a812fec::t_43da8a98c74cf1 586,610,669
+Tests/PimentoCoreTests/SignInTests.swift
+  s_4884204a812fec::t_43da8a98c74cf1 784
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5d2591e56aecf9a3379419e92d2788668c13d0e7",
+  "prompts": {},
+  "humans": {
+    "h_464ee3ce4ea982": {
+      "author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  },
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}

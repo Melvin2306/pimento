@@ -1,0 +1,31 @@
+Sources/PimentoCore/Auth.swift
+  s_4884204a812fec::t_a35ab225c96910 269
+  s_4884204a812fec::t_63625b70250b5a 223,243-268,270-276
+  s_4884204a812fec::t_461eac65bc8f61 277-279
+Tests/PimentoCoreTests/OutcomeAndServiceTests.swift
+  s_4884204a812fec::t_3ff7c95385532f 120-122,126,140,154-166
+  s_4884204a812fec::t_15b19061e97779 123-125,128,134-135,137-139
+  s_4884204a812fec::t_ed1015da07c0b0 127,129-133
+Tests/PimentoCoreTests/RoleMatcherTests.swift
+  s_4884204a812fec::t_ec05e4f7425bdd 124,136
+Sources/PimentoCore/SignIn/TokenStore.swift
+  s_4884204a812fec::t_96c563b2cb733c 58-59,264,266-273,290,303,319,324,329,332-360
+Tests/PimentoCoreTests/KeychainStoreTests.swift
+  s_4884204a812fec::t_5051c8ed00bb2d 1-132
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "324ca7f5ea60e2b34f0a5fb6aa94d124e520ab76",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}

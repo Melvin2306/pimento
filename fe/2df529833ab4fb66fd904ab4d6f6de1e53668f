@@ -1,0 +1,25 @@
+Sources/PimentoCore/CLI/CLIRunner.swift
+  s_4884204a812fec::t_d0dd0007914099 68-88
+Sources/pimento/main.swift
+  s_4884204a812fec::t_d0dd0007914099 119-122
+Tests/PimentoCoreTests/CLIRunnerTests.swift
+  s_4884204a812fec::t_ab98c19e9051c3 634
+  s_4884204a812fec::t_d0dd0007914099 133
+  s_4884204a812fec::t_8c4e8a0e7b5c4a 622-633,635-681
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fe2df529833ab4fb66fd904ab4d6f6de1e53668f",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
