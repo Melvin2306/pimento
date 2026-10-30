@@ -28,10 +28,15 @@ extension CLIRunner {
                 clientId: clientId, tenant: tenant, loginHint: previous?.username, claims: settings.claimsChallenge,
                 timeout: Self.browserTimeout
             ) { url in
-                runner.err("Opening your browser to sign in. If it does not open, visit:")
-                runner.err("  \(url.absoluteString)")
+                // The sign-in URL (state, nonce, PKCE challenge) is shown only
+                // when no browser could be opened: not in scrollback or logs otherwise.
+                if await open(url) {
+                    runner.err("Opened your browser to sign in.")
+                } else {
+                    runner.err("Could not open a browser. To sign in, visit:")
+                    runner.err("  \(url.absoluteString)")
+                }
                 runner.err(runner.errStyle.dim("Waiting up to \(WaitTimeout.label(Self.browserTimeout)) (no browser here? use --device-code)…"))
-                _ = await open(url)
                 // Without a browser here, the URL can still be opened by hand.
                 return true
             }

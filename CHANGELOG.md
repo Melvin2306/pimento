@@ -512,6 +512,9 @@ All notable changes to this project are documented here. The format follows
   to the CLI with those flags first, so the CLI always reads it as that read-only mode: before, the
   whole command line went through as it was, and `Pimento activate X --yes --list` reached the CLI
   as an `activate`.
+- `pimento login` prints the sign-in URL (with its `state`, `nonce` and PKCE challenge) only when
+  no browser could be opened, instead of always, so it does not end up in scrollback, terminal
+  logs or screen shares.
 
 ## [0.1.0] - 2026-10-29
 

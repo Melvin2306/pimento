@@ -185,11 +185,34 @@ struct CLIAuthTests {
         #expect(await h.run("login", "--json") == 0)
         let url = try #require(opened.value)
         #expect(query(url)["claims"] == challenge)
-        #expect(h.err.contains(url.absoluteString))
+        // The browser opened: the URL (state, nonce, challenge) is not printed.
+        #expect(!h.err.contains(url.absoluteString) && !h.err.contains(query(url)["state"]!))
+        #expect(h.err.contains("Opened your browser to sign in."))
         #expect(h.out.contains("\"source\" : \"pimento\""))
         #expect(h.authSettings.load().claimsChallenge == nil)
         // What the opener left behind is removed once the sign-in is over.
         #expect(h.browserSignInsEnded.value == 1)
+    }
+
+    /// No browser could be opened: the URL is printed, to be opened by hand.
+    @Test(.enabled(if: LoopbackListener.isSupported, "no loopback listener on Windows"))
+    func loginPrintsTheURLOnlyWhenNoBrowserOpened() async throws {
+        let h = CLIHarness()
+        let opened = TestBox<URL>()
+        h.signInTransport = fakeLogin { opened.value.flatMap { query($0)["nonce"] } }
+        try h.authSettings.save(AuthSettings(clientId: testClientId))
+        h.openURL = { url in
+            opened.value = url
+            let q = query(url)
+            let port = UInt16(URL(string: q["redirect_uri"]!)!.port!)
+            // The user opens it by hand.
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.1) { browse(port: port, "/?code=c&state=\(q["state"]!)") }
+            return false
+        }
+        #expect(await h.run("login") == 0)
+        let url = try #require(opened.value)
+        #expect(h.err.contains("Could not open a browser. To sign in, visit:"))
+        #expect(h.err.contains(url.absoluteString))
     }
 
     /// Windows has no browser sign-in: `login` uses a device code by itself.
