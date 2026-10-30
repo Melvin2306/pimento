@@ -1,0 +1,306 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>bundleid</key>
+	<string>io.github.melvin2306.pimento.alfred</string>
+	<key>category</key>
+	<string>Productivity</string>
+	<key>connections</key>
+	<dict>
+		<key>D5257E0C-810B-4556-9FF6-4B996BB2428E</key>
+		<array>
+			<dict>
+				<key>destinationuid</key>
+				<string>50B0C3DD-C472-4523-9F55-F8D743A439F3</string>
+				<key>modifiers</key>
+				<integer>0</integer>
+				<key>modifiersubtext</key>
+				<string></string>
+				<key>vitoclose</key>
+				<false/>
+			</dict>
+			<dict>
+				<key>destinationuid</key>
+				<string>50B0C3DD-C472-4523-9F55-F8D743A439F3</string>
+				<key>modifiers</key>
+				<integer>1048576</integer>
+				<key>modifiersubtext</key>
+				<string></string>
+				<key>vitoclose</key>
+				<false/>
+			</dict>
+			<dict>
+				<key>destinationuid</key>
+				<string>50B0C3DD-C472-4523-9F55-F8D743A439F3</string>
+				<key>modifiers</key>
+				<integer>524288</integer>
+				<key>modifiersubtext</key>
+				<string></string>
+				<key>vitoclose</key>
+				<false/>
+			</dict>
+		</array>
+		<key>50B0C3DD-C472-4523-9F55-F8D743A439F3</key>
+		<array>
+			<dict>
+				<key>destinationuid</key>
+				<string>3FCBB74F-A19F-4677-BFB3-96A85FAFF3F0</string>
+				<key>modifiers</key>
+				<integer>0</integer>
+				<key>modifiersubtext</key>
+				<string></string>
+				<key>vitoclose</key>
+				<false/>
+			</dict>
+		</array>
+	</dict>
+	<key>createdby</key>
+	<string>melvin2306</string>
+	<key>description</key>
+	<string>Activate and deactivate Azure PIM roles and presets with the pimento CLI</string>
+	<key>disabled</key>
+	<false/>
+	<key>name</key>
+	<string>Pimento</string>
+	<key>objects</key>
+	<array>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>alfredfiltersresults</key>
+				<false/>
+				<key>alfredfiltersresultsmatchmode</key>
+				<integer>0</integer>
+				<key>argumenttreatemptyqueryasnil</key>
+				<false/>
+				<key>argumenttrimmode</key>
+				<integer>0</integer>
+				<key>argumenttype</key>
+				<integer>1</integer>
+				<key>escaping</key>
+				<integer>102</integer>
+				<key>keyword</key>
+				<string>pim</string>
+				<key>queuedelaycustom</key>
+				<integer>3</integer>
+				<key>queuedelayimmediatelyinitially</key>
+				<true/>
+				<key>queuedelaymode</key>
+				<integer>0</integer>
+				<key>queuemode</key>
+				<integer>2</integer>
+				<key>runningsubtext</key>
+				<string>Reading your PIM roles…</string>
+				<key>script</key>
+				<string></string>
+				<key>scriptargtype</key>
+				<integer>1</integer>
+				<key>scriptfile</key>
+				<string>scriptfilter.sh</string>
+				<key>subtext</key>
+				<string>Presets and roles: words narrow the list, &gt; and a justification activate</string>
+				<key>title</key>
+				<string>Pimento: activate PIM roles</string>
+				<key>type</key>
+				<integer>8</integer>
+				<key>withspace</key>
+				<true/>
+			</dict>
+			<key>type</key>
+			<string>alfred.workflow.input.scriptfilter</string>
+			<key>uid</key>
+			<string>D5257E0C-810B-4556-9FF6-4B996BB2428E</string>
+			<key>version</key>
+			<integer>3</integer>
+		</dict>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>concurrently</key>
+				<false/>
+				<key>escaping</key>
+				<integer>102</integer>
+				<key>script</key>
+				<string></string>
+				<key>scriptargtype</key>
+				<integer>1</integer>
+				<key>scriptfile</key>
+				<string>action.sh</string>
+				<key>type</key>
+				<integer>8</integer>
+			</dict>
+			<key>type</key>
+			<string>alfred.workflow.action.script</string>
+			<key>uid</key>
+			<string>50B0C3DD-C472-4523-9F55-F8D743A439F3</string>
+			<key>version</key>
+			<integer>2</integer>
+		</dict>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>lastpathcomponent</key>
+				<false/>
+				<key>onlyshowifquerypopulated</key>
+				<true/>
+				<key>removeextension</key>
+				<false/>
+				<key>text</key>
+				<string>{query}</string>
+				<key>title</key>
+				<string>{var:pim_title}</string>
+			</dict>
+			<key>type</key>
+			<string>alfred.workflow.output.notification</string>
+			<key>uid</key>
+			<string>3FCBB74F-A19F-4677-BFB3-96A85FAFF3F0</string>
+			<key>version</key>
+			<integer>1</integer>
+		</dict>
+	</array>
+	<key>readme</key>
+	<string>Pimento for Alfred: a launcher for the pimento CLI (https://github.com/Melvin2306/pimento). It runs pimento with --json and never talks to Azure or sees a token itself.
+
+pim                       presets, active roles (time left) and eligible roles
+pim WORDS                 only those whose names contain every word
+↩ on a role               fills in the role; type &gt; and a justification, then ↩ to activate
+                          (⌘↩: the maximum its PIM policy allows)
+↩ on a preset             activates it with its justification (type &gt; TEXT to use another)
+⌥↩ on an active role      deactivates it
+
+Configuration: pimento_path (empty: ~/.local/bin/pimento, then PATH and Homebrew, then Pimento.app), tenant, the default duration, and demo mode (synthetic data, offline).</string>
+	<key>uidata</key>
+	<dict>
+		<key>D5257E0C-810B-4556-9FF6-4B996BB2428E</key>
+		<dict>
+			<key>xpos</key>
+			<real>40</real>
+			<key>ypos</key>
+			<real>40</real>
+		</dict>
+		<key>50B0C3DD-C472-4523-9F55-F8D743A439F3</key>
+		<dict>
+			<key>xpos</key>
+			<real>260</real>
+			<key>ypos</key>
+			<real>40</real>
+		</dict>
+		<key>3FCBB74F-A19F-4677-BFB3-96A85FAFF3F0</key>
+		<dict>
+			<key>xpos</key>
+			<real>480</real>
+			<key>ypos</key>
+			<real>40</real>
+		</dict>
+	</dict>
+	<key>userconfigurationconfig</key>
+	<array>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>default</key>
+				<string></string>
+				<key>placeholder</key>
+				<string>~/.local/bin/pimento</string>
+				<key>required</key>
+				<false/>
+				<key>trim</key>
+				<true/>
+			</dict>
+			<key>description</key>
+			<string>The pimento CLI. Empty: ~/.local/bin/pimento, then PATH, /opt/homebrew/bin and /usr/local/bin, then /Applications/Pimento.app/Contents/Helpers/pimento.</string>
+			<key>label</key>
+			<string>pimento path</string>
+			<key>type</key>
+			<string>textfield</string>
+			<key>variable</key>
+			<string>pimento_path</string>
+		</dict>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>default</key>
+				<string></string>
+				<key>placeholder</key>
+				<string>contoso.onmicrosoft.com</string>
+				<key>required</key>
+				<false/>
+				<key>trim</key>
+				<true/>
+			</dict>
+			<key>description</key>
+			<string>Tenant GUID or domain (pimento --tenant). Empty: $PIMENTO_TENANT, then the signed-in tenant. A preset always uses its own tenant.</string>
+			<key>label</key>
+			<string>Tenant</string>
+			<key>type</key>
+			<string>textfield</string>
+			<key>variable</key>
+			<string>tenant</string>
+		</dict>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>default</key>
+				<string>8</string>
+				<key>pairs</key>
+				<array>
+					<array>
+						<string>1 hour</string>
+						<string>1</string>
+					</array>
+					<array>
+						<string>2 hours</string>
+						<string>2</string>
+					</array>
+					<array>
+						<string>4 hours</string>
+						<string>4</string>
+					</array>
+					<array>
+						<string>8 hours</string>
+						<string>8</string>
+					</array>
+					<array>
+						<string>The maximum each role's policy allows</string>
+						<string>max</string>
+					</array>
+				</array>
+			</dict>
+			<key>description</key>
+			<string>The duration for ↩ on a role (always capped at its PIM policy's maximum). ⌘↩ asks for the maximum.</string>
+			<key>label</key>
+			<string>Duration</string>
+			<key>type</key>
+			<string>popupbutton</string>
+			<key>variable</key>
+			<string>default_hours</string>
+		</dict>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>default</key>
+				<false/>
+				<key>required</key>
+				<false/>
+				<key>text</key>
+				<string>Use demo data (pimento --demo)</string>
+			</dict>
+			<key>description</key>
+			<string>A simulated Azure with synthetic data: offline, nothing is sent, none of your files are used. Each command starts from the demo data.</string>
+			<key>label</key>
+			<string>Demo mode</string>
+			<key>type</key>
+			<string>checkbox</string>
+			<key>variable</key>
+			<string>demo_mode</string>
+		</dict>
+	</array>
+	<key>variablesdontexport</key>
+	<array/>
+	<key>version</key>
+	<string>0.1.0</string>
+	<key>webaddress</key>
+	<string>https://github.com/Melvin2306/pimento</string>
+</dict>
+</plist>
