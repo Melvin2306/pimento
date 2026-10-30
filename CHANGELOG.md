@@ -487,6 +487,17 @@ All notable changes to this project are documented here. The format follows
   program that opens connections and sends nothing (or trickles) no longer holds back the
   browser's redirect for 5 seconds per connection. Each connection still has 5 seconds in all;
   at most 16 are open at once, and a 17th pushes out the oldest.
+- `az` is looked up once per process and only in absolute `PATH` folders: an empty or relative
+  entry (`.`, `bin`), which means the current directory, is skipped, so an `az` (or, for az's own
+  `#!/usr/bin/env bash`, a `bash`) left in the folder you run `pimento` from is never started; az
+  runs with a `PATH` without such entries. On macOS and Linux an `az` (Homebrew's too) whose file
+  or folder someone other than root or you could change is passed over. On Windows the
+  installer's Python is used only for its `…\wbin\az.cmd` layout, and a batch file run through
+  `cmd.exe` must be an absolute path without `cmd.exe` special characters (a `ComSpec` that is not
+  an absolute `cmd.exe` is ignored). Cancelling a task ends `az` at once, its output is capped
+  (16 MB, stderr 1 MB; beyond that az is ended), and the SIGKILL that follows a timeout's SIGTERM
+  is cancelled once az's process group let go of its output. On Linux, `xdg-open` is likewise
+  looked up only in absolute `PATH` folders.
 
 ## [0.1.0] - 2026-10-29
 

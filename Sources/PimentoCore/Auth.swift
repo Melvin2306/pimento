@@ -108,23 +108,64 @@ public enum AzureCLI {
         return environment.first { $0.key.uppercased() == "PATH" }?.value ?? ""
     }
 
-    /// Finds `az`: on macOS in the usual Homebrew locations first, then in `$PATH`.
+    /// Finds `az`: on macOS in the usual Homebrew locations first, then in
+    /// `$PATH`. Only absolute `PATH` folders count: an empty or relative entry
+    /// (`.`, `bin`) means the current directory, where anyone who can write
+    /// there could leave an `az`. On macOS and Linux the file and its folder
+    /// must belong to root or you and be writable by nobody else
+    /// (`isTrusted`); otherwise the next candidate is tried.
     public static func locate(
         environment: [String: String] = ProcessInfo.processInfo.environment,
         platform: HostPlatform = .current,
-        isExecutable: (String) -> Bool = AzureCLI.isExecutable
+        isExecutable: (String) -> Bool = AzureCLI.isExecutable,
+        isTrusted: (String) -> Bool = AzureCLI.isTrusted
     ) -> String? {
         if platform == .macOS {
-            for path in candidatePaths where isExecutable(path) { return path }
+            for path in candidatePaths where isExecutable(path) && isTrusted(path) { return path }
         }
-        for dir in searchPath(environment, platform: platform).split(separator: platform.pathListSeparator) where !dir.isEmpty {
+        for dir in searchPath(environment, platform: platform).split(separator: platform.pathListSeparator) {
             let folder = platform == .windows ? String(dir).trimmingCharacters(in: CharacterSet(charactersIn: "\"")) : String(dir)
+            guard isAbsolute(folder, platform: platform) else { continue }
             for name in executableNames(platform: platform) {
                 let path = platform.join(folder, name)
-                if isExecutable(path) { return path }
+                if isExecutable(path) && isTrusted(path) { return path }
             }
         }
         return nil
+    }
+
+    /// `/…` on macOS and Linux; `C:\…`, `C:/…` or `\\server\…` on Windows.
+    static func isAbsolute(_ path: String, platform: HostPlatform) -> Bool {
+        guard platform == .windows else { return path.hasPrefix("/") }
+        if path.hasPrefix(#"\\"#) { return true }
+        let chars = Array(path)
+        return chars.count >= 3 && chars[0].isASCII && chars[0].isLetter && chars[1] == ":" && (chars[2] == "\\" || chars[2] == "/")
+    }
+
+    /// The real file and its folder belong to root or you, and nobody else
+    /// may change them (`PathTrust`). Always true on Windows (ACLs).
+    public static func isTrusted(_ path: String) -> Bool {
+        #if os(Windows)
+        return true
+        #else
+        let real = URL(fileURLWithPath: path).resolvingSymlinksInPath().path
+        let folder = URL(fileURLWithPath: real).deletingLastPathComponent().path
+        return [real, folder].allSatisfy { PathTrust.info(at: $0).map { PathTrust.isTrusted($0, user: PathTrust.currentUser) } ?? false }
+        #endif
+    }
+
+    private static let resolvedLock = NSLock()
+    nonisolated(unsafe) private static var resolved: String?
+
+    /// `locate()`, once: the absolute path found first is used for every
+    /// later run of this process (as long as it is still there), so a
+    /// changed `PATH` or a new `az` earlier on it cannot swap it.
+    public static func resolvedPath() -> String? {
+        resolvedLock.withLock {
+            if let resolved, isExecutable(resolved) { return resolved }
+            resolved = locate()
+            return resolved
+        }
     }
 
     /// An executable file; on Windows any file (az.cmd has no execute bit).
@@ -153,7 +194,9 @@ public enum AzureCLI {
         func parent(_ path: Substring) -> Substring? {
             path.lastIndex(where: { $0 == "\\" || $0 == "/" }).map { path[..<$0] }
         }
-        if let bin = parent(Substring(az)), let root = parent(bin), !root.isEmpty {
+        // Only the installer's own layout: `<CLI2>\wbin\az.cmd` beside `<CLI2>\python.exe`.
+        if let bin = parent(Substring(az)), let root = parent(bin), !root.isEmpty,
+           bin.split(whereSeparator: { $0 == "\\" || $0 == "/" }).last?.lowercased() == "wbin" {
             let python = platform.join(String(root), "python.exe")
             if fileExists(python) { return (python, ["-IBm", "azure.cli"] + arguments) }
         }
@@ -161,20 +204,67 @@ public enum AzureCLI {
         guard arguments.allSatisfy({ !$0.isEmpty && $0.unicodeScalars.allSatisfy(plain.contains) }) else {
             throw AzureCLIError.failed("Refusing to pass these arguments through cmd.exe to \(az).")
         }
+        // cmd.exe parses the batch file's path too: absolute, and none of its special characters.
+        let special = CharacterSet(charactersIn: "\"%^&|<>!\r\n")
+        guard isAbsolute(az, platform: platform), az.rangeOfCharacter(from: special) == nil else {
+            throw AzureCLIError.failed("Refusing to run \(az) through cmd.exe: not an absolute path without special characters.")
+        }
         let windows = environment.first { $0.key.uppercased() == "SYSTEMROOT" }?.value ?? #"C:\Windows"#
-        let cmd = environment.first { $0.key.uppercased() == "COMSPEC" }?.value ?? platform.join(windows, "System32", "cmd.exe")
+        let system = platform.join(windows, "System32", "cmd.exe")
+        let comspec = environment.first { $0.key.uppercased() == "COMSPEC" }?.value
+        let cmd = comspec.flatMap { isAbsolute($0, platform: platform) && $0.lowercased().hasSuffix("\\cmd.exe") ? $0 : nil } ?? system
         return (cmd, ["/d", "/c", az] + arguments)
     }
 
+    /// The most `az` may write to stdout (a long `account list`) and stderr;
+    /// beyond that it is ended and the run fails.
+    static let maxOutput = 16 << 20
+    static let maxErrorOutput = 1 << 20
+
     /// Runs `az` with `arguments` off the main thread and returns its stdout.
+    /// Cancelling the task ends `az` and everything it started.
     public static func run(_ arguments: [String], azPath: String? = nil, timeout: TimeInterval = 90) async throws -> Data {
         try NetworkGuard.check("the Azure CLI (az \(arguments.prefix(2).joined(separator: " ")))")
-        guard let az = azPath ?? locate() else { throw AzureCLIError.notFound }
-        return try await withCheckedThrowingContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                continuation.resume(with: Result { try runSync(az: az, arguments: arguments, timeout: timeout) })
+        guard let az = azPath ?? resolvedPath() else { throw AzureCLIError.notFound }
+        let control = RunControl()
+        let data = try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                DispatchQueue.global(qos: .userInitiated).async {
+                    continuation.resume(with: Result { try runSync(az: az, arguments: arguments, timeout: timeout, control: control) })
+                }
+            }
+        } onCancel: {
+            control.cancel()
+        }
+        try Task.checkCancellation()
+        return data
+    }
+
+    /// The running `az` and whether its task was cancelled, between the task
+    /// and the thread that waits for `az`.
+    final class RunControl: @unchecked Sendable {
+        private let lock = NSLock()
+        private var process: Process?
+        private var cancelled = false
+
+        /// Registers `process`; false (and it is not started) when already cancelled.
+        func start(_ process: Process) -> Bool {
+            lock.withLock {
+                guard !cancelled else { return false }
+                self.process = process
+                return true
             }
         }
+
+        func cancel() {
+            let running = lock.withLock { () -> Process? in
+                cancelled = true
+                return process
+            }
+            if let running, running.isRunning { _ = terminateTree(running) }
+        }
+
+        var isCancelled: Bool { lock.withLock { cancelled } }
     }
 
     /// Set from another thread: the pipe reader and the timeout.
@@ -188,7 +278,36 @@ public enum AzureCLI {
         }
     }
 
-    private static func runSync(az: String, arguments: [String], timeout: TimeInterval) throws -> Data {
+    /// The `PATH` az runs with (its `#!/usr/bin/env bash` and Python look
+    /// things up in it): your absolute folders, then the usual system ones;
+    /// empty and relative entries (the current directory) are dropped.
+    static func childPath(_ path: String?) -> String {
+        let extra = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"]
+        let own = (path ?? "").split(separator: ":").map(String.init).filter { $0.hasPrefix("/") }
+        return (own + extra).joined(separator: ":")
+    }
+
+    /// Reads `handle` to its end, keeping at most `limit` bytes; `overflow`
+    /// runs once when more arrives (the rest is read and dropped, so the
+    /// writer is never blocked on a full pipe).
+    static func read(_ handle: FileHandle, limit: Int, overflow: () -> Void) -> (data: Data, overflowed: Bool) {
+        var data = Data()
+        var overflowed = false
+        while true {
+            let chunk = handle.availableData
+            if chunk.isEmpty { break }
+            if overflowed { continue }
+            if data.count + chunk.count > limit {
+                overflowed = true
+                overflow()
+                continue
+            }
+            data += chunk
+        }
+        return (data, overflowed)
+    }
+
+    private static func runSync(az: String, arguments: [String], timeout: TimeInterval, control: RunControl = RunControl()) throws -> Data {
         let platform = HostPlatform.current
         var env = ProcessInfo.processInfo.environment
         let (executable, argv) = try launch(az: az, arguments: arguments, platform: platform, environment: env)
@@ -196,8 +315,7 @@ public enum AzureCLI {
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = argv
         if platform != .windows {
-            let extra = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-            env["PATH"] = env["PATH"].map { "\($0):\(extra)" } ?? extra
+            env["PATH"] = childPath(env["PATH"])
         } else if executable.lowercased().hasSuffix("python.exe") {
             env["AZ_INSTALLER"] = "MSI" // what az.cmd sets
         }
@@ -208,28 +326,41 @@ public enum AzureCLI {
         process.standardOutput = out
         process.standardError = err
         process.standardInput = FileHandle.nullDevice
+        guard control.start(process) else { throw CancellationError() }
         do { try process.run() } catch { throw AzureCLIError.failed(error.localizedDescription) }
+        // Cancelled between registering and starting: end it now.
+        if control.isCancelled { control.cancel() }
 
         // Drain both pipes concurrently so neither can fill up and block az.
-        let errData = Box(Data()), timedOut = Box(false)
+        let errData = Box(Data()), timedOut = Box(false), tooMuch = Box(false)
+        let escalation = Box<DispatchWorkItem?>(nil)
+        let endForOverflow = {
+            tooMuch.value = true
+            escalation.value = terminateTree(process)
+        }
         let group = DispatchGroup()
         group.enter()
         DispatchQueue.global().async {
-            errData.value = err.fileHandleForReading.readDataToEndOfFile()
+            errData.value = read(err.fileHandleForReading, limit: maxErrorOutput, overflow: endForOverflow).data
             group.leave()
         }
         let killer = DispatchWorkItem {
             guard process.isRunning else { return }
             timedOut.value = true
-            terminateTree(process)
+            escalation.value = terminateTree(process)
         }
         DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: killer)
-        let outData = out.fileHandleForReading.readDataToEndOfFile()
+        let outData = read(out.fileHandleForReading, limit: maxOutput, overflow: endForOverflow).data
         process.waitUntilExit()
         group.wait()
         killer.cancel()
+        // Everything that held the pipes is gone: no SIGKILL for a group id
+        // that may be reused later.
+        escalation.value?.cancel()
 
+        if control.isCancelled { throw CancellationError() }
         if timedOut.value { throw AzureCLIError.timedOut }
+        if tooMuch.value { throw AzureCLIError.failed("az wrote more than \(maxOutput >> 20) MB; it was ended.") }
         if process.terminationReason == .uncaughtSignal {
             throw AzureCLIError.failed("az was ended by signal \(process.terminationStatus).")
         }
@@ -252,9 +383,13 @@ extension AzureCLI {
     ///   left. (Should the process not lead its own group, only it is ended:
     ///   never signal Pimento's own group.)
     /// - Windows: `taskkill /T /F` ends the process tree.
-    static func terminateTree(_ process: Process) {
+    ///
+    /// Returns the scheduled SIGKILL, for the caller to cancel once the
+    /// group has let go of the pipes (its id may be reused afterwards).
+    @discardableResult
+    static func terminateTree(_ process: Process) -> DispatchWorkItem? {
         let pid = process.processIdentifier
-        guard pid > 0 else { return }
+        guard pid > 0 else { return nil }
         #if os(Windows)
         let system = ProcessInfo.processInfo.environment.first { $0.key.uppercased() == "SYSTEMROOT" }?.value ?? #"C:\Windows"#
         let taskkill = Process()
@@ -265,16 +400,19 @@ extension AzureCLI {
         taskkill.standardError = FileHandle.nullDevice
         if (try? taskkill.run()) != nil { taskkill.waitUntilExit() }
         if process.isRunning { process.terminate() }
+        return nil
         #else
         guard getpgid(pid) == pid, pid != getpgrp() else {
             // Not a group leader (or already reaped): end only the process.
             if process.isRunning { process.terminate() }
-            return
+            return nil
         }
         kill(-pid, SIGTERM)
-        DispatchQueue.global().asyncAfter(deadline: .now() + 3) {
+        let escalate = DispatchWorkItem {
             if kill(-pid, 0) == 0 { kill(-pid, SIGKILL) }
         }
+        DispatchQueue.global().asyncAfter(deadline: .now() + 3, execute: escalate)
+        return escalate
         #endif
     }
 }

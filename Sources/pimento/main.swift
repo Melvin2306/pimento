@@ -91,9 +91,10 @@ func openInBrowser(_ url: URL) -> Bool {
     redirectPages.add(page)
     return true
     #else
+    // Absolute PATH folders only: an empty or relative entry is the current directory.
     let path = ProcessInfo.processInfo.environment["PATH"] ?? "/usr/bin:/bin"
-    let tool = (path.split(separator: ":").map { "\($0)/xdg-open" } + ["/usr/bin/xdg-open"])
-        .first { FileManager.default.isExecutableFile(atPath: $0) }
+    let tool = (path.split(separator: ":").filter { $0.hasPrefix("/") }.map { "\($0)/xdg-open" } + ["/usr/bin/xdg-open"])
+        .first { FileManager.default.isExecutableFile(atPath: $0) && AzureCLI.isTrusted($0) }
     guard let tool else { return false }
     guard let page = BrowserLaunch.openThroughPage(url, open: { file in
         let process = Process()

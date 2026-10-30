@@ -987,8 +987,12 @@ directly with the PIM APIs (`api-version=2020-10-01`):
 
 1. **Token.** It runs `az account get-access-token --resource https://management.azure.com/`
    (plus `--tenant` when one is selected). The same token lists your tenants
-   (`GET /tenants?api-version=2022-12-01`) for the tenant picker. `az` is looked up at `/opt/homebrew/bin/az`,
-   `/usr/local/bin/az`, then `$PATH`. Your object ID comes from the token's `oid` claim.
+   (`GET /tenants?api-version=2022-12-01`) for the tenant picker. `az` is looked up once per process
+   at `/opt/homebrew/bin/az`, `/usr/local/bin/az`, then in the absolute folders of `$PATH` (never
+   the current directory), and only a file that root or you own and nobody else can change (nor its
+   folder) is used. It runs from an argv array, never a shell, with a `PATH` without relative
+   entries; its output is capped at 16 MB, and cancelling ends it. Your object ID comes from the
+   token's `oid` claim.
 2. **List eligible.**
    `GET /providers/Microsoft.Authorization/roleEligibilityScheduleInstances?$filter=asTarget()`
    at tenant level. `asTarget()` returns everything you are eligible for, **including

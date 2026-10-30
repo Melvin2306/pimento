@@ -139,6 +139,50 @@ struct AuthTests {
         #expect(gone)
     }
 
+    /// Cancelling the task ends az at once, instead of waiting out its 90 s.
+    @Test func cancellingTheTaskEndsAz() async throws {
+        let slow = try fakeAz("exec sleep 30")
+        let started = Date()
+        let task = Task { try await AzureCLI.run([], azPath: slow, timeout: 60) }
+        try await Task.sleep(nanoseconds: 300_000_000)
+        task.cancel()
+        await #expect(throws: CancellationError.self) { _ = try await task.value }
+        #expect(Date().timeIntervalSince(started) < 10)
+    }
+
+    /// Output beyond the limit ends az and fails, instead of filling memory.
+    @Test func endlessOutputIsCutOff() async throws {
+        let flood = try fakeAz("head -c \(AzureCLI.maxOutput + 4096) /dev/zero; sleep 30")
+        let started = Date()
+        await #expect(throws: AzureCLIError.failed("az wrote more than 16 MB; it was ended.")) {
+            _ = try await AzureCLI.run([], azPath: flood, timeout: 60)
+        }
+        #expect(Date().timeIntervalSince(started) < 15)
+    }
+
+    /// An az anyone may change is not trusted; your own is.
+    @Test func trustNeedsAnOwnerOnlyFileAndFolder() throws {
+        let az = try fakeAz("exit 0")
+        #expect(AzureCLI.isTrusted(az))
+        try FileManager.default.setAttributes([.posixPermissions: 0o777], ofItemAtPath: az)
+        #expect(!AzureCLI.isTrusted(az))
+    }
+
+    /// The SIGKILL that follows SIGTERM is handed back, to be cancelled once
+    /// the group let go of the pipes (its id may be reused afterwards).
+    @Test func theSigkillAfterATimeoutCanBeCancelled() async throws {
+        let running = Process()
+        running.executableURL = URL(fileURLWithPath: "/bin/sh")
+        running.arguments = ["-c", "exec sleep 30"]
+        try running.run()
+        let escalation = AzureCLI.terminateTree(running)
+        running.waitUntilExit()
+        if let escalation {
+            escalation.cancel()
+            #expect(escalation.isCancelled)
+        }
+    }
+
     /// Regression: the branch for a process that does not lead its own group
     /// called itself with the same process, forever (a crash at the 90 s
     /// timeout). A process already reaped takes that branch too.
@@ -189,14 +233,39 @@ struct AuthTests {
 
     @Test func locatesAzPreferringHomebrew() {
         let present: Set<String> = ["/opt/homebrew/bin/az", "/custom/bin/az"]
-        #expect(AzureCLI.locate(environment: ["PATH": "/custom/bin"], platform: .macOS, isExecutable: present.contains) == "/opt/homebrew/bin/az")
-        #expect(AzureCLI.locate(environment: ["PATH": "/x:/custom/bin"], platform: .macOS, isExecutable: ["/custom/bin/az"].contains)
-            == "/custom/bin/az")
-        #expect(AzureCLI.locate(environment: [:], platform: .macOS, isExecutable: { _ in false }) == nil)
+        let trusted: (String) -> Bool = { _ in true }
+        #expect(AzureCLI.locate(environment: ["PATH": "/custom/bin"], platform: .macOS, isExecutable: present.contains, isTrusted: trusted)
+            == "/opt/homebrew/bin/az")
+        #expect(AzureCLI.locate(environment: ["PATH": "/x:/custom/bin"], platform: .macOS, isExecutable: ["/custom/bin/az"].contains,
+                                isTrusted: trusted) == "/custom/bin/az")
+        #expect(AzureCLI.locate(environment: [:], platform: .macOS, isExecutable: { _ in false }, isTrusted: trusted) == nil)
         // Linux: only PATH.
-        #expect(AzureCLI.locate(environment: ["PATH": "/usr/bin"], platform: .linux, isExecutable: present.contains) == nil)
-        #expect(AzureCLI.locate(environment: ["PATH": "/usr/bin:/custom/bin"], platform: .linux, isExecutable: present.contains)
-            == "/custom/bin/az")
+        #expect(AzureCLI.locate(environment: ["PATH": "/usr/bin"], platform: .linux, isExecutable: present.contains, isTrusted: trusted) == nil)
+        #expect(AzureCLI.locate(environment: ["PATH": "/usr/bin:/custom/bin"], platform: .linux, isExecutable: present.contains,
+                                isTrusted: trusted) == "/custom/bin/az")
+    }
+
+    @Test func azRunsWithoutTheCurrentDirectoryOnPath() {
+        #expect(AzureCLI.childPath(".:/opt/x/bin::bin:/usr/bin") == "/opt/x/bin:/usr/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin")
+        #expect(AzureCLI.childPath(nil) == "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin")
+    }
+
+    /// Relative and empty PATH entries are the current directory: never searched.
+    /// An az someone else could change is passed over (Homebrew's too).
+    @Test func skipsTheCurrentDirectoryAndUntrustedAz() {
+        let trusted: (String) -> Bool = { _ in true }
+        let anywhere: (String) -> Bool = { _ in true }
+        #expect(AzureCLI.locate(environment: ["PATH": ":.:bin:./tools:/usr/bin"], platform: .linux, isExecutable: anywhere, isTrusted: trusted)
+            == "/usr/bin/az")
+        #expect(AzureCLI.locate(environment: ["PATH": "."], platform: .linux, isExecutable: anywhere, isTrusted: trusted) == nil)
+        #expect(AzureCLI.locate(environment: ["PATH": #".;tools;"C:\tools""#], platform: .windows, isExecutable: anywhere, isTrusted: trusted)
+            == #"C:\tools\az.cmd"#)
+        #expect(AzureCLI.locate(environment: ["PATH": #"\\server\share\bin"#], platform: .windows, isExecutable: anywhere, isTrusted: trusted)
+            == #"\\server\share\bin\az.cmd"#)
+        // Homebrew's az is someone else's: the next one on PATH.
+        #expect(AzureCLI.locate(environment: ["PATH": "/usr/bin"], platform: .macOS, isExecutable: anywhere,
+                                isTrusted: { !$0.hasPrefix("/opt/homebrew") && !$0.hasPrefix("/usr/local") }) == "/usr/bin/az")
+        #expect(AzureCLI.locate(environment: ["PATH": "/usr/bin"], platform: .macOS, isExecutable: anywhere, isTrusted: { _ in false }) == nil)
     }
 
     @Test func locatesAzCmdOnWindows() {
@@ -204,9 +273,9 @@ struct AuthTests {
         let present: Set<String> = [wbin + #"\az.cmd"#, #"C:\tools\az.exe"#]
         // `Path`, `;`-separated, quotes allowed; az.cmd before az.exe.
         #expect(AzureCLI.locate(environment: ["Path": #"C:\Windows;"\#(wbin)";C:\tools"#], platform: .windows,
-                                isExecutable: present.contains) == wbin + #"\az.cmd"#)
-        #expect(AzureCLI.locate(environment: ["PATH": #"C:\tools"#], platform: .windows, isExecutable: present.contains) == #"C:\tools\az.exe"#)
-        #expect(AzureCLI.locate(environment: ["PATH": #"C:\none"#], platform: .windows, isExecutable: present.contains) == nil)
+                                isExecutable: present.contains, isTrusted: { _ in true }) == wbin + #"\az.cmd"#)
+        #expect(AzureCLI.locate(environment: ["PATH": #"C:\tools"#], platform: .windows, isExecutable: present.contains, isTrusted: { _ in true }) == #"C:\tools\az.exe"#)
+        #expect(AzureCLI.locate(environment: ["PATH": #"C:\none"#], platform: .windows, isExecutable: present.contains, isTrusted: { _ in true }) == nil)
     }
 
     @Test func launchesAzWithoutAShell() throws {
@@ -228,6 +297,20 @@ struct AuthTests {
         }
         // az.exe runs directly.
         #expect(try AzureCLI.launch(az: #"C:\tools\az.exe"#, arguments: args, platform: .windows) == (#"C:\tools\az.exe"#, args))
+        // Python only for the installer's `wbin` layout, not any batch file with a python.exe above it.
+        let other = try AzureCLI.launch(az: #"C:\py\Scripts\az.cmd"#, arguments: args, platform: .windows, environment: [:],
+                                        fileExists: { $0 == #"C:\py\python.exe"# })
+        #expect(other == (#"C:\Windows\System32\cmd.exe"#, ["/d", "/c", #"C:\py\Scripts\az.cmd"#] + args))
+        // cmd.exe would parse the batch file's path: relative or with special characters, refused.
+        for az in [#"az.cmd"#, #"C:\a&b\az.cmd"#, #"C:\100%\az.bat"#, #"C:\x"y\az.cmd"#] {
+            #expect(throws: AzureCLIError.self) {
+                try AzureCLI.launch(az: az, arguments: args, platform: .windows, environment: [:], fileExists: { _ in false })
+            }
+        }
+        // A ComSpec that is not an absolute cmd.exe is not used.
+        let comspec = try AzureCLI.launch(az: #"C:\py\Scripts\az.bat"#, arguments: args, platform: .windows,
+                                          environment: ["COMSPEC": "evil.exe", "SystemRoot": #"D:\Win"#], fileExists: { _ in false })
+        #expect(comspec.executable == #"D:\Win\System32\cmd.exe"#)
     }
 
     @Test func tokenCommandPinsTenantAndResource() {

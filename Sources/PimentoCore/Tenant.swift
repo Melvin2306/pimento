@@ -274,7 +274,7 @@ public enum TenantDirectory {
         async let arm = armWithFallback(preferredTenant: preferredTenant, transport: transport, azPath: azPath)
         let (armTenants, accountData, tenantData) = await (arm, accounts, tenantList)
         let azSources = [accountData, tenantData].compactMap { $0 }
-        if armTenants == nil, azSources.isEmpty, azPath == nil, AzureCLI.locate() == nil { throw AzureCLIError.notFound }
+        if armTenants == nil, azSources.isEmpty, azPath == nil, AzureCLI.resolvedPath() == nil { throw AzureCLIError.notFound }
         return merge([armTenants ?? []] + azSources.map(parseAzure))
     }
 
