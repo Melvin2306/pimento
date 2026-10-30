@@ -865,7 +865,7 @@ public enum CLIHelp {
         return
       fi
       case "$prev" in
-        -t|--tenant|-j|--justification|--role|--id|--max-parallel|--preset|--days|--ticket|--ticket-system|--client-id) return ;;
+        -t|--tenant|-j|--justification|--role|--id|--max-parallel|--preset|--days|--window|--ticket|--ticket-system|--client-id) return ;;
         --auth) COMPREPLY=($(compgen -W "az pimento" -- "$cur")); return ;;
         --at) COMPREPLY=($(compgen -W "now +1h +2h tomorrow08:00 workday08:00" -- "$cur")); return ;;
         --hours) COMPREPLY=($(compgen -W "max 1 2 4 8 12 24" -- "$cur")); return ;;

@@ -54,6 +54,12 @@ Expect 'pimento presets ' 'show'
 Expect 'pimento history ' 'import-azure'
 Expect 'pimento completions ' 'powershell'
 Expect 'pimento help ' 'approvals'
+Expect 'pimento mc' 'mcp'
+Expect 'pimento mcp --allow-a' '--allow-activate'
+Expect 'pimento keep-alive --days ' 'mon-fri'
+Expect 'pimento extend --days ' '30'
+Expect 'pimento version --ch' '--check'
+Expect 'pimento list --i' '--id'
 # Preset names, from `pimento presets list --json` (the demo's presets).
 Expect 'pimento --demo activate --preset ' 'On-call'
 Expect 'pimento --demo activate --preset Rel' "'Release day'"

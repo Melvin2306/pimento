@@ -12,6 +12,7 @@ public enum CompletionSpec {
         ("deactivate", "End active roles early"),
         ("renew", "End and activate roles again"),
         ("extend", "Ask an administrator to extend time-bound assignments"),
+        ("keep-alive", "Renew roles before they expire, during working hours"),
         ("scheduled", "List your scheduled and pending activations"),
         ("cancel", "Cancel scheduled or pending activations"),
         ("pending", "List your requests waiting for approval"),
@@ -26,27 +27,31 @@ public enum CompletionSpec {
         ("login", "Sign in without the Azure CLI"),
         ("logout", "Forget Pimento sign-in"),
         ("whoami", "Show the auth source and who you are signed in as"),
+        ("mcp", "Serve your roles to AI agents (MCP over stdio)"),
         ("completions", "Print a completion script"),
-        ("version", "Print the version"),
+        ("version", "Print the version, or check for a newer one"),
         ("help", "Show help for a command"),
     ]
 
-    /// The long flags of each command (short forms are for typing). `--auth`
-    /// and `--demo` are added much as the bash script does: `--auth`
-    /// everywhere but `completions`, `help`, `version` and `logout`, `--demo`
-    /// everywhere but `completions`, `help` and `version`.
+    /// The long flags of each command (short forms are for typing). `--help`
+    /// everywhere but `completions` and `help`; `--auth` and `--demo` are
+    /// added much as the bash script does: `--auth` everywhere but
+    /// `completions`, `help`, `version` and `logout`, `--demo` everywhere but
+    /// `completions`, `help` and `version`.
     public static func flags(of command: String) -> [String] {
         let tenantJSON = ["--tenant", "--json"]
         var flags: [String] = switch command {
-        case "list": tenantJSON + ["--role", "--active", "--eligible"]
+        case "list": tenantJSON + ["--role", "--id", "--active", "--eligible"]
         case "activate":
-            tenantJSON + ["--role", "--all", "--preset", "--justification", "--hours", "--at", "--ticket", "--ticket-system",
+            tenantJSON + ["--role", "--id", "--all", "--preset", "--justification", "--hours", "--at", "--ticket", "--ticket-system",
                           "--yes", "--dry-run", "--max-parallel"]
-        case "deactivate": tenantJSON + ["--role", "--all", "--preset", "--justification", "--yes", "--dry-run", "--max-parallel"]
+        case "deactivate": tenantJSON + ["--role", "--id", "--all", "--preset", "--justification", "--yes", "--dry-run", "--max-parallel"]
         case "renew":
-            tenantJSON + ["--role", "--all", "--preset", "--justification", "--hours", "--ticket", "--ticket-system", "--yes",
+            tenantJSON + ["--role", "--id", "--all", "--preset", "--justification", "--hours", "--ticket", "--ticket-system", "--yes",
                           "--dry-run", "--max-parallel"]
         case "extend": tenantJSON + ["--role", "--all", "--justification", "--days", "--yes", "--dry-run"]
+        case "keep-alive":
+            ["--tenant", "--role", "--all", "--preset", "--justification", "--hours", "--days", "--window", "--yes", "--dry-run"]
         case "cancel": tenantJSON + ["--role", "--all", "--yes", "--dry-run"]
         case "wait": tenantJSON + ["--all", "--timeout"]
         case "approve", "deny": tenantJSON + ["--justification", "--yes", "--dry-run"]
@@ -54,10 +59,12 @@ public enum CompletionSpec {
         case "history": tenantJSON + ["--since", "--until", "--action", "--outcome", "--limit", "--csv", "--yes"]
         case "login": tenantJSON + ["--device-code", "--client-id"]
         case "logout": ["--all", "--json"]
+        case "mcp": ["--tenant", "--allow-activate", "--allow-privileged", "--no-confirm"]
+        case "version": ["--check", "--json"]
         case "scheduled", "pending", "approvals", "status", "tenants", "whoami": tenantJSON
         default: []
         }
-        if !["completions", "help", "version"].contains(command) { flags.append("--help") }
+        if !["completions", "help"].contains(command) { flags.append("--help") }
         if !["completions", "help", "version", "logout"].contains(command) { flags.append("--auth") }
         if !["completions", "help", "version"].contains(command) { flags.append("--demo") }
         return flags
@@ -70,11 +77,11 @@ public enum CompletionSpec {
     public static let valueFlags = [
         "--tenant", "-t", "--auth", "--role", "--preset", "--justification", "-j", "--hours", "--at", "--ticket",
         "--ticket-system", "--max-parallel", "--days", "--timeout", "--since", "--until", "--action", "--outcome",
-        "--limit", "-n", "--client-id",
+        "--limit", "-n", "--client-id", "--id", "--window",
     ]
 
     /// The values offered after a flag (the others take free text; `--preset`
-    /// gets the names of the saved presets).
+    /// gets the names of the saved presets). `commandValues` wins for its command.
     public static let values: [(flag: String, values: [String])] = [
         ("--auth", ["az", "pimento"]),
         ("--hours", ["max", "1", "2", "4", "8", "12", "24"]),
@@ -85,6 +92,13 @@ public enum CompletionSpec {
         ("--until", ["today", "yesterday"]),
         ("--action", ["activate", "schedule", "cancel", "deactivate", "renew", "extend", "approve", "deny"]),
         ("--outcome", ["succeeded", "pending", "skipped", "failed", "denied", "canceled", "expired"]),
+    ]
+
+    /// Values of a flag that means something else for one command
+    /// (`keep-alive --days` takes working days, `extend --days` a number).
+    public static let commandValues: [(command: String, flag: String, values: [String])] = [
+        ("keep-alive", "--days", ["mon-fri", "mon-thu", "weekend", "all"]),
+        ("keep-alive", "--window", ["08:00-18:00", "07:00-19:00"]),
     ]
 
     /// The word right after a command.
@@ -103,6 +117,7 @@ public enum CompletionSpec {
         ("--demo", "Demo mode: simulated Azure, synthetic data"),
         ("--help", "Show help"),
         ("--role", "Role name, * as wildcard"),
+        ("--id", "Exactly the role with this id (from list --json)"),
         ("--active", "Only active roles"),
         ("--eligible", "Only roles that are not active"),
         ("--all", "Every matching role or request"),
@@ -115,7 +130,8 @@ public enum CompletionSpec {
         ("--yes", "Do not ask for confirmation"),
         ("--dry-run", "Print the requests, send nothing"),
         ("--max-parallel", "Requests in flight at once"),
-        ("--days", "Days to extend by"),
+        ("--days", "Days to extend by (keep-alive: working days)"),
+        ("--window", "Working hours, FROM-TO"),
         ("--timeout", "Give up after"),
         ("--exact", "Store the matching roles, not the filters"),
         ("--force", "Replace a preset with the same name"),
@@ -127,6 +143,10 @@ public enum CompletionSpec {
         ("--csv", "CSV on stdout"),
         ("--device-code", "Sign in with a code on another device"),
         ("--client-id", "Application (client) ID"),
+        ("--allow-activate", "Offer the activate, deactivate and renew tools"),
+        ("--allow-privileged", "Allow Owner and access administrator roles"),
+        ("--no-confirm", "Write without elicitation when the client cannot ask"),
+        ("--check", "Check for a newer release"),
     ]
 }
 
@@ -153,6 +173,8 @@ public enum PowerShellCompletion {
         lines += spec.commands.map { "        \(quote($0.name)) = \(list(spec.flags(of: $0.name)))" }
         lines += ["    }", "    $values = @{"]
         lines += spec.values.map { "        \(quote($0.flag)) = \(list($0.values))" }
+        lines += ["    }", "    $commandValues = @{"]
+        lines += spec.commandValues.map { "        \(quote($0.command + " " + $0.flag)) = \(list($0.values))" }
         lines += ["    }", "    $subcommands = @{"]
         lines += spec.subcommands.map { "        \(quote($0.command)) = \(list($0.words))" }
         lines += ["    }", "    $descriptions = @{"]
@@ -217,6 +239,7 @@ public enum PowerShellCompletion {
         $candidates = @()
         if ($expectValue) {
             if ($previous -eq '--preset') { $candidates = @(& $presetNames) }
+            elseif ($commandValues.ContainsKey("$command $previous")) { $candidates = $commandValues["$command $previous"] }
             elseif ($values.ContainsKey($previous)) { $candidates = $values[$previous] }
         } elseif ($null -eq $command) {
             if ($current.StartsWith('-')) { $candidates = $globalFlags; $kind = 'ParameterName' }

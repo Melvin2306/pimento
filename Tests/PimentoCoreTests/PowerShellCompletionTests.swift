@@ -76,8 +76,12 @@ struct PowerShellCompletionTests {
         for (command, _) in CompletionSpec.commands {
             for flag in CompletionSpec.flags(of: command) where !["--help", "--auth", "--demo"].contains(flag) {
                 let takesValue = CompletionSpec.valueFlags.contains(flag)
+                // A value of the command's own kind where it has one (keep-alive --days mon-fri).
+                // A domain for --tenant (`mcp` checks it while parsing).
+                let value = CompletionSpec.commandValues.first { $0.command == command && $0.flag == flag }?.values.first
+                    ?? (flag == "--tenant" ? "contoso.example" : "1")
                 let accepted = contexts(command).contains { context in
-                    let args = context + [flag] + (takesValue ? ["1"] : [])
+                    let args = context + [flag] + (takesValue ? [value] : [])
                     if case .unknownOption = parseError(args) { return false }
                     return true
                 }
@@ -145,6 +149,34 @@ struct PowerShellCompletionTests {
             #expect(CompletionSpec.valueFlags.contains(flag), "\(flag)")
         }
         #expect(AuthSource.allCases.map(\.rawValue).sorted() == ["az", "pimento"])
+        for (command, flag, values) in CompletionSpec.commandValues {
+            for value in values {
+                #expect(parseError([command, "--all", flag, value]) == nil, "\(command) \(flag) \(value)")
+            }
+            #expect(CompletionSpec.flags(of: command).contains(flag), "\(command) \(flag)")
+            #expect(CompletionSpec.valueFlags.contains(flag), "\(flag)")
+        }
+    }
+
+    /// The commands and flags of mcp, keep-alive, version --check and --id
+    /// are in the PowerShell script as in the other shells'.
+    @Test func theNewerCommandsAndFlagsAreCompleted() {
+        #expect(script.contains("'mcp' = @('--tenant', '--allow-activate', '--allow-privileged', '--no-confirm'"))
+        #expect(script.contains("'keep-alive' = @('--tenant', '--role', '--all', '--preset'"))
+        #expect(script.contains("'keep-alive --days' = @('mon-fri', 'mon-thu', 'weekend', 'all')"))
+        #expect(script.contains("'version' = @('--check', '--json', '--help')"))
+        for command in ["list", "activate", "deactivate", "renew"] {
+            #expect(CompletionSpec.flags(of: command).contains("--id"), "\(command)")
+        }
+        #expect(!CompletionSpec.flags(of: "keep-alive").contains("--id"))
+        for shell in [CompletionShell.zsh, .bash, .fish] {
+            let other = CLIHelp.completionScript(for: shell)
+            for word in ["mcp", "keep-alive", "powershell", "--check", "--id", "--allow-activate", "--window"] {
+                // fish names a long flag as `-l check`.
+                let spelled = shell == .fish && word.hasPrefix("--") ? "-l " + word.dropFirst(2) : word
+                #expect(other.contains(spelled), "\(shell): \(word)")
+            }
+        }
     }
 
     @Test func theWordsAfterACommandParse() throws {
