@@ -107,6 +107,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- When another program holds the sign-in port, the error names the way around it:
+  `pimento login --device-code`, or *Sign In with Code…* in the app. The PowerShell completion
+  passes a typed `--tenant` to `pimento presets list` only when it is a GUID or domain, in one
+  argument (Windows PowerShell 5.1 would split a value with a double quote). `install.ps1` never
+  takes `.` or `..` from its file list as a file to remove.
 - `pimento mcp --tenant`: `list_tenants` lists only the pinned tenant, as the other tools work only
   there. Error messages shown to the agent now redact a whole file path even when a folder name
   has spaces (`Application Support`, a user name), not only up to the first space. A confirmation
@@ -146,6 +151,12 @@ All notable changes to this project are documented here. The format follows
   warns before ↩), from the new `grantsAccess` field of `pimento list --json`; they used to
   warn for Owner only. A preset's copied command (*Copy Command*, Alfred's ⌘C) quotes the name
   for a shell, so pasting it cannot run what a name like `$(…)` contains.
+- The update check uses the logo fetch's private session: no stored credentials, and every
+  authentication request but the certificate check refused, so no client certificate or password
+  can be offered to a server that asks; on macOS its 1 MB limit now stops the download as it is
+  reached. `pimento version --check` prints an installer command for exactly the version it found.
+- Tenant logos: the largest logo decoded is 1024 pixels on a side (was 4096; the badge shows 96),
+  so a large image no longer takes some 64 MB of memory to decode.
 - The update check sends one HTTPS `GET` to `api.github.com` with only `User-Agent:
   Pimento/<version>` and a fixed `Accept-Language: en` (no cookies, tokens or IDs; the same two
   headers as the logo fetch), with a timeout, through a guard that

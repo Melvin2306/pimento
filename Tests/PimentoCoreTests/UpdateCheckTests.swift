@@ -225,6 +225,29 @@ struct UpdateCheckRequestTests {
         #expect(UpdateCheck.disabledReason(environment: [:], demo: true) != nil)
     }
 
+    /// The real transport is the logo fetch's: ephemeral, no stored
+    /// credentials, every challenge but the certificate check cancelled.
+    @Test func theRealCheckOffersNoCredentials() async {
+        let transport = UpdateCheckTransport()
+        let base = transport.base as? LogoTransport
+        #expect(base?.maxBytes == UpdateCheck.maxResponseBytes)
+        #expect(LogoTransport.session.configuration.urlCredentialStorage == nil)
+        let monitor = NetworkGuard.Monitor()
+        await NetworkGuard.$monitor.withValue(monitor) {
+            await #expect(throws: UpdateCheckError.self) { try await UpdateCheck.check(transport: transport) }
+        }
+        #expect(monitor.blocked == ["an update check to api.github.com"])
+    }
+
+    @Test func theInstallCommandNamesTheVersionFound() throws {
+        let v = try #require(SemanticVersion("1.4.2"))
+        #expect(UpdateCheck.installCommand(platform: .linux, version: v)
+            == "curl -fsSL https://raw.githubusercontent.com/Melvin2306/pimento/main/scripts/install.sh | sh -s -- --version 1.4.2")
+        #expect(UpdateCheck.installCommand(platform: .windows, version: v)
+            == #"$env:PIMENTO_VERSION = "1.4.2"; irm https://raw.githubusercontent.com/Melvin2306/pimento/main/scripts/install.ps1 | iex; $env:PIMENTO_VERSION = $null"#)
+        #expect(UpdateCheck.installCommand(platform: .macOS) == UpdateCheck.installScript)
+    }
+
     @Test func theEnvironmentVariableTurnsChecksOff() {
         #expect(UpdateCheck.disabledReason(environment: [:], demo: false) == nil)
         for value in ["1", "true", "YES", "on"] {
@@ -349,10 +372,10 @@ struct UpdateCheckStateTests {
             "",
             "A newer version is available: https://github.com/Melvin2306/pimento/releases/tag/v0.2.0",
             "To update, re-run the installer:",
-            "  curl -fsSL https://raw.githubusercontent.com/Melvin2306/pimento/main/scripts/install.sh | sh",
+            "  curl -fsSL https://raw.githubusercontent.com/Melvin2306/pimento/main/scripts/install.sh | sh -s -- --version 0.2.0",
         ])
         #expect(UpdateText.cliReport(result, platform: .windows).last
-            == "  irm https://raw.githubusercontent.com/Melvin2306/pimento/main/scripts/install.ps1 | iex")
+            == #"  $env:PIMENTO_VERSION = "0.2.0"; irm https://raw.githubusercontent.com/Melvin2306/pimento/main/scripts/install.ps1 | iex; $env:PIMENTO_VERSION = $null"#)
         #expect(UpdateText.cliReport(result, platform: .macOS, bundledWithApp: true).contains { $0.contains("inside Pimento.app") })
         #expect(UpdateText.isBundledWithApp("/Applications/Pimento.app/Contents/Helpers/pimento"))
         #expect(!UpdateText.isBundledWithApp("/home/alex/.local/bin/pimento") && !UpdateText.isBundledWithApp(nil))
@@ -410,7 +433,8 @@ struct CLIVersionCheckTests {
         #expect(await run(h, transport, "version", "--check") == 0)
         #expect(h.out.hasPrefix("current  \(AppInfo.version)\nlatest   99.0.0 (released 2026-11-02)\n"))
         #expect(h.out.contains("A newer version is available: https://github.com/Melvin2306/pimento/releases/tag/v99.0.0"))
-        #expect(h.out.contains(UpdateCheck.installCommand()))
+        #expect(h.out.contains(UpdateCheck.installCommand(version: SemanticVersion("99.0.0"))))
+        #expect(h.out.contains("--version 99.0.0") || h.out.contains("PIMENTO_VERSION = \"99.0.0\""))
         #expect(await transport.requests.count == 1)
 
         let json = CLIHarness()
@@ -422,7 +446,7 @@ struct CLIVersionCheckTests {
         #expect(doc["updateAvailable"] as? Bool == true)
         #expect(doc["releasePage"] as? String == "https://github.com/Melvin2306/pimento/releases/tag/v99.0.0")
         #expect(doc["diskImage"] as? String == "https://github.com/Melvin2306/pimento/releases/download/v99.0.0/Pimento.dmg")
-        #expect(doc["installCommand"] as? String == UpdateCheck.installCommand())
+        #expect(doc["installCommand"] as? String == UpdateCheck.installCommand(version: SemanticVersion("99.0.0")))
     }
 
     @Test func upToDateAndFailures() async throws {

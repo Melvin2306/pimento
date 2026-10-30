@@ -775,8 +775,8 @@ your settings, presets, history and sign-in stay. The ✕ hides the notice until
   Updates* has *Check Now*, the time and result of the last check, and the switch for the daily
   check (on by default). A manual check works with the switch off.
 - **The CLI** never checks on its own: `pimento version --check` asks and prints the current and
-  latest versions and how to update (re-run the [installer](#install-the-command-line-tool); the CLI
-  inside Pimento.app is updated with the app).
+  latest versions and how to update (re-run the [installer](#install-the-command-line-tool) for the
+  version it found, `--version X` / `PIMENTO_VERSION`; the CLI inside Pimento.app is updated with the app).
 - **Turn it off everywhere** with `PIMENTO_NO_UPDATE_CHECK=1` (in the environment of the app, for
   example with `launchctl setenv`, or of the CLI). Demo mode never checks.
 
@@ -1507,8 +1507,10 @@ directly with the PIM APIs (`api-version=2020-10-01`):
   `https://api.github.com/repos/Melvin2306/pimento/releases/latest`, with a 10-second timeout and a
   20-second limit for the whole check. The request carries no token, cookie, account, tenant, device
   or installation ID: only `User-Agent: Pimento/<version>` (GitHub requires one), the API's
-  `Accept` and version headers, and a fixed `Accept-Language: en` (not your system's languages). GitHub sees your IP address, as with any request. Redirects are refused, and a
-  guard refuses any other URL or method. The answer is treated as untrusted: the tag must be a strict
+  `Accept` and version headers, and a fixed `Accept-Language: en` (not your system's languages). GitHub sees your IP address, as with any request. It goes through the
+  same private session as the logo fetch (no cookies, cache or stored credentials; every
+  authentication request but the server's certificate check refused, so no client certificate or
+  password is offered). Redirects are refused, and a guard refuses any other URL or method. The answer is treated as untrusted: the tag must be a strict
   semantic version, drafts and pre-releases are ignored, answers over 1 MB are refused, and the links
   Pimento opens (release page, disk image) are built from that version and must lie under
   `https://github.com/Melvin2306/pimento/`; no URL is taken from the answer. Nothing is downloaded or
@@ -1532,7 +1534,7 @@ directly with the PIM APIs (`api-version=2020-10-01`):
   address and the domain). The lookup is not a sign-in attempt, so it is not expected in the
   tenant's sign-in logs, but Microsoft does not document what it records about it. HTTPS only,
   10-second request timeouts, at most 512 KB per answer, and only files that decode as an image of
-  32 to 4096 pixels are kept: in `~/Library/Application Support/Pimento/TenantLogos` (mode 600) for
+  32 to 1024 pixels are kept: in `~/Library/Application Support/Pimento/TenantLogos` (mode 600) for
   7 days, a tenant without a logo included. *Refresh Logos* fetches again, *Clear Cache* deletes
   them, and turning the setting off deletes them too and stops the fetches under way. Never in demo
   mode, never by the CLI.
@@ -1581,6 +1583,15 @@ See [SECURITY.md](SECURITY.md) for how to report a vulnerability.
   approval request that is decided later keeps its *Pending* entry; importing does not update
   entries Pimento already has. Import reads one tenant at a time, only your own self-service
   requests, and only as far back as Azure lists them.
+- **Tenant logos and private addresses.** A logo's website is checked by name only (HTTPS, port
+  443, a public-looking domain). An administrator of a tenant you are a guest in can point its
+  verified domain at a loopback or internal address; TLS hostname checks keep any HTTP request from
+  reaching such a host, so at most one TCP and TLS handshake to port 443 happens, once per tenant
+  every 7 days, and nothing comes back. Refusing those addresses would need the address URLSession
+  actually connects to: it resolves names itself and offers no hook to vet or pin the address
+  before connecting, and checking a separate lookup first could be bypassed by DNS rebinding (the
+  domain's owner controls the answers and how long they last). So Pimento does not claim to block
+  it; leave *Fetch tenant logos* off if that matters to you.
 - **Launch at login** may be refused for an ad-hoc signed build; add Pimento under System Settings ›
   General › Login Items instead. Pimento then opens its window at login like any launch.
 - **Pimento sign-in** was built against Microsoft's documentation and tested with a fake token

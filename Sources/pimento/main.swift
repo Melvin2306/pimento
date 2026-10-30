@@ -180,7 +180,7 @@ var environment = CLIEnvironment(
 environment.readInput = readStdin
 // Only `pimento version --check` uses it: one GET of GitHub's latest release
 // (UpdateCheckTransport refuses anything else). No other command goes online.
-environment.updateTransport = UpdateCheckTransport(URLSessionTransport())
+environment.updateTransport = UpdateCheckTransport()
 // The app's bundled CLI is updated with the app, not with the installer.
 environment.executablePath = Bundle.main.executableURL?.resolvingSymlinksInPath().path
 

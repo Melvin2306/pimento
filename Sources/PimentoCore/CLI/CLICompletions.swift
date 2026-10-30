@@ -224,7 +224,9 @@ public enum PowerShellCompletion {
             if (-not $exe) { $exe = 'pimento' }
             $arguments = @('presets', 'list', '--json')
             if ($demo) { $arguments += '--demo' }
-            if ($tenant) { $arguments += @('--tenant', $tenant) }
+            # Only a GUID or domain, as one argument: Windows PowerShell 5.1 passes an
+            # embedded double quote unescaped, which could split it into more arguments.
+            if ($tenant -match '^[A-Za-z0-9][A-Za-z0-9.-]*$') { $arguments += "--tenant=$tenant" }
             $savedExitCode = Get-Variable -Name LASTEXITCODE -Scope Global -ErrorAction SilentlyContinue
             try {
                 $json = & $exe @arguments 2>$null | Out-String

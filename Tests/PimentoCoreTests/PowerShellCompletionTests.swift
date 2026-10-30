@@ -58,6 +58,8 @@ struct PowerShellCompletionTests {
         }
         // Preset names come from the CLI's own JSON, offline.
         #expect(script.contains("@('presets', 'list', '--json')"))
+        // A typed tenant reaches pimento only as a GUID or domain, in one argument.
+        #expect(script.contains(#"if ($tenant -match '^[A-Za-z0-9][A-Za-z0-9.-]*$') { $arguments += "--tenant=$tenant" }"#))
         #expect(script.contains("ConvertFrom-Json"))
     }
 

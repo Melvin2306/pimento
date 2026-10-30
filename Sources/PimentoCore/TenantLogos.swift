@@ -62,7 +62,8 @@ public enum TenantLogoPolicy {
     public static let maxRedirects = 3
     /// Smallest and largest side accepted, in pixels.
     public static let minPixels = 32
-    public static let maxPixels = 4096
+    /// (The badge shows 96 pixels at most: a bigger logo only costs memory to decode.)
+    public static let maxPixels = 1024
     /// Wider or taller than this does not fit a square badge.
     public static let maxAspectRatio = 2.0
 
@@ -461,16 +462,21 @@ public struct TenantLogoService: Sendable {
 /// credentials, a plain `User-Agent` and a fixed `Accept-Language`; HTTPS
 /// only; redirects and authentication challenges refused (the fetcher decides
 /// which redirects to follow); answers over `maxBytes` abandoned while they
-/// download. Refused while the network is blocked (demo mode).
+/// download. Refused while the network is blocked (demo mode). The update
+/// check uses it too (`UpdateCheckTransport`).
 public struct LogoTransport: HTTPTransport {
-    public struct Refused: Error, Equatable {
+    public struct Refused: Error, Equatable, LocalizedError {
         public let reason: String
+        public var errorDescription: String? { "Refused: \(reason)." }
     }
 
     public let maxBytes: Int
+    /// What the request is, for the demo mode refusal.
+    let purpose: String
 
-    public init(maxBytes: Int = TenantLogoPolicy.maxBytes) {
+    public init(maxBytes: Int = TenantLogoPolicy.maxBytes, purpose: String = "a logo request") {
         self.maxBytes = maxBytes
+        self.purpose = purpose
     }
 
     public static var userAgent: String { AppInfo.userAgent }
@@ -497,7 +503,7 @@ public struct LogoTransport: HTTPTransport {
     }
 
     public func send(_ request: URLRequest) async throws -> (Data, Int) {
-        try NetworkGuard.check("a logo request to \(request.url?.host ?? "?")")
+        try NetworkGuard.check("\(purpose) to \(request.url?.host ?? "?")")
         guard let url = request.url, TenantLogoPolicy.isPlainHTTPS(url) else { throw Refused(reason: "not HTTPS") }
         let request = Self.prepared(request)
         #if canImport(Darwin)

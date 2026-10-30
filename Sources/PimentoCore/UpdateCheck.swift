@@ -226,8 +226,13 @@ public enum UpdateCheck {
     public static let installScript = "curl -fsSL https://raw.githubusercontent.com/Melvin2306/pimento/main/scripts/install.sh | sh"
     public static let installPowerShell = "irm https://raw.githubusercontent.com/Melvin2306/pimento/main/scripts/install.ps1 | iex"
 
-    public static func installCommand(platform: HostPlatform = .current) -> String {
-        platform == .windows ? installPowerShell : installScript
+    /// The one-liner for `platform`; with `version`, it installs exactly that
+    /// release (the one the check reported), not whatever is latest by then.
+    public static func installCommand(platform: HostPlatform = .current, version: SemanticVersion? = nil) -> String {
+        guard let version else { return platform == .windows ? installPowerShell : installScript }
+        return platform == .windows
+            ? "$env:PIMENTO_VERSION = \"\(version)\"; \(installPowerShell); $env:PIMENTO_VERSION = $null"
+            : "\(installScript) -s -- --version \(version)"
     }
 
     /// Why checks are off: `PIMENTO_NO_UPDATE_CHECK` set to 1/true/yes/on,
@@ -371,7 +376,11 @@ public struct UpdateCheckTransport: HTTPTransport {
 
     let base: HTTPTransport
 
-    public init(_ base: HTTPTransport = URLSessionTransport()) { self.base = base }
+    /// By default the logo fetch's transport, with this check's size limit:
+    /// an ephemeral session without cookies, cache or stored credentials that
+    /// refuses redirects and every authentication challenge but the server's
+    /// certificate check (so no client certificate or password is offered).
+    public init(_ base: HTTPTransport = LogoTransport(maxBytes: UpdateCheck.maxResponseBytes, purpose: "an update check")) { self.base = base }
 
     public func send(_ request: URLRequest) async throws -> (Data, Int) {
         guard request.httpMethod ?? "GET" == "GET", request.url == UpdateCheck.endpoint, request.httpBody == nil else {
@@ -509,7 +518,7 @@ public enum UpdateText {
             lines.append("and the command line tool is updated with it.")
         } else {
             lines.append("To update, re-run the installer:")
-            lines.append("  \(UpdateCheck.installCommand(platform: platform))")
+            lines.append("  \(UpdateCheck.installCommand(platform: platform, version: update.version))")
         }
         return lines
     }

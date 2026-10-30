@@ -192,7 +192,7 @@ function Install-Pimento {
         $listed = Join-Path $InstallDir $Manifest
         if (Test-Path -LiteralPath $listed) {
             foreach ($name in Get-Content -LiteralPath $listed) {
-                if ($name -match '^[A-Za-z0-9._-]+$') {
+                if ($name -match '^[A-Za-z0-9._-]+$' -and $name -notmatch '^\.+$') {
                     Remove-Item -LiteralPath (Join-Path $InstallDir $name) -Force -ErrorAction SilentlyContinue
                 }
             }
@@ -292,7 +292,7 @@ function Install-Pimento {
         if (Test-Path -LiteralPath $listed) {
             $now = $files | ForEach-Object { $_.Name }
             foreach ($name in Get-Content -LiteralPath $listed) {
-                if ($name -match '^[A-Za-z0-9._-]+$' -and $now -notcontains $name) {
+                if ($name -match '^[A-Za-z0-9._-]+$' -and $name -notmatch '^\.+$' -and $now -notcontains $name) {
                     Remove-Item -LiteralPath (Join-Path $InstallDir $name) -Force -ErrorAction SilentlyContinue
                 }
             }

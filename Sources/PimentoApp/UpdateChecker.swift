@@ -29,7 +29,7 @@ final class UpdateChecker {
     init(store: PreferenceStore,
          environment: [String: String] = ProcessInfo.processInfo.environment,
          demo: Bool,
-         transport: HTTPTransport = UpdateCheckTransport(URLSessionTransport())) {
+         transport: HTTPTransport = UpdateCheckTransport()) {
         self.store = store
         self.transport = transport
         disabledReason = UpdateCheck.disabledReason(environment: environment, demo: demo)

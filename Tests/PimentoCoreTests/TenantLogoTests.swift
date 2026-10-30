@@ -592,6 +592,9 @@ struct TenantLogoTests {
         #expect(LogoImageCheck.inspect(try png(width: 240, height: 180)) != nil)
         #expect(LogoImageCheck.inspect(try png(width: 16, height: 16)) == nil, "too small for a badge")
         #expect(LogoImageCheck.inspect(try png(width: 245, height: 36)) == nil, "a banner does not fit a square")
+        // The badge is 96 pixels at most: a bigger image only costs memory to decode.
+        #expect(LogoImageCheck.inspect(try png(width: 1024, height: 1024)) != nil)
+        #expect(LogoImageCheck.inspect(try png(width: 1025, height: 1025)) == nil, "too large")
         var truncated = try png(width: 64, height: 64)
         truncated = truncated.prefix(40)
         #expect(LogoImageCheck.inspect(truncated) == nil, "a cut-off file does not decode")

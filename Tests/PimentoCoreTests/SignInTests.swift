@@ -194,6 +194,12 @@ struct OAuthBuildingBlockTests {
 
 @Suite("Sign-in: responses, claims and errors")
 struct OAuthResponseTests {
+    @Test func aTakenLoopbackPortPointsToTheDeviceCode() {
+        let message = SignInError.loopback("another program holds the ::1 side").localizedDescription
+        #expect(message.contains("pimento login --device-code"))
+        #expect(message.contains("Sign In with Code"))
+    }
+
     @Test func tokenResponseAndClientInfo() throws {
         let r = try #require(TokenResponse.parse(tokenAnswer(expiresIn: 4000)))
         #expect(r.expiresIn == 4000)

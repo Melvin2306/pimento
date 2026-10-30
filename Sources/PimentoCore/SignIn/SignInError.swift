@@ -47,7 +47,9 @@ public enum SignInError: Error, Equatable, LocalizedError {
         case .cancelled: "Sign-in was cancelled."
         case .deviceCodeExpired: "The code expired before sign-in finished. Run it again."
         case .declined: "Sign-in was declined."
-        case .loopback(let m): "Could not listen on localhost for the sign-in answer: \(m). Use the device code instead."
+        case .loopback(let m):
+            "Could not listen on localhost for the sign-in answer: \(m). Use the device code instead: "
+                + "`pimento login --device-code`, or Sign In with Code… in the app."
         case .storage(let m): "Could not access the saved sign-in: \(m)"
         }
     }

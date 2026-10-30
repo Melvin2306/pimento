@@ -26,7 +26,7 @@ extension CLIJSON {
             let update = result?.update
             releasePage = update?.releasePageURL.absoluteString
             diskImage = update?.diskImageURL?.absoluteString
-            installCommand = update == nil ? nil : UpdateCheck.installCommand(platform: platform)
+            installCommand = update.map { UpdateCheck.installCommand(platform: platform, version: $0.version) }
         }
     }
 }
