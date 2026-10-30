@@ -1353,6 +1353,10 @@ See [SECURITY.md](SECURITY.md) for how to report a vulnerability.
   brings the app forward. They act on the tenant the app is showing.
 - **Roles that require MFA or an authentication context** at activation fail with `MfaRule` /
   `AuthenticationContextRule` unless your az token already carries the required claims (see FAQ).
+- **High privilege means three built-in roles.** Owner, User Access Administrator and Role Based
+  Access Control Administrator are flagged (`(!)` in the CLI, `highPrivilege` and `--allow-privileged`
+  in `pimento mcp`). Custom roles with `Microsoft.Authorization/roleAssignments/write`, which can
+  grant access too, are not flagged: Pimento does not read role definitions' permissions.
 - You choose whole hours (or *Maximum allowed*); a role whose policy allows less, such as 90
   minutes, is requested for exactly its maximum.
 - **History** covers what Pimento sent from this Mac (and what *Import from Azure* reads). An
