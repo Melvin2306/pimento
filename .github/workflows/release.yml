@@ -31,10 +31,12 @@ jobs:
             || { echo "${GITHUB_REF_NAME} (${GITHUB_SHA}) is not on main: not released"; exit 1; }
       - name: Test
         run: swift test
-      - name: Bundle the app, CLI inside (ad-hoc signed, not notarized)
+      - name: Bundle the app, CLI inside (universal, ad-hoc signed, not notarized)
         run: |
           scripts/bundle.sh --zip
           build/Pimento.app/Contents/Helpers/pimento version
+      - name: Disk image (the app and an Applications link)
+        run: scripts/make-dmg.sh
       - name: Package the CLI on its own (universal, ad-hoc signed)
         run: scripts/package-cli.sh
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -42,6 +44,7 @@ jobs:
           name: release-macos
           path: |
             build/Pimento-*.zip
+            build/Pimento-*.dmg
             build/pimento-cli-*-macos.tar.gz
           if-no-files-found: error
 
@@ -104,18 +107,39 @@ jobs:
       id-token: write
       attestations: write
     steps:
+      # Only the release notes are read from the repository; nothing from it runs here.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/release-notes
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: build
           pattern: release-*
           merge-multiple: true
+      - name: Stable names
+        # The same files without the version, so that
+        # https://github.com/OWNER/REPO/releases/latest/download/<name> always works
+        # (README links, scripts/install.sh, scripts/install.ps1).
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          cd build
+          cp "Pimento-${version}.dmg" Pimento.dmg
+          cp "Pimento-${version}.zip" Pimento.zip
+          cp "pimento-cli-${version}-macos.tar.gz" pimento-cli-macos.tar.gz
+          for f in "pimento-cli-${version}"-linux-*.tar.gz; do
+            cp "$f" "pimento-cli-${f#"pimento-cli-${version}-"}"
+          done
+          cp "pimento-cli-${version}-windows-x86_64.zip" pimento-cli-windows-x86_64.zip
       - name: Checksums
         # `shell: bash` adds -o pipefail: a failing sha256sum must not hide behind tee.
         shell: bash
         run: |
           cd build
           ls -l
-          sha256sum Pimento-*.zip pimento-cli-*.tar.gz pimento-cli-*.zip | tee SHA256SUMS.txt
+          sha256sum Pimento-*.dmg Pimento-*.zip Pimento.dmg Pimento.zip \
+            pimento-cli-*.tar.gz pimento-cli-*.zip | tee SHA256SUMS.txt
       - name: Attest build provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
@@ -124,35 +148,49 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+        shell: bash
         run: |
           version="${GITHUB_REF_NAME#v}"
-          arm=""
-          if ls build/pimento-cli-*-linux-aarch64.tar.gz >/dev/null 2>&1; then
-            arm=" (also \`linux-aarch64\`)"
-          fi
-          cat > build/notes.md <<NOTES
-          Downloads:
+          curated=".github/release-notes/${GITHUB_REF_NAME}.md"
+          notes_flags=()
+          if [[ -f "$curated" ]]; then
+            cp "$curated" build/notes.md
+          else
+            arm=""
+            if ls build/pimento-cli-*-linux-aarch64.tar.gz >/dev/null 2>&1; then
+              arm=" (also \`pimento-cli-linux-aarch64.tar.gz\`)"
+            fi
+            base="https://github.com/${GH_REPO}/releases/latest/download"
+            cat > build/notes.md <<NOTES
+          ## Download
 
-          - **Pimento-${version}.zip**: the Mac app, with the \`pimento\` command-line tool inside
-            (Pimento › Install Command Line Tool… puts it on your PATH).
-          - **pimento-cli-${version}-macos.tar.gz**: only the command-line tool for macOS (Apple silicon and Intel),
-            with shell completions.
-          - **pimento-cli-${version}-linux-x86_64.tar.gz**${arm}: the command-line tool for Linux
-            (glibc 2.35+, libcurl), with shell completions.
-          - **pimento-cli-${version}-windows-x86_64.zip**: the command-line tool for Windows 10/11
-            (sign-in with \`pimento login\` uses a device code there).
+          - **Mac app**: [Pimento.dmg](${base}/Pimento.dmg) (macOS 14+, Apple silicon and Intel), with the
+            \`pimento\` command-line tool inside. Open it and drag Pimento to Applications. It is not
+            notarized: on first launch, right-click it and choose **Open**.
+          - **Command-line tool**: \`curl -fsSL https://raw.githubusercontent.com/${GH_REPO}/main/scripts/install.sh | sh\`
+            (macOS, Linux) or \`irm https://raw.githubusercontent.com/${GH_REPO}/main/scripts/install.ps1 | iex\` (Windows),
+            or download \`pimento-cli-macos.tar.gz\`, \`pimento-cli-linux-x86_64.tar.gz\`${arm} or
+            \`pimento-cli-windows-x86_64.zip\` below.
 
-          Verify with \`shasum -a 256 -c SHA256SUMS.txt --ignore-missing\` (macOS) or
-          \`sha256sum -c SHA256SUMS.txt --ignore-missing\` (Linux); on Windows compare
-          \`Get-FileHash pimento-cli-${version}-windows-x86_64.zip\` with SHA256SUMS.txt.
-          Each download has a build provenance attestation from this workflow:
-          \`gh attestation verify FILE --repo ${GH_REPO}\`.
-
-          Ad-hoc signed, not notarized: right-click the app and choose Open on first launch, or run
-          \`xattr -dr com.apple.quarantine Pimento.app\` (\`xattr -d com.apple.quarantine pimento\` for the CLI).
+          Each file is here under a stable name and as \`…-${version}…\`. Verify with
+          \`shasum -a 256 -c SHA256SUMS.txt --ignore-missing\` (macOS) or \`sha256sum -c SHA256SUMS.txt --ignore-missing\`
+          (Linux), and the build provenance with \`gh attestation verify FILE --repo ${GH_REPO}\`.
           NOTES
+            notes_flags=(--generate-notes)
+          fi
+          {
+            echo
+            echo "### SHA-256"
+            echo
+            echo '```'
+            cat build/SHA256SUMS.txt
+            echo '```'
+          } >> build/notes.md
+          prerelease=()
+          [[ "$version" == *-* ]] && prerelease=(--prerelease)
           gh release create "$GITHUB_REF_NAME" \
-            build/Pimento-*.zip build/pimento-cli-*.tar.gz build/pimento-cli-*.zip build/SHA256SUMS.txt \
+            build/Pimento-*.dmg build/Pimento-*.zip build/Pimento.dmg build/Pimento.zip \
+            build/pimento-cli-*.tar.gz build/pimento-cli-*.zip build/SHA256SUMS.txt \
             --title "Pimento ${version}" \
-            --generate-notes \
-            --notes-file build/notes.md
+            --notes-file build/notes.md \
+            ${notes_flags[@]+"${notes_flags[@]}"} ${prerelease[@]+"${prerelease[@]}"}

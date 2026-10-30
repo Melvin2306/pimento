@@ -14,6 +14,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  scripts:
+    name: Shell scripts
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: ShellCheck
+        run: |
+          shellcheck --version
+          # install.sh is POSIX sh (it runs as `curl … | sh`): checked as such.
+          shellcheck --shell=sh scripts/install.sh
+          shellcheck --severity=warning scripts/*.sh
+          # And it parses with the shells it will meet as sh.
+          sh -n scripts/install.sh
+          bash --posix -n scripts/install.sh
+
   build-and-test:
     name: macOS
     runs-on: macos-latest
@@ -31,16 +49,21 @@ jobs:
         run: swift build
       - name: Test
         run: swift test
-      - name: Bundle
+      - name: Bundle (universal)
         run: |
           scripts/bundle.sh --zip
           plutil -lint build/Pimento.app/Contents/Info.plist
+          lipo -archs build/Pimento.app/Contents/MacOS/Pimento | grep -q arm64
+          lipo -archs build/Pimento.app/Contents/MacOS/Pimento | grep -q x86_64
           test -f build/Pimento.app/Contents/Resources/AppIcon.icns
           test -x build/Pimento.app/Contents/MacOS/Pimento
           build/Pimento.app/Contents/Helpers/pimento version
           build/Pimento.app/Contents/Helpers/pimento help >/dev/null
           # 0.1.0's flags on the app binary are handed to the bundled CLI.
           build/Pimento.app/Contents/MacOS/Pimento --version
+      - name: Disk image
+        # Builds, verifies, attaches (-nobrowse) and checks build/Pimento-<version>.dmg.
+        run: scripts/make-dmg.sh
       - name: Package the CLI on its own (universal)
         run: |
           scripts/package-cli.sh
@@ -53,10 +76,14 @@ jobs:
           "$bin" version
           # Linked against Foundation and system libraries only: no AppKit/SwiftUI.
           ! otool -L "$bin" | grep -E 'AppKit|SwiftUI|UserNotifications'
+      - name: Installer (install.sh against the packaged CLI)
+        run: scripts/test-install.sh
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: Pimento-app
-          path: build/Pimento-*.zip
+          path: |
+            build/Pimento-*.zip
+            build/Pimento-*.dmg
           if-no-files-found: error
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -94,6 +121,8 @@ jobs:
           # The Swift runtime is linked in: no libswift*/libFoundation* from the toolchain.
           ldd "$bin"
           ! ldd "$bin" | grep -E 'libswift|libFoundation|libdispatch'
+      - name: Installer (install.sh with /bin/sh = dash, against the packaged CLI)
+        run: scripts/test-install.sh
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: pimento-cli-linux-x86_64
@@ -137,6 +166,9 @@ jobs:
           # `! pipeline` does not trip errexit unless it is the last command: test explicitly.
           if echo "$out" | grep -q "not found"; then exit 1; fi
           echo "$out" | grep -q "az login"
+      - name: Installer (install.ps1 with PowerShell 5.1 and 7, against the packaged CLI)
+        shell: pwsh
+        run: scripts/test-install.ps1
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: pimento-cli-windows-x86_64
