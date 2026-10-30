@@ -1206,6 +1206,7 @@ final class AppModel {
         let failed = all.filter { outcomes[$0.id]?.isFailure == true }
         banner = Banner(kind: failed.isEmpty ? .success : .error, text: lifecycleBanner(
             done: ended.count, verb: "deactivated", failed: failed, outcomes: outcomes))
+        noteClaimsChallenge(in: planned.compactMap { outcomes[$0.id] })
         isActivating = false
         roles = applyPending(to: roles)
         Notifier.rolesEnded(Set(ended.map { ReminderRole.key($0.policyKey) }))
@@ -1313,6 +1314,9 @@ final class AppModel {
         }
         if !lost.isEmpty { text += " \(lost.count) ended but not active again: activate \(lost.count == 1 ? "it" : "them") again." }
         banner = Banner(kind: !failed.isEmpty ? .error : awaiting.isEmpty ? .success : .info, text: text)
+        // A reactivation refused for MFA or an authentication context carries
+        // the claims challenge in its message, as an activation does.
+        noteClaimsChallenge(in: plans.compactMap { outcomes[$0.id] })
         isActivating = false
         roles = applyPending(to: roles)
         // The old reminders are for the old expiry; renewed roles get new ones.
