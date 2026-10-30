@@ -77,11 +77,31 @@ All notable changes to this project are documented here. The format follows
   and without cookies, Microsoft's branding CDNs only for the sign-in logo, HTTPS, 512 KB and
   image checks, cached for 7 days with *Refresh Logos* and *Clear Cache*; never in demo mode. It
   tells Microsoft and each tenant's website that this Mac looked them up (see *Security and privacy*).
+- **Browser sign-in on Windows.** `pimento login` opens the browser there too (authorization code
+  with PKCE), instead of always using a device code; `--device-code` still works. The loopback
+  listener now runs on Winsock with the same code as on macOS and Linux: loopback only (127.0.0.1
+  and ::1 on one port, another port when a program holds the ::1 side), the `state` check, the
+  per-connection and overall timeouts, and one answer. On Windows its port is held with
+  `SO_EXCLUSIVEADDRUSE`, so no other program can bind it, even with `SO_REUSEADDR`. The browser is
+  opened with `ShellExecuteW` on a private redirect page; the URL is never in a command line.
+- **PowerShell completions.** `pimento completions powershell` (or `pwsh`) prints a
+  `Register-ArgumentCompleter` script for Windows PowerShell 5.1 and PowerShell 7. It completes
+  commands, flags, their fixed values, the words after `presets`, `history`, `completions` and
+  `help`, and the names of your presets (read with `pimento presets list --json`, offline). The
+  Windows zip ships it as `completions\pimento.ps1`, and `install.ps1` loads it from a marked block
+  in your PowerShell profile. The block is replaced, not repeated, on every install, and
+  `-Uninstall` removes it; the rest of the profile, and its encoding, stay as they were.
+  `-NoCompletions` (`PIMENTO_NO_COMPLETIONS=1`) skips it, and `-ProfilePath` (`PIMENTO_PROFILE`)
+  picks another profile. cmd.exe has no programmable completion, so it gets none.
 
 ### Changed
 
 - `pimento activate` and `renew` plan their requests with the same code as `pimento mcp`
   (`ActivationPlanning`); their behaviour is unchanged.
+- Sign-in connections end with a lingering close (no more sending, the rest of the request read,
+  then closed), so a connection reset cannot discard the answer page before the browser shows it.
+- The loopback listener tests run on Windows too, and CI tries the PowerShell completions with
+  `TabExpansion2` in both PowerShells.
 
 ### Security
 

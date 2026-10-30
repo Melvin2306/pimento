@@ -130,7 +130,6 @@ struct NetworkGuardTests {
         #expect(monitor.blocked == ["the Azure CLI (az account get-access-token)"])
     }
 
-    #if !os(Windows)
     @Test func noSignInListenerIsOpened() {
         let monitor = NetworkGuard.Monitor()
         NetworkGuard.$monitor.withValue(monitor) {
@@ -138,7 +137,6 @@ struct NetworkGuardTests {
         }
         #expect(monitor.blocked.count == 1)
     }
-    #endif
 
     @Test func noBrowserIsOpened() {
         let monitor = NetworkGuard.Monitor()

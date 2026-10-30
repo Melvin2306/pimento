@@ -394,7 +394,12 @@ public struct VersionOptions: Equatable, Sendable {
 }
 
 public enum CompletionShell: String, CaseIterable, Sendable {
-    case zsh, bash, fish
+    case zsh, bash, fish, powershell
+
+    /// A shell as named on the command line: also `pwsh` for PowerShell.
+    public init?(argument: String) {
+        self.init(rawValue: argument == "pwsh" ? "powershell" : argument)
+    }
 }
 
 public enum CLICommand: Equatable, Sendable {
@@ -522,8 +527,9 @@ public enum CLIParseError: Error, Equatable, LocalizedError {
             "Say which active roles to \(c): resource filters, --role NAME\(c == "extend" ? "" : ", --preset NAME"), or --all."
         case .noSelection:
             "Say which roles to activate: resource filters, --role NAME, --preset NAME, or --all for every eligible role."
-        case .missingShell: "Name a shell: pimento completions zsh|bash|fish."
-        case .unknownShell(let s): "No completions for “\(s)”. Use zsh, bash or fish."
+        case .missingShell: "Name a shell: pimento completions zsh|bash|fish|powershell."
+        case .unknownShell(let s):
+            "No completions for “\(s)”. Use zsh, bash, fish or powershell (cmd has no programmable completion)."
         case .invalidStart(let message): "--at: \(message)"
         case .invalidDays(let v): "--days: cannot read “\(v)”. Use e.g. mon-fri, mon,wed,fri, weekend or all."
         case .invalidWindow(let v): "--window: cannot read “\(v)”. Use e.g. 08:00-18:00 (local time; 22:00-06:00 runs overnight)."
@@ -907,7 +913,7 @@ public enum CLIParser {
         case "completions":
             if rest.contains("--help") || rest.contains("-h") { return CLIInvocation(.help(topic: first)) }
             guard let name = rest.first else { throw CLIParseError.missingShell }
-            guard let shell = CompletionShell(rawValue: name) else { throw CLIParseError.unknownShell(name) }
+            guard let shell = CompletionShell(argument: name) else { throw CLIParseError.unknownShell(name) }
             if rest.count > 1 { throw CLIParseError.unexpectedArgument(rest[1], command: first) }
             return CLIInvocation(.completions(shell))
         default:

@@ -100,7 +100,7 @@ final class TestHTTPServer: @unchecked Sendable {
     }
 
     init(respond: @escaping @Sendable (String) -> (Int, [String: String])) throws {
-        let fd = socket(AF_INET, TestSocket.streamType, 0)
+        let fd = LoopbackSocket.makeSocket(family: AF_INET) ?? -1
         var addr = sockaddr_in()
         #if canImport(Darwin)
         addr.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
@@ -163,68 +163,6 @@ final class TestHTTPServer: @unchecked Sendable {
             TestSocket.sendAll(client, Array((text + "\r\n").utf8))
             _ = TestSocket.close(client)
         }
-    }
-}
-
-enum TestSocket {
-    static var streamType: Int32 {
-        #if canImport(Darwin)
-        SOCK_STREAM
-        #else
-        Int32(SOCK_STREAM.rawValue)
-        #endif
-    }
-
-    static func close(_ fd: Int32) -> Int32 {
-        #if canImport(Darwin)
-        Darwin.close(fd)
-        #else
-        Glibc.close(fd)
-        #endif
-    }
-
-    static func sendAll(_ fd: Int32, _ bytes: [UInt8]) {
-        var sent = 0
-        while sent < bytes.count {
-            #if canImport(Darwin)
-            let n = bytes[sent...].withUnsafeBytes { send(fd, $0.baseAddress, $0.count, 0) }
-            #else
-            let n = bytes[sent...].withUnsafeBytes { send(fd, $0.baseAddress, $0.count, Int32(MSG_NOSIGNAL)) }
-            #endif
-            guard n > 0 else { return }
-            sent += n
-        }
-    }
-
-    /// A client connection to 127.0.0.1:`port`.
-    static func connect(port: UInt16) -> Int32? {
-        let fd = socket(AF_INET, streamType, 0)
-        guard fd >= 0 else { return nil }
-        #if canImport(Darwin)
-        var on: Int32 = 1
-        setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size))
-        #endif
-        var addr = sockaddr_in()
-        #if canImport(Darwin)
-        addr.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
-        #endif
-        addr.sin_family = sa_family_t(AF_INET)
-        addr.sin_port = port.bigEndian
-        addr.sin_addr = in_addr(s_addr: UInt32(0x7F00_0001).bigEndian)
-        let result = withUnsafePointer(to: &addr) {
-            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                #if canImport(Darwin)
-                Darwin.connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
-                #else
-                Glibc.connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
-                #endif
-            }
-        }
-        guard result == 0 else {
-            _ = close(fd)
-            return nil
-        }
-        return fd
     }
 }
 #endif

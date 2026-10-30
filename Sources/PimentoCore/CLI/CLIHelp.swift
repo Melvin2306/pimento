@@ -64,7 +64,7 @@ public enum CLIHelp {
       logout       Forget Pimento's sign-in
       whoami       Show the auth source and who you are signed in as
       mcp          Serve your roles to AI agents (Model Context Protocol, stdio)
-      completions  Print a completion script for zsh, bash or fish
+      completions  Print a completion script for zsh, bash, fish or PowerShell
       version      Print the version; --check: is there a newer release?
       help         Show help for a command
 
@@ -576,7 +576,6 @@ public enum CLIHelp {
     Azure CLI is not needed. Opens your browser (authorization code with PKCE,
     answer on http://localhost:<random port>); --device-code prints a code to
     enter on another device instead, for SSH sessions and headless machines.
-    On Windows there is no browser sign-in yet: login always uses a device code.
 
     Afterwards Pimento sign-in is the auth source of the app and the CLI (the
     shared setting); `--auth az` or $\(AuthSourceResolver.environmentVariable)=az picks the Azure CLI again.
@@ -662,13 +661,19 @@ public enum CLIHelp {
     """
 
     static let completions = """
-    Usage: pimento completions zsh|bash|fish
+    Usage: pimento completions zsh|bash|fish|powershell
 
     Prints a completion script. For example:
 
       zsh:   pimento completions zsh > "${fpath[1]}/_pimento"   (then restart the shell)
       bash:  pimento completions bash > ~/.local/share/bash-completion/completions/pimento
       fish:  pimento completions fish > ~/.config/fish/completions/pimento.fish
+      PowerShell (Windows PowerShell 5.1 and PowerShell 7; also `pwsh`): add this line to $PROFILE
+             pimento completions powershell | Out-String | Invoke-Expression
+             (the Windows installer, install.ps1, sets this up for you)
+
+    PowerShell completes preset names too, from your presets file. cmd.exe has
+    no programmable completion, so there is no script for it.
     """
 
     // MARK: Completions
@@ -678,6 +683,7 @@ public enum CLIHelp {
         case .zsh: zsh
         case .bash: bash
         case .fish: fish
+        case .powershell: PowerShellCompletion.script
         }
     }
 
@@ -834,7 +840,7 @@ public enum CLIHelp {
                 '--allow-privileged[Allow Owner and access administrator roles]' \
                 '--no-confirm[Write without elicitation when the client cannot ask]' ;;
             version) _arguments -s '--check[Check for a newer release]' '--json[Machine-readable output]' '(- *)'{-h,--help}'[Show help]' ;;
-            completions) _arguments '1:shell:(zsh bash fish)' ;;
+            completions) _arguments '1:shell:(zsh bash fish powershell)' ;;
             help) _arguments '1:command:(list activate deactivate renew extend keep-alive scheduled cancel pending wait approvals approve deny status tenants presets history login logout whoami mcp completions version)' ;;
           esac ;;
       esac
@@ -891,7 +897,7 @@ public enum CLIHelp {
         whoami) opts="--tenant --json --auth --help" ;;
         mcp) opts="--tenant --allow-activate --allow-privileged --no-confirm --help" ;;
         version) opts="--check --json --help" ;;
-        completions) opts="zsh bash fish" ;;
+        completions) opts="zsh bash fish powershell" ;;
         help) opts="list activate deactivate renew extend keep-alive scheduled cancel pending wait approvals approve deny status tenants presets history login logout whoami mcp completions version" ;;
         *) opts="" ;;
       esac
@@ -977,7 +983,7 @@ public enum CLIHelp {
     complete -c pimento -n '__fish_seen_subcommand_from mcp' -l no-confirm -d 'Write without elicitation when the client cannot ask'
     complete -c pimento -n '__fish_seen_subcommand_from version' -l check -d 'Check for a newer release'
     complete -c pimento -n '__fish_seen_subcommand_from version' -l json -d 'Machine-readable output'
-    complete -c pimento -n '__fish_seen_subcommand_from completions' -a 'zsh bash fish'
+    complete -c pimento -n '__fish_seen_subcommand_from completions' -a 'zsh bash fish powershell'
     complete -c pimento -n '__fish_seen_subcommand_from help' -a 'list activate deactivate renew extend keep-alive scheduled cancel pending wait approvals approve deny status tenants presets history login logout whoami mcp completions version'
     """#
 }

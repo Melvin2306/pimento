@@ -164,7 +164,13 @@ jobs:
           bin="$(ls build/cli-check/*/pimento.exe)"
           "$bin" version
           "$bin" help >/dev/null
-          "$bin" help login | grep -q "device code"
+          # Browser sign-in on Windows too, and the device code as the option.
+          "$bin" help login | grep -q "Opens your browser"
+          "$bin" help login | grep -q -- "--device-code"
+          if "$bin" help login | grep -q "no browser sign-in"; then exit 1; fi
+          # PowerShell completions: printed by the CLI and shipped in the zip.
+          "$bin" completions powershell | grep -q "Register-ArgumentCompleter -Native"
+          grep -q "Register-ArgumentCompleter" "$(dirname "$bin")/completions/pimento.ps1"
           "$bin" history --json | grep -q 'AppData'
           # The runner has the Azure CLI (az.cmd) but no session: pimento must find and run it,
           # and fail on the missing login, not with "not found".
@@ -173,7 +179,7 @@ jobs:
           # `! pipeline` does not trip errexit unless it is the last command: test explicitly.
           if echo "$out" | grep -q "not found"; then exit 1; fi
           echo "$out" | grep -q "az login"
-      - name: Installer (install.ps1 with PowerShell 5.1 and 7, against the packaged CLI)
+      - name: Installer (install.ps1 with PowerShell 5.1 and 7, against the packaged CLI, with completions)
         shell: pwsh
         run: scripts/test-install.ps1
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

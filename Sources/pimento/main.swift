@@ -73,13 +73,18 @@ let redirectPages = RedirectPages()
 /// nonce, PKCE challenge) never becomes a process argument, where other local
 /// users could read it: macOS asks LaunchServices directly (no child process);
 /// Linux runs `xdg-open` (from PATH) on a private redirect page that holds the
-/// URL (`BrowserLaunch`). Windows has no browser sign-in yet
-/// (`LoopbackListener.isSupported`); its opener uses the same redirect page.
+/// URL (`BrowserLaunch`); Windows hands that page's path to `ShellExecuteW`
+/// (the default browser, through the `.html` file association): no shell
+/// string, no `cmd.exe`, and the URL in no command line.
 func openInBrowser(_ url: URL) -> Bool {
     #if os(macOS)
     return LSOpenCFURLRef(url as CFURL, nil) == noErr
     #elseif os(Windows)
     guard let page = BrowserLaunch.openThroughPage(url, open: { path in
+        // The shell may hand the file to a COM-based handler: COM must be set
+        // up on this thread (and is undone again if this call set it up).
+        let com = CoInitializeEx(nil, DWORD(COINIT_APARTMENTTHREADED.rawValue) | DWORD(COINIT_DISABLE_OLE1DDE.rawValue))
+        defer { if com >= 0 { CoUninitialize() } }
         let result = path.withCString(encodedAs: UTF16.self) { file in
             "open".withCString(encodedAs: UTF16.self) { verb in
                 ShellExecuteW(nil, verb, file, nil, nil, SW_SHOWNORMAL)

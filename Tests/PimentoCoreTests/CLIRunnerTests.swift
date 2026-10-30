@@ -36,7 +36,7 @@ final class CLIHarness: @unchecked Sendable {
     var openURL: @Sendable (URL) async -> Bool = { _ in false }
     /// How often `login` said a browser sign-in was over.
     let browserSignInsEnded = TestBox<Int>(0)
-    /// Whether `login` may use the browser (false on Windows).
+    /// Whether `login` may use the browser.
     var browserSignIn = LoopbackListener.isSupported
     /// Use the tokens of the auth source (`--auth`) instead of `tokens`.
     var useAuthTokens = false
