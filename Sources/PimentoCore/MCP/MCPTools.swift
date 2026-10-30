@@ -742,6 +742,9 @@ enum MCPConfirmation {
             n += 1
             let flag = MCPToolbox.isPrivileged(role) ? " [HIGH PRIVILEGE]" : ""
             lines.append("\(n). \(MCPText.clip(role.roleName, 80))\(flag) on \"\(MCPText.clip(role.scopeName, 120))\" (\(role.scopeTypeLabel))\(detail)")
+            // Display names are not unique (rg-app in a dev and a prod
+            // subscription): the scope says which one the agent picked.
+            lines.append("   \(MCPText.clip(role.scope, 300))")
         }
         for p in plan.activations { line(p.role, " for \(durationText(p.duration))") }
         for p in plan.deactivations { line(p.role, ": ends now") }

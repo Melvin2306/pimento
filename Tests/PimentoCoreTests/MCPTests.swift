@@ -757,6 +757,16 @@ struct MCPConfirmationTests {
         #expect(h.methods.writes == 0)
         await h.finish()
     }
+
+    @Test func theConfirmationNamesTheExactScope() async throws {
+        // Display names are not unique (rg-app in a dev and a prod subscription):
+        // the user must see which scope the agent picked.
+        let (h, ask, _) = try await legacyActivation(answer: ["action": "decline"])
+        let scope = try await h.session.makeService(tokens: h.session.azureCLITokens(tenantId: nil), readOnly: true).loadRoles().roles
+            .first { $0.roleName == "Reader" && $0.scopeName == "Contoso Production" }!.scope
+        #expect(ask["params"]?["message"]?.stringValue?.contains(scope) == true, "\(ask["params"]?["message"]?.stringValue ?? "")")
+        await h.finish()
+    }
 }
 
 extension MCPHarness {

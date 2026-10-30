@@ -1155,6 +1155,7 @@ and your client shows Pimento's confirmation, with a checkbox you have to tick:
 An AI agent asks Pimento to ACTIVATE this Azure role for alex@example.com in tenant …:
 
 1. Reader on "Contoso Production" (Subscription) for 8 h
+   /subscriptions/00000000-0000-0000-0000-000000000000
 
 Justification (from the agent): "INC-1234 log investigation"
 
@@ -1171,7 +1172,7 @@ approval*, the failed policy rule, …) goes back to the agent and into the hist
   CLI's read-only commands use.
 - **You confirm every write.** With `--allow-activate`, each activation, deactivation and renewal
   is planned first (read-only), shown to you through MCP *elicitation* (a form in the client: the
-  roles, scopes, durations, the agent's justification and ticket, warnings), and sent only when you
+  roles, their scopes by name and full ARM path, durations, the agent's justification and ticket, warnings), and sent only when you
   accept with the box ticked. Declining, dismissing, an unticked box, no answer within 10 minutes,
   or the end of the session sends nothing. Before sending, Pimento plans again from fresh data and
   sends only if the plan is still exactly what you confirmed. On the stateless protocol revision the
