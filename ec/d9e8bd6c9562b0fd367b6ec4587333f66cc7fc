@@ -1,0 +1,21 @@
+Sources/PimentoCore/CLI/CLICompletions.swift
+  s_4884204a812fec::t_e3f1055d30fbf5 243-247
+Tests/PimentoCoreTests/PowerShellCompletionTests.swift
+  s_4884204a812fec::t_9aa7e73d0cfea6 184-192
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ecd9e8bd6c9562b0fd367b6ec4587333f66cc7fc",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
