@@ -415,6 +415,7 @@ public enum CLIParseError: Error, Equatable, LocalizedError {
     case clearNeedsConfirmation
     case invalidClientId(String)
     case ticketSystemWithoutTicket
+    case emptyFilter(String)
 
     public var errorDescription: String? {
         switch self {
@@ -465,6 +466,8 @@ public enum CLIParseError: Error, Equatable, LocalizedError {
         case .missingExportFile: "`pimento history export` needs a file name (FILE.csv, or - for stdout)."
         case .invalidClientId(let v):
             "--client-id takes the Application (client) ID GUID of your app registration, got “\(v)”."
+        case .emptyFilter(let what):
+            "An empty \(what) (only spaces) would match every name; give a resource name, --role NAME or --all."
         case .ticketSystemWithoutTicket:
             "--ticket-system goes with --ticket NUMBER (--ticket NUMBER --ticket-system NAME)."
         case .clearNeedsConfirmation:
@@ -512,6 +515,16 @@ public enum WaitTimeout {
 
 /// Hand-written subcommand parser: `pimento <command> [options] [filters]`.
 public enum CLIParser {
+    /// Resource filters and `--role` names, trimmed. One that is empty after
+    /// trimming is refused: `" "` would be a substring of most names.
+    static func terms(_ values: [String], _ what: String) throws -> [String] {
+        try values.map { raw in
+            let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !value.isEmpty else { throw CLIParseError.emptyFilter(what) }
+            return value
+        }
+    }
+
     private struct Flag {
         let key: String
         let takesValue: Bool
@@ -773,8 +786,8 @@ public enum CLIParser {
         var o = ListOptions()
         o.tenant = scan.values["tenant"]?.last
         o.json = scan.values["json"] != nil
-        o.criteria.filters = scan.positionals
-        o.criteria.roles = scan.values["role"] ?? []
+        o.criteria.filters = try terms(scan.positionals, "filter")
+        o.criteria.roles = try terms(scan.values["role"] ?? [], "--role")
         switch (scan.values["active"] != nil, scan.values["eligible"] != nil) {
         case (true, true): throw CLIParseError.conflicting("--active", "--eligible")
         case (true, false): o.criteria.state = .active
@@ -790,8 +803,8 @@ public enum CLIParser {
         var o = ActivateOptions()
         o.tenant = scan.values["tenant"]?.last
         o.json = scan.values["json"] != nil
-        o.criteria.filters = scan.positionals
-        o.criteria.roles = scan.values["role"] ?? []
+        o.criteria.filters = try terms(scan.positionals, "filter")
+        o.criteria.roles = try terms(scan.values["role"] ?? [], "--role")
         o.all = scan.values["all"] != nil
         o.assumeYes = scan.values["yes"] != nil
         o.dryRun = scan.values["dry-run"] != nil
@@ -824,8 +837,8 @@ public enum CLIParser {
         var o = LifecycleOptions()
         o.tenant = scan.values["tenant"]?.last
         o.json = scan.values["json"] != nil
-        o.criteria.filters = scan.positionals
-        o.criteria.roles = scan.values["role"] ?? []
+        o.criteria.filters = try terms(scan.positionals, "filter")
+        o.criteria.roles = try terms(scan.values["role"] ?? [], "--role")
         o.all = scan.values["all"] != nil
         o.assumeYes = scan.values["yes"] != nil
         o.dryRun = scan.values["dry-run"] != nil
@@ -858,7 +871,7 @@ public enum CLIParser {
         o.tenant = scan.values["tenant"]?.last
         o.json = scan.values["json"] != nil
         o.targets = scan.positionals
-        o.roles = scan.values["role"] ?? []
+        o.roles = try terms(scan.values["role"] ?? [], "--role")
         o.all = scan.values["all"] != nil
         o.assumeYes = scan.values["yes"] != nil
         o.dryRun = scan.values["dry-run"] != nil
@@ -913,8 +926,8 @@ public enum CLIParser {
         var o = ExtendOptions()
         o.tenant = scan.values["tenant"]?.last
         o.json = scan.values["json"] != nil
-        o.criteria.filters = scan.positionals
-        o.criteria.roles = scan.values["role"] ?? []
+        o.criteria.filters = try terms(scan.positionals, "filter")
+        o.criteria.roles = try terms(scan.values["role"] ?? [], "--role")
         o.all = scan.values["all"] != nil
         o.assumeYes = scan.values["yes"] != nil
         o.dryRun = scan.values["dry-run"] != nil
@@ -1021,8 +1034,8 @@ public enum CLIParser {
             o.name = name
             o.tenant = scan.values["tenant"]?.last
             o.json = scan.values["json"] != nil
-            o.criteria.filters = Array(scan.positionals.dropFirst())
-            o.criteria.roles = scan.values["role"] ?? []
+            o.criteria.filters = try terms(Array(scan.positionals.dropFirst()), "filter")
+            o.criteria.roles = try terms(scan.values["role"] ?? [], "--role")
             o.criteria.state = .any
             o.exact = scan.values["exact"] != nil
             o.force = scan.values["force"] != nil

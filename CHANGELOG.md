@@ -419,6 +419,8 @@ All notable changes to this project are documented here. The format follows
   path short. A scope that cannot be a path (`..`, empty segments) is an error instead of a crash.
 - A preset's tenant is checked like `--tenant` (a GUID or a domain, not starting with `-`) before
   the CLI uses it, and so before it reaches `az --tenant`; the presets file can be edited by hand.
+- Resource filters and `--role` names are trimmed, and one that is empty after trimming is a usage
+  error: `pimento deactivate " " --yes` ended a role, as a space is part of most resource names.
 
 ## [0.1.0] - 2026-10-29
 

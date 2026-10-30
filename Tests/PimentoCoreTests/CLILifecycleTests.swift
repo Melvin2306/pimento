@@ -217,6 +217,24 @@ struct CLILifecycleRunnerTests {
         #expect(h.out.contains("requires approval"))
     }
 
+    /// Regression: `deactivate " " --yes` deactivated a role (a space is a
+    /// substring of most resource names).
+    @Test func whitespaceOnlyFiltersSelectNothing() async throws {
+        for args in [["deactivate", " ", "--yes"], ["deactivate", "--role", "\t", "--yes"], ["renew", "  ", "-j", "x", "--yes"],
+                     ["activate", " ", "-j", "x", "--yes"], ["list", " "], ["extend", "\n", "-j", "x", "--yes"],
+                     ["cancel", "--role", " ", "--yes"], ["presets", "save", "P", " "]] {
+            let h = CLIHarness(put: lifecyclePUT)
+            #expect(await h.run(args) == 2, "\(args)")
+            #expect(h.err.contains("An empty"))
+            #expect(await h.transport.requests.isEmpty)
+        }
+        // Filters are trimmed.
+        guard case .deactivate(let o) = try CLIParser.parse(["deactivate", " staging ", "--role", " Owner ", "--yes"]).command else {
+            Issue.record("expected deactivate"); return
+        }
+        #expect(o.criteria.filters == ["staging"] && o.criteria.roles == ["Owner"])
+    }
+
     /// Regression: when the policy could not be read, renew sent
     /// SelfDeactivate + SelfActivate for a role whose policy needs approval.
     @Test func renewLeavesRolesAloneWhosePolicyCannotBeRead() async throws {
