@@ -229,19 +229,23 @@ Use either this link or `install.sh`, not both: `install.sh` leaves a link in it
 - **Owner safety net**: when the selection contains *Owner* roles, Pimento lists them and asks before sending anything.
 - **Group-inherited eligibilities** work, and **ABAC conditions** on an eligibility (for example
   one that limits which roles the holder may assign) are carried over automatically.
-- **Any tenant**: a searchable tenant picker in the toolbar shows every tenant by name, or pass
-  `--tenant` / `PIMENTO_TENANT`. Hide the tenants you never use.
+- **Any tenant**: a searchable tenant picker in the toolbar shows every tenant by name, with its
+  initials as a badge (or, if you turn it on, its logo), or pass `--tenant` / `PIMENTO_TENANT`.
+  Hide the tenants you never use.
 - **Sign in without the Azure CLI** (optional): Pimento's own Microsoft sign-in, in the browser or with
   a device code, with your own app registration. The refresh token is kept in the Keychain; switching
   tenants needs no new sign-in. See [Pimento sign-in](#pimento-sign-in-without-the-azure-cli).
 - **Settings** (<kbd>⌘</kbd><kbd>,</kbd>) for notifications, activation defaults, refresh and table columns.
 - **Themes**: Native, Azure-style or, for fun, Windows XP-style (see [Themes](#themes)).
 - **A real command-line tool**, `pimento`: `list`, `activate` (also `--at` and `--ticket`), `deactivate`, `renew`,
-  `scheduled`, `cancel`, `pending`, `wait`, `approvals`, `approve`, `deny`, `status`, `tenants`, `history`, `login`, with JSON
-  output, exit codes and shell completions. Download it on its own, or get it with the app.
+  `keep-alive`, `scheduled`, `cancel`, `pending`, `wait`, `approvals`, `approve`, `deny`, `status`, `tenants`, `history`,
+  `login`, with JSON output, exit codes and shell completions (zsh, bash, fish, PowerShell), on macOS, Linux and Windows.
+  Download it on its own, or get it with the app.
 - **AI agents (MCP)**: `pimento mcp` lets Claude Code, Claude Desktop, Cursor and other MCP clients
   read your roles, and, if you allow it, activate them after you confirm each request in the client.
   Read-only by default. See [AI agents (MCP)](#ai-agents-mcp).
+- **Raycast and Alfred**: search, activate and end roles and presets from your launcher, through the
+  installed CLI (see [Integrations](#integrations)).
 - **Demo mode**: every feature against a simulated Azure with synthetic data, offline and apart from
   your own settings, for trying Pimento out and for screenshots (see [Demo mode](#demo-mode)).
 - **Update check**: once a day Pimento asks GitHub whether a newer release exists and, if so, shows a
@@ -859,7 +863,7 @@ suite and its presets, history and sign-in settings in `~/Library/Application Su
 both start from the demo data on every launch unless *Keep demo changes* is on. The demo account's
 tokens are in memory, never in the Keychain. Demo notifications are marked as such and withdrawn when
 the demo ends. Requests to the network, the Azure CLI, the sign-in listener and the browser (sign-in
-and device-code pages) are refused for the whole process, and there is no update check. Launch at login and the command line tool installer are off. Leaving demo mode restarts
+and device-code pages) are refused for the whole process, and there is no update check and no tenant logo fetch. Launch at login and the command line tool installer are off. Leaving demo mode restarts
 Pimento with your own session. Each `pimento --demo` command starts from the demo data in a temporary
 folder that is removed afterwards, and ignores `PIMENTO_TENANT`, `PIMENTO_AUTH` and the token-store
 variables.
