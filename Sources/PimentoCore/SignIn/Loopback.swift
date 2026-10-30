@@ -160,7 +160,7 @@ public final class LoopbackListener: @unchecked Sendable {
         let bound = withUnsafePointer(to: &addr) {
             $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(v4, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) }
         }
-        guard bound == 0, listen(v4, 8) == 0 else {
+        guard bound == 0, listen(v4, 32) == 0 else {
             let message = String(cString: strerror(errno))
             _ = closeSocket(v4)
             throw SignInError.loopback(message)
@@ -206,7 +206,7 @@ public final class LoopbackListener: @unchecked Sendable {
             _ = closeSocket(fd)
             return meansNoIPv6(code) ? .unavailable : .taken
         }
-        guard listen(fd, 8) == 0 else {
+        guard listen(fd, 32) == 0 else {
             _ = closeSocket(fd)
             return .taken
         }
@@ -251,12 +251,38 @@ public final class LoopbackListener: @unchecked Sendable {
         }
     }
 
+    /// How many connections are served at once. A client that connects
+    /// beyond that pushes out the oldest one (it has had the most time), so
+    /// stray or slow connections cannot keep the browser's redirect out.
+    static let maxConnections = 16
+
+    /// One open connection: its request head so far and its own deadline.
+    private struct Connection {
+        let fd: Int32
+        let deadline: Date
+        var head: [UInt8] = []
+
+        /// The head is complete (or as long as it may get).
+        var isComplete: Bool {
+            head.count >= LoopbackListener.maxHead || String(decoding: head, as: UTF8.self).contains("\r\n\r\n")
+        }
+    }
+
+    /// The longest request head read.
+    static let maxHead = 16384
+
+    /// Serves every connection side by side on this one thread: each gets
+    /// `connectionTimeout` in all to send its request head, and none waits
+    /// for another, so a connection that sends nothing (or trickles) delays
+    /// nobody. At most `maxConnections` are open at once.
     private func serve(state: String, deadline: Date) throws -> String {
         lock.lock()
         let fds = stopped ? [] : sockets
         serving = true
         lock.unlock()
+        var clients: [Connection] = []
         defer {
+            for client in clients { _ = Self.closeSocket(client.fd) }
             lock.lock()
             stopped = true
             serving = false
@@ -264,61 +290,85 @@ public final class LoopbackListener: @unchecked Sendable {
             lock.unlock()
         }
         guard !fds.isEmpty else { throw SignInError.cancelled }
+        /// Answers `client`, closes it; the code or error ends the wait.
+        func finish(_ client: Connection) throws -> String? {
+            switch answer(client, state: state) {
+            case .code(let code): return code
+            case .error(let info): throw info.needsInteraction ? SignInError.interactionRequired(info) : SignInError.oauth(info)
+            case .stateMismatch, .ignored: return nil
+            }
+        }
         while Date() < deadline {
             if isStopped { throw SignInError.cancelled }
-            var polls = fds.map { pollfd(fd: $0, events: Int16(POLLIN), revents: 0) }
-            let ready = poll(&polls, nfds_t(polls.count), 200)
+            // Wake up for the nearest connection deadline, at most every 200 ms.
+            let nearest = clients.map { $0.deadline.timeIntervalSinceNow }.min() ?? 0.2
+            let wait = Int32((min(0.2, max(0, nearest)) * 1000).rounded(.up))
+            var polls = (fds + clients.map(\.fd)).map { pollfd(fd: $0, events: Int16(POLLIN), revents: 0) }
+            let ready = poll(&polls, nfds_t(polls.count), wait)
             if isStopped { throw SignInError.cancelled }
-            guard ready > 0 else { continue }
-            for p in polls where p.revents & Int16(POLLIN) != 0 {
-                let client = accept(p.fd, nil, nil)
-                guard client >= 0 else { continue }
-                let callback = handle(client, state: state)
-                switch callback {
-                case .code(let code): return code
-                case .error(let info): throw info.needsInteraction ? SignInError.interactionRequired(info) : SignInError.oauth(info)
-                case .stateMismatch, .ignored: continue
+            if ready < 0, errno != EINTR { throw SignInError.loopback(String(cString: strerror(errno))) }
+
+            // Read from every connection that has something; answer the finished ones.
+            var open: [Connection] = []
+            for (i, var client) in clients.enumerated() {
+                var done = client.deadline <= Date()
+                if ready > 0, polls[fds.count + i].revents != 0, !done {
+                    var buffer = [UInt8](repeating: 0, count: 4096)
+                    let n = recv(client.fd, &buffer, buffer.count, 0)
+                    if n > 0 { client.head += buffer[0..<n] } else if n == 0 || (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) { done = true }
+                    if client.isComplete { done = true }
                 }
+                if done {
+                    // `client` is closed either way; the rest stay for `defer`.
+                    let result: String?
+                    do { result = try finish(client) } catch {
+                        clients = open + clients.dropFirst(i + 1)
+                        throw error
+                    }
+                    if let code = result {
+                        clients = open + clients.dropFirst(i + 1)
+                        return code
+                    }
+                } else {
+                    open.append(client)
+                }
+            }
+            clients = open
+
+            guard ready > 0 else { continue }
+            for p in polls.prefix(fds.count) where p.revents & Int16(POLLIN) != 0 {
+                let fd = accept(p.fd, nil, nil)
+                guard fd >= 0 else { continue }
+                Self.prepare(fd)
+                // Added first, so `defer` closes it whatever `finish` does.
+                clients.append(Connection(fd: fd, deadline: Date().addingTimeInterval(connectionTimeout)))
+                if clients.count > Self.maxConnections, let code = try finish(clients.removeFirst()) { return code }
             }
         }
         throw SignInError.timedOut
     }
 
-    /// Reads one request head (up to 16 KB, within `connectionTimeout` in
-    /// all), answers it, closes the connection.
-    private func handle(_ client: Int32, state: String) -> LoopbackCallback {
-        defer { _ = Self.closeSocket(client) }
-        let deadline = Date().addingTimeInterval(connectionTimeout)
-        // A backstop for each call; the deadline bounds the whole exchange.
-        var timeout = timeval(tv_sec: 5, tv_usec: 0)
-        setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
-        setsockopt(client, SOL_SOCKET, SO_SNDTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
+    /// A connection that never blocks the serving thread, and no SIGPIPE.
+    private static func prepare(_ fd: Int32) {
+        _ = fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK)
         #if canImport(Darwin)
         var on: Int32 = 1
-        setsockopt(client, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size))
+        setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size))
         #endif
-        var head = [UInt8]()
-        var buffer = [UInt8](repeating: 0, count: 4096)
-        while head.count < 16384 {
-            let left = deadline.timeIntervalSinceNow
-            guard left > 0 else { break }
-            var p = pollfd(fd: client, events: Int16(POLLIN), revents: 0)
-            let ready = poll(&p, 1, Int32((left * 1000).rounded(.up)))
-            if ready < 0, errno == EINTR { continue }
-            guard ready > 0 else { break }
-            let n = recv(client, &buffer, buffer.count, 0)
-            guard n > 0 else { break }
-            head += buffer[0..<n]
-            if String(decoding: head, as: UTF8.self).contains("\r\n\r\n") { break }
-        }
-        let callback = LoopbackRequest.parse(String(decoding: head, as: UTF8.self), expectedState: state)
+    }
+
+    /// Parses what `client` sent, answers it (what fits in the socket buffer:
+    /// the page is small), closes the connection.
+    private func answer(_ client: Connection, state: String) -> LoopbackCallback {
+        defer { _ = Self.closeSocket(client.fd) }
+        let callback = LoopbackRequest.parse(String(decoding: client.head, as: UTF8.self), expectedState: state)
         let response = [UInt8](LoopbackRequest.response(for: callback))
         var sent = 0
         while sent < response.count {
             #if canImport(Darwin)
-            let n = response[sent...].withUnsafeBytes { send(client, $0.baseAddress, $0.count, 0) }
+            let n = response[sent...].withUnsafeBytes { send(client.fd, $0.baseAddress, $0.count, 0) }
             #else
-            let n = response[sent...].withUnsafeBytes { send(client, $0.baseAddress, $0.count, Int32(MSG_NOSIGNAL)) }
+            let n = response[sent...].withUnsafeBytes { send(client.fd, $0.baseAddress, $0.count, Int32(MSG_NOSIGNAL)) }
             #endif
             guard n > 0 else { break }
             sent += n

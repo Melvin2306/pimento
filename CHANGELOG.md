@@ -483,6 +483,10 @@ All notable changes to this project are documented here. The format follows
   still running for it no longer land in the new one; the followed requests also start over when a
   listing is for another account or tenant. **Cancel** on a row now asks first, and **Cancel All**
   sends exactly the requests its confirmation showed instead of re-reading the list when tapped.
+- The sign-in listener serves its connections side by side instead of one after another: a local
+  program that opens connections and sends nothing (or trickles) no longer holds back the
+  browser's redirect for 5 seconds per connection. Each connection still has 5 seconds in all;
+  at most 16 are open at once, and a 17th pushes out the oldest.
 
 ## [0.1.0] - 2026-10-29
 

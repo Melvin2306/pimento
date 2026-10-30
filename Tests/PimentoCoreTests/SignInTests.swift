@@ -465,6 +465,26 @@ struct LoopbackTests {
     }
     #endif
 
+    #if !os(Windows)
+    /// Connections that send nothing do not queue the browser's redirect
+    /// behind them: it is answered at once, while they are still open, and
+    /// more of them than the listener serves at once only push out the oldest.
+    @Test func silentConnectionsDoNotDelayTheRedirect() async throws {
+        let listener = try LoopbackListener(connectionTimeout: 4)
+        async let code = listener.waitForCallback(state: "s1", timeout: 20)
+        try await Task.sleep(nanoseconds: 50_000_000)
+        let idle = (0..<(LoopbackListener.maxConnections + 4)).compactMap { _ in TestSocket.connect(port: listener.port) }
+        defer { for fd in idle { _ = TestSocket.close(fd) } }
+        #expect(idle.count == LoopbackListener.maxConnections + 4)
+        try await Task.sleep(nanoseconds: 100_000_000)
+        let started = Date()
+        let page = browse(port: listener.port, "/?code=the-code&state=s1")
+        #expect(page.hasPrefix("HTTP/1.1 200"))
+        #expect(Date().timeIntervalSince(started) < 2, "the redirect waited for the idle connections")
+        #expect(try await code == "the-code")
+    }
+    #endif
+
     @Test(.enabled(if: LoopbackListener.isSupported, "no loopback listener on Windows"))
     func listenerTimesOutAndCancels() async throws {
         let listener = try LoopbackListener()
