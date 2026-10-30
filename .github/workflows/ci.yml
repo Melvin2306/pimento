@@ -34,6 +34,32 @@ jobs:
           sh -n scripts/install.sh
           bash --posix -n scripts/install.sh
 
+  raycast:
+    name: Raycast extension
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: integrations/raycast
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          # @raycast/api needs Node >= 22.22.2 (its engines); 22.x is the latest 22.
+          node-version: 22.x
+          cache: npm
+          cache-dependency-path: integrations/raycast/package-lock.json
+      - name: Install, test, type-check
+        # The tests against `pimento --demo` are skipped here (no Swift build); the macOS job's
+        # Alfred tests cover the CLI's JSON.
+        run: |
+          node --version
+          npm ci
+          npm test
+          npx tsc --noEmit
+
   build-and-test:
     name: macOS
     runs-on: macos-latest
