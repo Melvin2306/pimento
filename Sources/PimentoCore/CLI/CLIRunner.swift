@@ -99,8 +99,8 @@ public struct CLISignIn: Sendable {
     public var transport: HTTPTransport
     /// Opens the sign-in page in a browser; false if it could not.
     public var openURL: @Sendable (URL) async -> Bool
-    /// Whether browser sign-in works here (it needs a loopback listener: not
-    /// on Windows). Without it, `login` uses a device code.
+    /// Whether browser sign-in works here (it needs the loopback listener,
+    /// which every platform has). Without it, `login` uses a device code.
     public var browserSignIn: Bool
     /// Called when a browser sign-in is over (signed in, failed or timed out):
     /// removes what `openURL` left behind (the redirect page).
