@@ -15,9 +15,25 @@ struct TenantToolbarButton: View {
         } label: {
             // Primary colour on purpose: a secondary label reads as disabled.
             HStack(spacing: 6) {
-                Image(systemName: model.tenant.isOverride ? "lock.fill" : "building.2.fill")
-                    // White on the blue XP title bar, where the accent would vanish.
-                    .foregroundStyle(theme == .windowsXP ? Color.white : Color.accentColor)
+                if let current = model.currentTenantInfo {
+                    TenantBadge(model: model, tenant: current, size: 18)
+                        // Set apart from the blue XP title bar.
+                        .overlay {
+                            if theme == .windowsXP {
+                                RoundedRectangle(cornerRadius: 18 * 0.24).stroke(Color.white.opacity(0.8), lineWidth: 1)
+                            }
+                        }
+                } else {
+                    Image(systemName: "building.2.fill")
+                        // White on the blue XP title bar, where the accent would vanish.
+                        .foregroundStyle(theme == .windowsXP ? Color.white : Color.accentColor)
+                }
+                if model.tenant.isOverride {
+                    Image(systemName: "lock.fill")
+                        .font(.caption)
+                        .foregroundStyle(theme == .windowsXP ? Color.white : Color.secondary)
+                        .accessibilityHidden(true)
+                }
                 Text(model.tenantLabel)
                     .fontWeight(.medium)
                     .foregroundStyle(.primary)
@@ -122,7 +138,7 @@ struct TenantPicker: View {
         let current = model.tenant.source == .azDefault
         let resolved = current && model.effectiveTenantId != nil ? model.tenantLabel : nil
         return PickerRowButton(id: "az-default", disabled: locked, action: { choose(nil) }) {
-            Image(systemName: "terminal").frame(width: 18).foregroundStyle(.secondary)
+            Image(systemName: "terminal").frame(width: 22).foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 1) {
                 Text("Use az default")
                 Text(resolved.map { "az account show: \($0)" } ?? "The tenant of az's current account")
@@ -208,9 +224,8 @@ private struct TenantRow: View {
         let hidden = model.isHidden(tenant)
         let current = model.isEffectiveTenant(tenant)
         PickerRowButton(id: tenant.id, disabled: locked, action: choose) {
-            Image(systemName: tenant.isManaged ? "person.2.badge.gearshape" : "building.2")
-                .frame(width: 18)
-                .foregroundStyle(.secondary)
+            TenantBadge(model: model, tenant: tenant, size: 22)
+                .opacity(hidden ? 0.55 : 1)
             VStack(alignment: .leading, spacing: 1) {
                 Text(tenant.label)
                     .fontWeight(current ? .semibold : .regular)

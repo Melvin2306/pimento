@@ -190,7 +190,14 @@ private struct HistoryFilterBar: View {
                         Text("All").tag(String?.none)
                         Divider()
                         ForEach(tenants, id: \.id) { tenant in
-                            Text(tenant.label).tag(Optional(tenant.id))
+                            let info = model.knownTenant(tenant.id)
+                                ?? TenantInfo(id: tenant.id, displayName: UUID(uuidString: tenant.label) == nil ? tenant.label : nil)
+                            Label {
+                                Text(tenant.label)
+                            } icon: {
+                                Image(nsImage: TenantBadgeImage.image(for: info, logo: model.tenantLogos.image(for: info), size: 14))
+                            }
+                            .tag(Optional(tenant.id))
                         }
                     }
                     .fixedSize()

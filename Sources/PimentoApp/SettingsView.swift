@@ -53,7 +53,13 @@ private struct GeneralSettings: View {
                             if !tenantChoices.isEmpty {
                                 Divider()
                                 ForEach(tenantChoices, id: \.id) { choice in
-                                    Text(choice.label).tag(choice.id)
+                                    Label {
+                                        Text(model.knownTenant(choice.id) == nil ? choice.id : choice.label)
+                                    } icon: {
+                                        Image(nsImage: TenantBadgeImage.image(
+                                            for: choice, logo: model.tenantLogos.image(for: choice), size: 14))
+                                    }
+                                    .tag(choice.id)
                                 }
                             }
                         }
@@ -72,6 +78,23 @@ private struct GeneralSettings: View {
                             InfoButton("Hide tenants you never use from the tenant picker (⇧⌘T) by hovering over them.",
                                        label: "About hidden tenants")
                         }
+                    }
+                    SettingsRow("Logos") {
+                        Toggle("Fetch tenant logos", isOn: $model.prefs.fetchTenantLogos)
+                            .disabled(AppRuntime.isDemo)
+                        SettingsNote(AppRuntime.isDemo
+                            ? "Off in demo mode: the demo tenants show their initials."
+                            : "Off: coloured initials, nothing is sent. On: Microsoft's sign-in service and each "
+                                + "tenant's website learn that this Mac looked them up (no account or token is sent).")
+                        HStack(spacing: 8) {
+                            Button("Refresh Logos") { model.refreshTenantLogos() }
+                            Button("Clear Cache") { model.tenantLogos.clear() }
+                            InfoButton("For each tenant shown, Pimento asks Microsoft's sign-in service for the tenant's "
+                                + "sign-in page logo, else loads the icon of the tenant's own website (apple-touch-icon.png, "
+                                + "favicon.ico). Logos are kept for 7 days in \(PimentoPaths.displayFile("TenantLogos")). "
+                                + "Turning this off deletes them.", label: "About tenant logos")
+                        }
+                        .disabled(!model.tenantLogos.isAllowed)
                     }
                 }
                 SettingsGroup("Refresh") {
@@ -134,11 +157,11 @@ private struct GeneralSettings: View {
     }
 
     /// Known tenants plus a saved one az no longer lists.
-    private var tenantChoices: [(id: String, label: String)] {
-        var choices = model.knownTenants.map { (id: $0.id, label: $0.label) }
+    private var tenantChoices: [TenantInfo] {
+        var choices = model.knownTenants
         if case .specific(let id) = model.prefs.launchTenant,
            !choices.contains(where: { $0.id.caseInsensitiveCompare(id) == .orderedSame }) {
-            choices.append((id: id, label: id))
+            choices.append(UUID(uuidString: id) != nil ? TenantInfo(id: id) : TenantInfo(id: id, defaultDomain: id))
         }
         return choices
     }

@@ -28,6 +28,7 @@ struct PreferencesTests {
         #expect(p.theme == .native)
         #expect(p.appearanceMode == .system)
         #expect(p.effectiveAppearance == .system)
+        #expect(!p.fetchTenantLogos, "logo fetching contacts Microsoft and tenant websites: opt-in only")
     }
 
     @Test func roundTripsThroughTheStore() {
@@ -45,6 +46,7 @@ struct PreferencesTests {
         p.autoRefreshMinutes = 5
         p.theme = .windowsXP
         p.appearanceMode = .dark
+        p.fetchTenantLogos = true
         let store = MemoryStore()
         p.save(to: store)
         #expect(Preferences.load(from: store) == p)

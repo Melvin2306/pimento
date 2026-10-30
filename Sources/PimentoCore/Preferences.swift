@@ -140,6 +140,10 @@ public struct Preferences: Equatable, Sendable {
     /// Ask GitHub once a day whether a newer release exists (`UpdateCheck`).
     /// Only tells; nothing is downloaded or installed.
     public var checkForUpdates = true
+    /// Fetch tenant logos (sign-in page branding, else the website icon)
+    /// instead of showing only the offline monogram. Off by default: it tells
+    /// Microsoft and each tenant's website that this Mac looked them up.
+    public var fetchTenantLogos = false
 
     // Menu bar
     /// The menu bar extra: active roles with their countdown, presets, quick actions.
@@ -246,6 +250,7 @@ public struct Preferences: Equatable, Sendable {
         static let menuBarShowsRemainingTime = "general.menuBarRemainingTime"
         static let hideDockIcon = "general.hideDockIcon"
         static let checkForUpdates = "general.checkForUpdates"
+        static let fetchTenantLogos = "general.fetchTenantLogos"
 
         static let all = [
             notifyOnCompletion, notifyOnlyOnFailure, playSound, expiryReminders, reminderLeadMinutes, notifyScheduledStart,
@@ -254,6 +259,7 @@ public struct Preferences: Equatable, Sendable {
             keepAliveHours, keepAlivePaused,
             launchTenant, refreshOnLaunch, autoRefreshMinutes, theme, appearanceMode, appearanceSchedule,
             showInMenuBar, menuBarShowsRemainingTime, hideDockIcon, checkForUpdates,
+            showInMenuBar, menuBarShowsRemainingTime, hideDockIcon, fetchTenantLogos,
         ]
     }
 
@@ -291,6 +297,7 @@ public struct Preferences: Equatable, Sendable {
         bool(Key.menuBarShowsRemainingTime, &p.menuBarShowsRemainingTime)
         bool(Key.hideDockIcon, &p.hideDockIcon)
         bool(Key.checkForUpdates, &p.checkForUpdates)
+        bool(Key.fetchTenantLogos, &p.fetchTenantLogos)
         return p.validated()
     }
 
@@ -326,6 +333,7 @@ public struct Preferences: Equatable, Sendable {
         store.set(p.menuBarShowsRemainingTime, forKey: Key.menuBarShowsRemainingTime)
         store.set(p.hideDockIcon, forKey: Key.hideDockIcon)
         store.set(p.checkForUpdates, forKey: Key.checkForUpdates)
+        store.set(p.fetchTenantLogos, forKey: Key.fetchTenantLogos)
     }
 
     /// Removes every stored setting, so the defaults apply again.
