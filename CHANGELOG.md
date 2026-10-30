@@ -311,6 +311,37 @@ All notable changes to this project are documented here. The format follows
 - Windows XP-style under a dark system: the toolbar stayed dark above the light window. Light and
   dark are now set app-wide instead of per window, so switching themes or modes never leaves a
   window stuck in a forced appearance.
+- Activate and Renew could be sent twice: a second click, ⌘↩, a preset or a reminder action while
+  the role policies were still loading started the same operation again. The values sent are now
+  the ones on screen when the button was pressed.
+- Expiry reminder actions: a tap right after launch, or while a refresh ran, could refuse the
+  current tenant or say the roles were no longer active (and withdraw their reminders). Renew from
+  a reminder without a stored justification now asks instead of using the main window's text, and
+  the notification delegate is set before launch finishes so a tap that launches the app is not lost.
+- Two batches expiring in the same minute (or in two tenants) kept only one expiry reminder.
+- A renewal that ends up waiting for approval is reported as such, not as "0 renewed".
+- A request ARM accepts with a failure status (`Failed`, `FailedAsResourceIsLocked`, `Denied`, …)
+  counts as failed, not as submitted or scheduled.
+- Approving or denying when the approval's stages cannot be read reports the error instead of
+  "not pending any more".
+- Signing out while a token refresh was running could bring the account back with the rotated
+  refresh token; a sign-out that cannot delete `tokens.json` now fails instead of reporting success.
+- The bearer token follows ARM `nextLink` pages only over HTTPS.
+- Presets, history settings and CSV exports are mode 600 from the moment they are created, and the
+  data folder is created 700.
+- History pruning keeps lines it cannot read; `pimento history --until DAY` includes that day.
+- CLI: a closed output pipe (`pimento … | head`) ends quietly instead of crashing; a huge
+  `wait --timeout` is refused instead of crashing; `pimento --help COMMAND` shows that command;
+  `-j -y` no longer takes `-y` as the justification; `--ticket-system` needs `--ticket`; `tenants`
+  honours `$PIMENTO_TENANT`; help, presets, history and `logout` work with an invalid
+  `$PIMENTO_AUTH`; `login` and `logout` warn when `auth.json` cannot be written; an `az` crash is
+  no longer reported as a 90-second timeout.
+- App: account switches and sign-outs wait for a running operation; Activate Again no longer keeps
+  a ticket or justification from other requests; Cancel All says it also withdraws requests awaiting
+  approval; a failed Renew or Deactivate keeps Azure's MFA claims challenge for the next sign-in.
+- "Install Command Line Tool…" checks again, as administrator, that it replaces or removes only a
+  symlink.
+- Release workflow: only the publishing job gets a write token.
 
 ## [0.1.0] - 2026-10-29
 
