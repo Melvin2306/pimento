@@ -79,12 +79,14 @@ does the whole list in one go, as you, using the Azure CLI session you already h
 - **A real command-line tool**, `pimento`: `list`, `activate` (also `--at` and `--ticket`), `deactivate`, `renew`,
   `scheduled`, `cancel`, `pending`, `wait`, `approvals`, `approve`, `deny`, `status`, `tenants`, `history`, `login`, with JSON
   output, exit codes and shell completions. Download it on its own, or get it with the app.
+- **Demo mode**: every feature against a simulated Azure with synthetic data, offline and apart from
+  your own settings, for trying Pimento out and for screenshots (see [Demo mode](#demo-mode)).
 - **No client secret or service principal, no dependencies, no telemetry.**
 
 ## Screenshots
 
 <!-- Add screenshots of the main window, the dry-run sheet and the Owner confirmation here.
-     Use a demo tenant or blur names: no real subscription names, IDs or user names. -->
+     Take them in demo mode (see Demo mode): no real subscription names, IDs or user names. -->
 
 _Coming soon._
 
@@ -625,6 +627,63 @@ confirmation keep the macOS look. No fonts, logos, icons, wallpapers or sounds a
 The Azure-style and Windows XP-style themes are inspired by those designs. Pimento is not
 affiliated with or endorsed by Microsoft.
 
+### Demo mode
+
+Demo mode runs Pimento against a simulated Azure with synthetic data, for trying every feature and
+for screenshots (README, product pages, posts) without showing your own tenants, subscriptions or
+colleagues. It is offline and isolated: nothing is sent anywhere, and none of your settings, files or
+sign-in are read or changed.
+
+Start it with:
+
+- the app: *Pimento › Demo Mode* (asks, then restarts Pimento in demo mode; the same item leaves it),
+  or launch it with `--demo` (`open -a Pimento --args --demo`) or `PIMENTO_DEMO=1`;
+- the CLI: `pimento --demo <command>` (the flag goes anywhere before `--`) or `PIMENTO_DEMO=1`.
+
+**What is simulated.** Every endpoint Pimento uses: eligible and active roles (paged), PIM policies,
+activation, scheduling, deactivation, renewal and extension requests with PIM's statuses and error
+codes (`RoleAssignmentExists`, `ExpirationRule`, `TicketingRule`, `PendingRoleAssignmentRequest`,
+a deactivation in the first five minutes, `RequestCannotBeCancelled`, …), cancel, approvals with their
+stages and decisions, `/tenants`, and Pimento sign-in (refresh token and device code). Changes last for
+the session: activations become active and expire, scheduled ones start, a simulated approver (Megan
+Bowen) decides your requests after about 45 seconds (a justification containing "deny" is denied), and a
+colleague's request reaches your approval inbox after two and a half minutes. Notifications work as
+usual.
+
+**The demo data.** Alex Wilber (`alex.wilber@contoso.example`) in Contoso, with Fabrikam, Northwind
+Traders, Adventure Works and an unnamed tenant; 16 eligibilities in Contoso across subscriptions,
+resource groups, a management group and resources (Owner, Contributor, Reader, User Access
+Administrator, Key Vault Secrets User, Storage Blob Data Reader, Website Contributor), directly and
+through `sg-platform-oncall` / `sg-data-analysts`, some with ABAC conditions, maxima of 1, 4 and 8
+hours, some requiring a ticket and Owner on Contoso Production requiring approval. Three roles are
+active (one ends within the reminder lead), one activation is scheduled for tomorrow 08:00, two
+colleagues wait for your approval, and there are the presets *On-call*, *Release day* and *Data team*
+and about 40 history records of the past three weeks. Only Microsoft's fictitious company names and
+`.example` domains are used.
+
+**Isolation.** The app keeps its demo settings in the `io.github.melvin2306.pimento.demo` defaults
+suite and its presets, history and sign-in settings in `~/Library/Application Support/Pimento/Demo`;
+both start from the demo data on every launch unless *Keep demo changes* is on. The demo account's
+tokens are in memory, never in the Keychain. Demo notifications are marked as such and withdrawn when
+the demo ends. Requests to the network, the Azure CLI and the sign-in listener are refused for the
+whole process. Launch at login and the command line tool installer are off. Leaving demo mode restarts
+Pimento with your own session. Each `pimento --demo` command starts from the demo data in a temporary
+folder that is removed afterwards, and ignores `PIMENTO_TENANT`, `PIMENTO_AUTH` and the token-store
+variables.
+
+**For screenshots.** The *Demo* menu (only in demo mode) has *Reset Demo Data*, *Freeze Clock at
+10:30* (tidy times; while the clock stands still nothing expires, starts or is decided), *Clock Speed*
+(real time up to 600× faster, to see expiry, scheduled starts and approvals sooner), *Hide Demo Badge*
+(also in *Settings › General*) and *Keep Demo Changes*. In the terminal, `PIMENTO_DEMO_CLOCK=10:30`
+freezes the clock (`live` runs it), `PIMENTO_DEMO_SPEED=60` speeds it up in the app, and
+`PIMENTO_DEMO_BADGE=off` hides the CLI's "Demo mode" line. In the CLI the clock is virtual: `wait` and
+Renew's retries take no real time.
+
+```sh
+PIMENTO_DEMO_CLOCK=10:30 pimento --demo list
+pimento --demo activate "Contoso Production" --role Owner -j "Rotate the TLS certificate" --yes
+```
+
 ### The command line
 
 <!-- cli-readme:start -->
@@ -717,6 +776,11 @@ registration (`--client-id`, `$PIMENTO_CLIENT_ID`, or saved); see
 [Pimento sign-in](#pimento-sign-in-without-the-azure-cli). On an SSH session or a machine without
 a browser, use `pimento login --device-code`. Sign-in errors print a readable reason (for AADSTS
 codes) and the command that fixes them.
+
+**Demo mode.** Every command also takes `--demo` (or `PIMENTO_DEMO=1`): it then runs against a
+simulated Azure with synthetic data (Contoso, Alex Wilber), offline, in a temporary folder of its own,
+without touching your settings, files or tokens. `PIMENTO_DEMO_CLOCK=10:30` freezes its clock for
+tidy terminal screenshots. See [Demo mode](#demo-mode).
 
 **Selecting roles.** A FILTER matches the resource name (case-insensitive substring); several
 filters are OR-ed. A filter starting with `/` is an ARM scope and matches it and everything below

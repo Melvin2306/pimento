@@ -8,6 +8,25 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Demo mode**: Pimento against a simulated Azure with synthetic data, for trying every feature and
+  for screenshots. App: *Pimento › Demo Mode* (restarts after asking), `--demo` or `PIMENTO_DEMO=1`;
+  CLI: `pimento --demo <command>` or `PIMENTO_DEMO=1`.
+  - An in-memory simulator of every ARM and sign-in endpoint Pimento uses (`DemoAzure`): role
+    listings with paging, policies, activate / schedule / deactivate / renew / extend with PIM's
+    statuses and error codes, cancel, approvals with stages and decisions, `/tenants`, the token and
+    device-code endpoints. State lasts for the session on a demo clock: activations expire,
+    scheduled ones start, a simulated approver decides, a colleague's request arrives.
+  - Synthetic data: Alex Wilber in Contoso, Fabrikam, Northwind Traders, Adventure Works and an
+    unnamed tenant; 16 eligibilities in Contoso (direct and through groups, ABAC conditions, 1/4/8-hour
+    maxima, tickets, one approval), three active roles, one scheduled for tomorrow 08:00, two requests
+    in the approver inbox, three presets and about 40 history records.
+  - Isolated and offline: its own defaults suite and `…/Pimento/Demo` folder (reset on each start
+    unless *Keep demo changes*), tokens in memory (never the Keychain), marked notifications withdrawn
+    when the demo ends, and URLSession, `az` and the sign-in listener refused for the whole process.
+    Each CLI command uses a temporary folder and ignores `PIMENTO_TENANT` / `PIMENTO_AUTH`.
+  - For screenshots: a small *Demo* badge that can be hidden, a *Demo* menu (*Reset Demo Data*,
+    *Freeze Clock at 10:30*, *Clock Speed*, *Hide Demo Badge*, *Keep Demo Changes*), and
+    `PIMENTO_DEMO_CLOCK=10:30` / `PIMENTO_DEMO_SPEED` / `PIMENTO_DEMO_BADGE=off`.
 - **Pimento sign-in**: sign in without the Azure CLI, with your own public-client app registration
   in Microsoft Entra ID (README › *Pimento sign-in* has the exact registration steps; Pimento ships
   no client ID and does not use Microsoft's). No packages: OAuth 2.0 with URLSession and the Security
