@@ -417,6 +417,8 @@ All notable changes to this project are documented here. The format follows
 - Activation, deactivation, renewal and extension URLs percent-encode the scope (as cancel already
   did, now with an ASCII-only allowlist): a `?`, `#` or space in a scope can no longer cut the `PUT`
   path short. A scope that cannot be a path (`..`, empty segments) is an error instead of a crash.
+- A preset's tenant is checked like `--tenant` (a GUID or a domain, not starting with `-`) before
+  the CLI uses it, and so before it reaches `az --tenant`; the presets file can be edited by hand.
 
 ## [0.1.0] - 2026-10-29
 

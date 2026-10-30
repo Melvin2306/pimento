@@ -27,10 +27,11 @@ public enum CLIExit: Int32, Sendable {
             }
         case let e as PresetError:
             switch e {
-            case .ambiguous, .otherTenant, .emptyName, .noRoles: return .usage
+            case .ambiguous, .otherTenant, .invalidTenant, .emptyName, .noRoles: return .usage
             default: return .failure
             }
         case let e as ActivationRequestError:
+            if case .invalidScope = e { return .failure }
             return e == .missingPrincipal ? .auth : .usage
         case is AzureCLIError:
             return .auth

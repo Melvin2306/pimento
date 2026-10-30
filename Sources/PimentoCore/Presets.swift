@@ -128,6 +128,16 @@ public struct Preset: Codable, Hashable, Identifiable, Sendable {
         try c.encodeIfPresent(updatedAt, forKey: .updatedAt)
     }
 
+    /// The preset's tenant, to use as `--tenant` would be (it reaches `az
+    /// --tenant`): checked like `--tenant`, as the presets file is edited by
+    /// hand too. nil: any tenant.
+    public func checkedTenantId() throws -> String? {
+        guard let raw = tenantId else { return nil }
+        let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard TenantResolver.isValid(value) else { throw PresetError.invalidTenant(name, tenantId: raw) }
+        return value
+    }
+
     /// True for presets of `tenantId`, presets for any tenant, and every
     /// preset when the tenant is not known yet.
     public func applies(toTenant tenantId: String?) -> Bool {
@@ -202,6 +212,7 @@ public enum PresetError: Error, Equatable, LocalizedError {
     case noRoles
     case unsupportedVersion(Int)
     case unreadable(String)
+    case invalidTenant(String, tenantId: String)
 
     public var errorDescription: String? {
         switch self {
@@ -215,6 +226,8 @@ public enum PresetError: Error, Equatable, LocalizedError {
         case .unsupportedVersion(let v):
             "The presets file was written by a newer Pimento (format \(v); this one reads up to \(PresetLibrary.currentVersion)). Update Pimento."
         case .unreadable(let why): "Could not read the presets file: \(why)"
+        case .invalidTenant(let n, let t):
+            "The preset “\(n)” names the tenant “\(t)”, which is not a tenant GUID or domain. Fix it in the presets file, or use --tenant."
         }
     }
 }

@@ -176,6 +176,23 @@ struct CLIPresetTests {
         #expect(await h.run("activate", "--preset", "Nope", "--dry-run") == 1)
     }
 
+    /// A preset's tenant goes to `az --tenant` like `--tenant`, so it is
+    /// checked like `--tenant` (the presets file can be edited by hand).
+    @Test func aPresetTenantThatIsNoTenantIsRefused() async throws {
+        for bad in ["--allow-no-subscriptions", "contoso", "a b.example", "-t.example"] {
+            for command in [["activate", "--preset", "Odd", "--dry-run"], ["deactivate", "--preset", "Odd", "--dry-run"]] {
+                let h = CLIHarness()
+                try writePresets(h, [Preset(name: "Odd", tenantId: bad, roles: [PresetRole(scope: "/s", roleDefinitionId: "r")], justification: "x")])
+                #expect(await h.run(command) == 2, "\(bad) \(command[0])")
+                #expect(h.err.contains("is not a tenant GUID or domain"))
+                #expect(await h.transport.requests.isEmpty)
+                #expect(h.givenTokens.value?.isEmpty ?? true)
+            }
+        }
+        #expect(try Preset(name: "Ok", tenantId: " contoso.example ").checkedTenantId() == "contoso.example")
+        #expect(try Preset(name: "Any", tenantId: nil).checkedTenantId() == nil)
+    }
+
     @Test func savePresetFromFiltersThenListShowAndDelete() async throws {
         let h = CLIHarness()
         let tid = "11111111-2222-4333-8444-555555555555"

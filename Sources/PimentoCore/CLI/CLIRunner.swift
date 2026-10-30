@@ -438,7 +438,7 @@ public struct CLIRunner: Sendable {
         var tenant = try resolveTenant(o.tenant)
         if let name = o.preset {
             library = try store.load()
-            if tenant.tenantId == nil, let only = library?.named(name), only.count == 1, let tid = only[0].tenantId {
+            if tenant.tenantId == nil, let only = library?.named(name), only.count == 1, let tid = try only[0].checkedTenantId() {
                 tenant = TenantSelection(tenantId: tid, source: .commandLine)
             }
         }
