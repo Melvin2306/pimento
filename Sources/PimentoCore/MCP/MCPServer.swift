@@ -78,8 +78,23 @@ public final class MCPServer: @unchecked Sendable {
     /// Serves until `lines` ends, then lets the requests in flight finish
     /// (a write that was sent is recorded in the history) and returns.
     public func run(lines: AsyncStream<String>) async {
+        await run(input: AsyncStream { continuation in
+            Task {
+                for await line in lines { continuation.yield(.line(line)) }
+                continuation.finish()
+            }
+        })
+    }
+
+    /// `run(lines:)` for a reader that refuses overlong lines itself
+    /// (`MCPLineReader`), so that they are never held in full.
+    public func run(input: AsyncStream<MCPInputLine>) async {
         await withTaskGroup(of: Void.self) { group in
-            for await line in lines {
+            for await item in input {
+                guard case .line(let line) = item else {
+                    send(["jsonrpc": "2.0", "id": .null, "error": RPCError(code: MCP.Code.invalidRequest, message: "Message too large").json])
+                    continue
+                }
                 let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
                 if trimmed.isEmpty { continue }
                 guard trimmed.utf8.count <= MCP.maxMessageBytes else {

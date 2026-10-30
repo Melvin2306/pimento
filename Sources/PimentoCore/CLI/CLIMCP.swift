@@ -24,7 +24,11 @@ extension CLIRunner {
             ? "activation allowed (each write is confirmed by the user\(config.noConfirm ? ", or by the client's own approval when it cannot ask" : ""))"
                 + (config.allowPrivileged ? ", high-privilege roles allowed" : "")
             : "read-only") + (config.tenant.map { ", tenant \($0) only" } ?? "") + "."))
-        await server.run(lines: Self.lines(from: env.readLine))
+        if let read = env.readInput {
+            await server.run(input: Self.lines(from: MCPLineReader.mcp(read: read)))
+        } else {
+            await server.run(lines: Self.lines(from: env.readLine))
+        }
         return .success
     }
 
@@ -44,6 +48,19 @@ extension CLIRunner {
             history: env.history,
             now: env.now,
             timeZone: env.timeZone)
+    }
+
+    /// stdin through the bounded reader, on a thread of its own (reads block):
+    /// a line over the message limit is skipped, never held in full.
+    static func lines(from reader: MCPLineReader) -> AsyncStream<MCPInputLine> {
+        AsyncStream { continuation in
+            let thread = Thread {
+                while let line = reader.next() { continuation.yield(line) }
+                continuation.finish()
+            }
+            thread.stackSize = 1 << 20
+            thread.start()
+        }
     }
 
     /// stdin, line by line, read on a thread of its own (`readLine` blocks).

@@ -978,7 +978,11 @@ struct MCPCommandTests {
             ["jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": ["_meta": meta, "name": "list_active_roles", "arguments": [:]]],
             ["jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": ["_meta": meta, "name": "activate_roles", "arguments": reader]],
         ]
-        stdin.fileHandleForWriting.write(Data(messages.map { $0.serialized + "\n" }.joined().utf8))
+        // Also: a CRLF line, and a line over the 1 MB limit, refused without ending the session.
+        var input = messages.map { $0.serialized + "\n" }.joined()
+        input += String(repeating: " ", count: 2_000_000) + "\n"
+        input += (["jsonrpc": "2.0", "id": 4, "method": "ping"] as JSONValue).serialized + "\r\n"
+        stdin.fileHandleForWriting.write(Data(input.utf8))
         try stdin.fileHandleForWriting.close()
         let data = stdout.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
@@ -989,5 +993,81 @@ struct MCPCommandTests {
         #expect(byId[2]?["result"]?["structuredContent"]?["count"] == 3)
         // Read-only: the write tool does not exist.
         #expect(byId[3]?.errorCode == -32602)
+        #expect(byId[.null]?["error"]?["message"] == "Message too large")
+        #expect(byId[4]?["result"] == [:])
+    }
+}
+
+@Suite("MCP: bounded stdin")
+struct MCPLineReaderTests {
+    /// A read(2) over `data`, `chunk` bytes at a time.
+    static func reader(_ data: [UInt8], limit: Int = 1000, chunk: Int) -> MCPLineReader {
+        let box = ByteSource(data)
+        return MCPLineReader(limit: limit, chunkSize: 4096) { buffer, count in box.read(into: buffer, max: min(count, chunk)) }
+    }
+
+    static func all(_ r: MCPLineReader) -> [MCPInputLine] {
+        var out: [MCPInputLine] = []
+        while let line = r.next() { out.append(line) }
+        return out
+    }
+
+    @Test func linesAreWhatReadLineReturns() {
+        let cases: [(String, [String])] = [
+            ("", []), ("\n", [""]), ("a", ["a"]), ("a\n", ["a"]), ("a\r\n", ["a"]), ("a\r", ["a\r"]), ("a\r\r\n", ["a\r"]),
+            ("a\n\nb", ["a", "", "b"]), ("\r\n\r\n", ["", ""]), ("é😀\n{\"x\":1}\r\n", ["é😀", "{\"x\":1}"]),
+        ]
+        for (input, expected) in cases {
+            for chunk in [1, 2, 3, 7, 4096] {
+                #expect(Self.all(Self.reader(Array(input.utf8), chunk: chunk)) == expected.map(MCPInputLine.line), "\(input.debugDescription) by \(chunk)")
+            }
+        }
+        // Invalid UTF-8 is repaired, as readLine does.
+        #expect(Self.all(Self.reader([0x61, 0xFF, 0x0A], chunk: 1)) == [.line("a\u{FFFD}")])
+    }
+
+    @Test func overlongLinesAreRefusedAndTheNextLineIsRead() {
+        for chunk in [1, 3, 4096] {
+            let input = Array("abcd\nabcde\nabcd\r\nlonger than four\nok\nabcd\r".utf8)
+            #expect(Self.all(Self.reader(input, limit: 4, chunk: chunk)) == [.line("abcd"), .tooLong, .line("abcd"), .tooLong, .line("ok"), .tooLong])
+        }
+    }
+
+    @Test func anOverlongLineIsNeverHeldInFull() {
+        // 20 MB without a newline, then a message: at most the limit (and a "\r") is held.
+        let source = ByteSource(Array(repeating: UInt8(ascii: " "), count: 20_000_000) + Array("\n{}\n".utf8))
+        let reader = MCPLineReader(limit: 1000) { buffer, count in source.read(into: buffer, max: count) }
+        #expect(Self.all(reader) == [.tooLong, .line("{}")])
+        #expect(reader.peakLineBytes <= 1001)
+    }
+
+    @Test func theServerRefusesWhatTheReaderRefused() async throws {
+        let output = LineCollector()
+        let server = MCPServer(config: MCPConfiguration(), tools: MCPToolbox(backend: MCPBackend(
+            service: { _, _ in fatalError() }, tenants: { _ in [] }, resolveTenant: { $0 }, presets: PresetStore(url: TestTemp.url("none.json")),
+            history: nil, now: { Date() }, timeZone: .current)), send: { output.add($0) })
+        await server.run(input: AsyncStream { c in
+            c.yield(.tooLong)
+            c.yield(.line(#"{"jsonrpc":"2.0","id":1,"method":"ping"}"#))
+            c.finish()
+        })
+        let replies = try output.all.map(JSONValue.parse)
+        #expect(replies.count == 2)
+        #expect(replies.first?["error"]?["message"] == "Message too large")
+        #expect(replies.last?["id"] == 1)
+    }
+}
+
+/// Bytes handed out like read(2) would.
+final class ByteSource: @unchecked Sendable {
+    private let bytes: [UInt8]
+    private var offset = 0
+    init(_ bytes: [UInt8]) { self.bytes = bytes }
+    func read(into buffer: UnsafeMutableRawPointer, max: Int) -> Int {
+        let n = Swift.min(max, bytes.count - offset)
+        guard n > 0 else { return 0 }
+        bytes.withUnsafeBytes { buffer.copyMemory(from: $0.baseAddress! + offset, byteCount: n) }
+        offset += n
+        return n
     }
 }

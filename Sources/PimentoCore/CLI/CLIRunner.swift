@@ -12,6 +12,9 @@ public struct CLIEnvironment: Sendable {
     public var write: @Sendable (String, Stream) -> Void
     /// One line from stdin (the confirmation answer); nil at end of input.
     public var readLine: @Sendable () -> String?
+    /// Raw reads from stdin, like read(2) (`pimento mcp`, which reads its
+    /// lines with a bounded reader); nil: `readLine` is used instead.
+    public var readInput: MCPLineReader.Read?
     public var stdoutIsTTY: Bool
     public var stderrIsTTY: Bool
     public var stdinIsTTY: Bool
