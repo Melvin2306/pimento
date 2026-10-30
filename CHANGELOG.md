@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **`--id ID`** for `pimento list`, `activate`, `deactivate` and `renew`: exactly the role whose
+  `id` or `eligibilityScheduleId` in `list --json` is ID (repeatable). For scripts and launchers
+  that picked one row, where a scope filter would also match the roles below that scope.
+
 ## [0.1.0] - 2026-10-30
 
 The first public release. It covers everything built before it; the development history is in

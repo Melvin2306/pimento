@@ -13,7 +13,7 @@ struct CLIPresetTests {
         #expect(o.preset == "On-call")
         #expect(o.duration == .maximum)
         #expect(o.justification.isEmpty)  // may come from the preset
-        #expect(throws: CLIParseError.conflicting("--preset", "filters, --role or --all")) {
+        #expect(throws: CLIParseError.conflicting("--preset", "filters, --role, --id or --all")) {
             try CLIParser.parse(["activate", "--preset", "x", "prod", "-j", "x"])
         }
         #expect(throws: CLIParseError.invalidHours("forever")) {

@@ -847,10 +847,10 @@ pimento history import-azure --since 30d     # add your requests from the portal
 
 | Command | What it does |
 | --- | --- |
-| `pimento list [FILTER…] [--role NAME] [--active \| --eligible]` | Table of your eligible roles, with status and expiry |
-| `pimento activate (FILTER… \| --role NAME \| --all \| --preset NAME) -j TEXT [--hours N\|max] [--at WHEN] [--ticket NUMBER [--ticket-system NAME]] [--yes] [--dry-run] [--max-parallel N]` | Activates the matching roles that are not active yet, in parallel (8 at a time by default), or schedules them with `--at` |
-| `pimento deactivate (FILTER… \| --role NAME \| --all \| --preset NAME) [-j TEXT] [--yes] [--dry-run]` | Ends the matching activations now (`SelfDeactivate`) |
-| `pimento renew (FILTER… \| --role NAME \| --all \| --preset NAME) -j TEXT [--hours N\|max] [--ticket NUMBER [--ticket-system NAME]] [--yes] [--dry-run]` | Ends and activates the matching roles again, for a fresh duration (the role is off for a few minutes in between), with the original activation's ticket or `--ticket` |
+| `pimento list [FILTER…] [--role NAME] [--id ID] [--active \| --eligible]` | Table of your eligible roles, with status and expiry |
+| `pimento activate (FILTER… \| --role NAME \| --id ID \| --all \| --preset NAME) -j TEXT [--hours N\|max] [--at WHEN] [--ticket NUMBER [--ticket-system NAME]] [--yes] [--dry-run] [--max-parallel N]` | Activates the matching roles that are not active yet, in parallel (8 at a time by default), or schedules them with `--at` |
+| `pimento deactivate (FILTER… \| --role NAME \| --id ID \| --all \| --preset NAME) [-j TEXT] [--yes] [--dry-run]` | Ends the matching activations now (`SelfDeactivate`) |
+| `pimento renew (FILTER… \| --role NAME \| --id ID \| --all \| --preset NAME) -j TEXT [--hours N\|max] [--ticket NUMBER [--ticket-system NAME]] [--yes] [--dry-run]` | Ends and activates the matching roles again, for a fresh duration (the role is off for a few minutes in between), with the original activation's ticket or `--ticket` |
 | `pimento extend (FILTER… \| --role NAME \| --all) -j TEXT [--days N] [--yes] [--dry-run]` | Asks an administrator to extend admin-assigned, time-bound assignments (`SelfExtend`) |
 | `pimento scheduled` | Your scheduled activations and requests awaiting approval, from Azure |
 | `pimento cancel (REQUEST-ID… \| FILTER… \| --role NAME \| --all) [--yes] [--dry-run]` | Cancels them (`POST …/cancel`) |
@@ -891,7 +891,10 @@ tidy terminal screenshots. See [Demo mode](#demo-mode).
 filters are OR-ed. A filter starting with `/` is an ARM scope and matches it and everything below
 it. `--role` matches the whole role name, case-insensitively, with `*` as a wildcard:
 `--role owner` is Owner only, `--role '*owner'` also matches Storage Blob Data Owner. Repeat
-`--role` for several roles. `activate` needs at least one FILTER, `--role`, `--all` or `--preset`.
+`--role` for several roles. `--id ID` (`list`, `activate`, `deactivate`, `renew`) selects exactly the
+role whose `id` or `eligibilityScheduleId` in `list --json` is ID, for scripts and launchers that
+picked one row: a scope filter would also match the roles below that scope. `activate` needs at least
+one FILTER, `--role`, `--id`, `--all` or `--preset`.
 
 **Duration.** `--hours N` (1 to 24, default 8) or `--hours max`. Before activating, `pimento` reads
 each role's PIM policy (`roleManagementPolicyAssignments`) and requests at most its maximum: the
