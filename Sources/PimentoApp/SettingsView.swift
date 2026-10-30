@@ -113,6 +113,7 @@ private struct GeneralSettings: View {
                     SettingsNote(SettingsText.menuBarStatus(showInMenuBar: model.prefs.showInMenuBar,
                                                             hideDockIcon: model.prefs.hideDockIcon))
                 }
+                UpdateSettingsSection()
             }
 
             HStack {

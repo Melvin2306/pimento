@@ -55,11 +55,21 @@ In scope, for example:
 - `scripts/install.sh` or `scripts/install.ps1` installing a file whose SHA-256 does not match the
   release's `SHA256SUMS.txt` (or whose attestation failed), or changing files outside the install
   folder, the shell completion folders and (on Windows) the user `Path`.
+- the update check sending more than its documented `GET` (any identifier, token or cookie), going
+  to another host than `api.github.com`, running in demo mode or with `PIMENTO_NO_UPDATE_CHECK=1`,
+  opening a link outside `https://github.com/Melvin2306/pimento/`, or downloading or installing
+  anything; or a CLI command other than `pimento version --check` contacting GitHub.
 
 Out of scope: the security of Azure, Microsoft Entra ID or the Azure CLI themselves, and
 anything that requires an attacker to already control your user account or `az` session.
 
 ## Design notes
+
+- The update check (README › Updates) is one `GET` of GitHub's latest release with only a
+  `User-Agent: Pimento/<version>` header (besides fixed `Accept`, API-version and
+  `Accept-Language` headers that are the same for everyone), through a guard that refuses any other URL or method and
+  a transport that refuses redirects. The answer is untrusted: the tag must parse as a strict
+  semantic version, and the links opened are built from it, never copied from the answer.
 
 - No secret of its own: by default the token comes from `az account get-access-token`; with
   Pimento sign-in, from the user's own public-client app registration (no client secret). Access

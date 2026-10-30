@@ -366,13 +366,24 @@ public struct MCPOptions: Equatable, Sendable {
     public init() {}
 }
 
+/// `pimento version`: the version; with `--check`, also the latest release
+/// (the only command that contacts GitHub).
+public struct VersionOptions: Equatable, Sendable {
+    public var check = false
+    public var json = false
+    public init(check: Bool = false, json: Bool = false) {
+        self.check = check
+        self.json = json
+    }
+}
+
 public enum CompletionShell: String, CaseIterable, Sendable {
     case zsh, bash, fish
 }
 
 public enum CLICommand: Equatable, Sendable {
     case help(topic: String?)
-    case version
+    case version(VersionOptions)
     case list(ListOptions)
     case activate(ActivateOptions)
     case deactivate(LifecycleOptions)
@@ -678,6 +689,7 @@ public enum CLIParser {
     ]) { a, _ in a }
 
     private static let plainFlags = tenant.merging(json) { a, _ in a }
+    private static let versionFlags = json.merging(["--check": Flag(key: "check", takesValue: false)]) { a, _ in a }
 
     private static let loginFlags = tenant.merging(json) { a, _ in a }.merging([
         "--client-id": Flag(key: "client-id", takesValue: true),
@@ -780,7 +792,7 @@ public enum CLIParser {
         guard let first = args.first else { return CLIInvocation(.help(topic: nil)) }
         // `--help` / `-h` first take a topic like `help` (`pimento --help wait`);
         // elsewhere on a 0.1-style line they still mean help.
-        if !CLICommand.names.contains(first), first != "--help", first != "-h", let legacy = try parseLegacy(args) { return legacy }
+        if !CLICommand.names.contains(first), first != "--help", first != "-h", first != "--version", let legacy = try parseLegacy(args) { return legacy }
         let rest = Array(args.dropFirst())
         switch first {
         case "help", "--help", "-h":
@@ -788,8 +800,9 @@ public enum CLIParser {
             guard CLICommand.names.contains(topic) else { throw CLIParseError.unknownCommand(topic) }
             return CLIInvocation(.help(topic: topic))
         case "version", "--version":
-            if let extra = rest.first { throw CLIParseError.unexpectedArgument(extra, command: "version") }
-            return CLIInvocation(.version)
+            let scan = try scan(rest, command: "version", flags: versionFlags, positionals: false)
+            if scan.help { return CLIInvocation(.help(topic: "version")) }
+            return CLIInvocation(.version(VersionOptions(check: scan.values["check"] != nil, json: scan.values["json"] != nil)))
         case "list": return try CLIInvocation(parseList(rest))
         case "activate": return try CLIInvocation(parseActivate(rest))
         case "deactivate", "renew": return try CLIInvocation(parseLifecycle(rest, command: first))
@@ -1190,7 +1203,7 @@ public enum CLIParser {
             let topic = modes.count == 1 ? modes.first?.split(separator: " ").first.map(String.init) : nil
             return CLIInvocation(.help(topic: topic))
         }
-        if args.contains("--version") { return CLIInvocation(.version) }
+        if args.contains("--version") { return CLIInvocation(.version(VersionOptions())) }
         guard let mode = modes.first else { return nil }
         guard modes.count == 1 else { throw CLIParseError.conflicting("--list", "--dry-run") }
         let flag = legacyModes.first { $0.value == mode }!.key

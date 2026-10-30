@@ -9,6 +9,7 @@ struct ContentView: View {
         @Bindable var model = model
         VStack(spacing: 0) {
             ThemeHeader()
+            UpdateNotice(updates: model.updates)
             if let banner = model.banner {
                 BannerView(banner: banner) { model.banner = nil }
             }

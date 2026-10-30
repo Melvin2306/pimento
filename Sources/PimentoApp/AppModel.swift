@@ -263,6 +263,8 @@ final class AppModel {
     @ObservationIgnored var keepAliveRunning = false
     /// What the last pass saw of the kept roles (key: end), to notice changes after a refresh.
     @ObservationIgnored var keepAliveSeen: [String: Date] = [:]
+    /// Whether a newer Pimento exists (Settings › General › Updates).
+    let updates: UpdateChecker
 
     struct Banner: Equatable {
         enum Kind { case info, success, error }
@@ -335,6 +337,7 @@ final class AppModel {
         // preview is a separate action), so the stale setting is dropped.
         let defaults = AppRuntime.defaults
         defaults.removeObject(forKey: "dryRun")
+        updates = UpdateChecker(store: defaults, demo: AppRuntime.isDemo)
         self.commandLineTenant = commandLineTenant
         let prefs = Preferences.load(from: defaults)
         self.prefs = prefs
@@ -1925,6 +1928,7 @@ final class AppModel {
             clearRecentJustifications()
             clearRecentTickets()
         }
+        if prefs.checkForUpdates != old.checkForUpdates { updates.setAutomatic(prefs.checkForUpdates, initialDelay: 0) }
         if prefs.notifyScheduledStart != old.notifyScheduledStart {
             Notifier.syncScheduledStarts(scheduledRequests, tenantId: identity?.tenantId ?? effectiveTenantId, prefs: prefs)
         }
