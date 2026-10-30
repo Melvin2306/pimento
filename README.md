@@ -25,6 +25,11 @@ resource group, click *Activate*, type the same justification again, wait, repea
 does the whole list in one go, as you, using the Azure CLI session you already have, or
 [its own sign-in](#pimento-sign-in-without-the-azure-cli) when there is no Azure CLI.
 
+<p align="center">
+  <img src="docs/screenshots/01-main-window.png" width="900" alt="Pimento main window: eligible Azure roles with membership, duration and status, eight roles selected for activation with one justification and ticket">
+  <br><sub>Demo mode, synthetic data. More in <a href="#screenshots">Screenshots</a>.</sub>
+</p>
+
 ## Features
 
 - **All your eligibilities in one table**: role, resource, scope type, whether you hold it
@@ -85,10 +90,49 @@ does the whole list in one go, as you, using the Azure CLI session you already h
 
 ## Screenshots
 
-<!-- Add screenshots of the main window, the dry-run sheet and the Owner confirmation here.
-     Take them in demo mode (see Demo mode): no real subscription names, IDs or user names. -->
+All screenshots are taken in [demo mode](#demo-mode): the tenants, subscriptions, people and
+IDs are synthetic.
 
-_Coming soon._
+**Bulk activation.** Eight roles checked, one justification and ticket, each role capped at its
+own policy maximum (*4 h (max 8 h)*, *1 h (max)*), one click on *Activate 8 roles*.
+
+<img src="docs/screenshots/01-main-window.png" alt="Pimento main window in dark mode: eligible roles across Contoso subscriptions, resource groups and resources, eight of them checked, with per-role durations, Active and Scheduled statuses, a justification, ticket INC-012 in ServiceNow, and an Activate 8 roles button">
+
+**Presets.** Select a saved set of roles (*Data team*, *On-call*, *Release day*) from the toolbar, or
+activate it straight away. Owner roles are marked and capped durations are flagged before you send anything.
+
+<img src="docs/screenshots/02-presets.png" alt="The presets menu open in the toolbar with Data team, On-call and Release day, two Owner roles checked and a warning that both are capped at the policy maximum">
+
+**Results per row, including approvals.** Roles that need approval show *Awaiting approval*;
+Pimento follows the request and notifies you when it is decided.
+
+<img src="docs/screenshots/03-awaiting-approval.png" alt="Result banner saying 1 activated, 1 awaiting approval, with the Owner role on Contoso Production showing Awaiting approval and the Owner role on Contoso Staging showing Activated until 18:18">
+
+**Approvals inbox.** As an approver, approve or deny requests in bulk with a justification;
+requests for Owner or access-administrator roles are flagged.
+
+<img src="docs/screenshots/04-approvals.png" alt="Approvals sheet with requests from Diego Siciliani for User Access Administrator (flagged Grants access) and Megan Bowen for Owner, a justification Access granted and Deny and Approve buttons">
+
+**History.** Every request from the app and the CLI, searchable and filterable by period,
+action, outcome and tenant, with CSV export and import from Azure.
+
+<img src="docs/screenshots/05-history.png" alt="History window listing activations, approvals, denials, schedules and renewals with outcome, role, resource, tenant, duration, justification, source and request id">
+
+**Settings › Appearance.** Pick a theme from preview cards and a mode: system, light, dark,
+ultra dark or by time of day.
+
+<img src="docs/screenshots/06-appearance-settings.png" alt="Appearance settings with theme cards for Native, Azure-style and Windows XP-style, mode buttons and table column toggles">
+
+**Themes.** Native (here in ultra dark), Azure-style and, for fun, Windows XP-style.
+
+<img src="docs/screenshots/07-themes.png" alt="Three Pimento windows stacked: the native theme in ultra dark, the Azure-style theme with its My roles header, and the beige Windows XP-style theme with a glossy blue title bar">
+
+**Scheduled activations.** Activations that start later, straight from Azure, with *Cancel*.
+
+<img src="docs/screenshots/08-scheduled.png" alt="Scheduled Activations sheet with a Contributor role on Contoso Staging starting Saturday 08:00 and a Cancel button">
+
+The Azure-style and Windows XP-style themes are inspired by those designs; Pimento is not
+affiliated with or endorsed by Microsoft.
 
 ## Requirements
 
