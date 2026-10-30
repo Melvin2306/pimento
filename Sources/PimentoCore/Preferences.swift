@@ -120,6 +120,12 @@ public struct Preferences: Equatable, Sendable {
     public var confirmOwnerRoles = true
     public var maxParallelRequests = 8
 
+    // Keep alive
+    /// When keep-alive may renew roles (Mon–Fri 08:00–18:00 by default).
+    public var keepAliveHours = WorkingHours()
+    /// Keep-alive renews nothing while paused (the roles stay marked).
+    public var keepAlivePaused = false
+
     // General
     public var launchTenant: LaunchTenant = .lastUsed
     public var refreshOnLaunch = true
@@ -225,6 +231,8 @@ public struct Preferences: Equatable, Sendable {
         static let prefillLastJustification = "activation.prefillLastJustification"
         static let confirmOwnerRoles = "activation.confirmOwnerRoles"
         static let maxParallelRequests = "activation.maxParallelRequests"
+        static let keepAliveHours = "keepAlive.hours"
+        static let keepAlivePaused = "keepAlive.paused"
         static let launchTenant = "general.launchTenant"
         static let refreshOnLaunch = "general.refreshOnLaunch"
         static let autoRefreshMinutes = "general.autoRefreshMinutes"
@@ -239,6 +247,7 @@ public struct Preferences: Equatable, Sendable {
             notifyOnCompletion, notifyOnlyOnFailure, playSound, expiryReminders, reminderLeadMinutes, notifyScheduledStart,
             notifyApprovalDecisions, notifyNewApprovals,
             defaultHours, rememberJustifications, prefillLastJustification, confirmOwnerRoles, maxParallelRequests,
+            keepAliveHours, keepAlivePaused,
             launchTenant, refreshOnLaunch, autoRefreshMinutes, theme, appearanceMode, appearanceSchedule,
             showInMenuBar, menuBarShowsRemainingTime, hideDockIcon,
         ]
@@ -262,6 +271,8 @@ public struct Preferences: Equatable, Sendable {
         bool(Key.prefillLastJustification, &p.prefillLastJustification)
         bool(Key.confirmOwnerRoles, &p.confirmOwnerRoles)
         int(Key.maxParallelRequests, &p.maxParallelRequests)
+        p.keepAliveHours = WorkingHours(storedValue: store.object(forKey: Key.keepAliveHours))
+        bool(Key.keepAlivePaused, &p.keepAlivePaused)
         switch store.object(forKey: Key.launchTenant) as? String {
         case nil, "lastUsed": p.launchTenant = .lastUsed
         case "azDefault": p.launchTenant = .azDefault
@@ -293,6 +304,8 @@ public struct Preferences: Equatable, Sendable {
         store.set(p.prefillLastJustification, forKey: Key.prefillLastJustification)
         store.set(p.confirmOwnerRoles, forKey: Key.confirmOwnerRoles)
         store.set(p.maxParallelRequests, forKey: Key.maxParallelRequests)
+        store.set(p.keepAliveHours.storedValue, forKey: Key.keepAliveHours)
+        store.set(p.keepAlivePaused, forKey: Key.keepAlivePaused)
         let launch: String = switch p.launchTenant {
         case .lastUsed: "lastUsed"
         case .azDefault: "azDefault"
