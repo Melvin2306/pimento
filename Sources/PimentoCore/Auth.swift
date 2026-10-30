@@ -220,7 +220,7 @@ public enum AzureCLI {
         let killer = DispatchWorkItem {
             guard process.isRunning else { return }
             timedOut.value = true
-            process.terminate()
+            terminateTree(process)
         }
         DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: killer)
         let outData = out.fileHandleForReading.readDataToEndOfFile()
@@ -237,6 +237,43 @@ public enum AzureCLI {
             throw AzureCLIError.failed(stderr.isEmpty ? "az exited with status \(process.terminationStatus)" : stderr)
         }
         return outData
+    }
+}
+
+extension AzureCLI {
+    /// Ends `process` and everything it started. `terminate()` alone ends
+    /// only the process itself (az's wrapper script, or cmd.exe), and a
+    /// Python child still holding the output pipe would keep the read
+    /// waiting long past the timeout.
+    ///
+    /// - macOS, Linux: Foundation starts the process in a process group of its
+    ///   own; the group gets SIGTERM, and SIGKILL 3 s later if any of it is
+    ///   left. (Should the process not lead its own group, only it is ended:
+    ///   never signal Pimento's own group.)
+    /// - Windows: `taskkill /T /F` ends the process tree.
+    static func terminateTree(_ process: Process) {
+        let pid = process.processIdentifier
+        guard pid > 0 else { return }
+        #if os(Windows)
+        let system = ProcessInfo.processInfo.environment.first { $0.key.uppercased() == "SYSTEMROOT" }?.value ?? #"C:\Windows"#
+        let taskkill = Process()
+        taskkill.executableURL = URL(fileURLWithPath: HostPlatform.windows.join(system, "System32", "taskkill.exe"))
+        taskkill.arguments = ["/T", "/F", "/PID", String(pid)]
+        taskkill.standardInput = FileHandle.nullDevice
+        taskkill.standardOutput = FileHandle.nullDevice
+        taskkill.standardError = FileHandle.nullDevice
+        if (try? taskkill.run()) != nil { taskkill.waitUntilExit() }
+        if process.isRunning { process.terminate() }
+        #else
+        guard getpgid(pid) == pid, pid != getpgrp() else {
+            terminateTree(process)
+            return
+        }
+        kill(-pid, SIGTERM)
+        DispatchQueue.global().asyncAfter(deadline: .now() + 3) {
+            if kill(-pid, 0) == 0 { kill(-pid, SIGKILL) }
+        }
+        #endif
     }
 }
 

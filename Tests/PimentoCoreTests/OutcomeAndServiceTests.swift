@@ -117,6 +117,53 @@ struct AuthTests {
         let ok = try fakeAz("printf token")
         #expect(try await AzureCLI.run([], azPath: ok) == Data("token".utf8))
     }
+
+    /// az's Python child holding the output pipe open: the timeout ends it too.
+    @Test func aTimeoutEndsWhatAzStarted() async throws {
+        let pidFile = FileManager.default.temporaryDirectory.appendingPathComponent("pimento-az-child-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: pidFile) }
+        let stuck = try fakeAz("sh -c 'echo $$ > \"\(pidFile.path)\"; exec sleep 30' &\nsleep 30")
+        let started = Date()
+        await #expect(throws: AzureCLIError.timedOut) { _ = try await AzureCLI.run([], azPath: stuck, timeout: 2) }
+        // Not the 30 s the child would have held the pipe (generous: tests run in parallel).
+        #expect(Date().timeIntervalSince(started) < 12)
+        // No file: under load the timeout came before az started its child.
+        guard let text = try? Data(contentsOf: pidFile),
+              let child = Int32(String(decoding: text, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines))
+        else { return }
+        var gone = false
+        for _ in 0..<50 where !gone {
+            gone = !isRunning(child)
+            if !gone { try await Task.sleep(nanoseconds: 100_000_000) }
+        }
+        #expect(gone)
+    }
+
+    /// Whether `pid` runs (a zombie does not: in a container nobody may reap
+    /// the orphan).
+    func isRunning(_ pid: Int32) -> Bool {
+        guard kill(pid, 0) == 0 else { return false }
+        #if os(Linux)
+        if let stat = try? String(contentsOfFile: "/proc/\(pid)/stat", encoding: .utf8),
+           let close = stat.lastIndex(of: ")") {
+            return !stat[stat.index(after: close)...].trimmingCharacters(in: .whitespaces).hasPrefix("Z")
+        }
+        #endif
+        return true
+    }
+    #else
+    /// az.cmd going through cmd.exe, with a child (ping) holding the output
+    /// pipe: the timeout ends the whole tree, not only cmd.exe.
+    @Test func aTimeoutEndsWhatAzStarted() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("pimento-az-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let az = dir.appendingPathComponent("az.cmd")
+        try Data("@echo off\r\nping -n 30 127.0.0.1\r\n".utf8).write(to: az)
+        let started = Date()
+        await #expect(throws: AzureCLIError.timedOut) { _ = try await AzureCLI.run([], azPath: az.path, timeout: 1) }
+        #expect(Date().timeIntervalSince(started) < 15)
+    }
     #endif
 
     @Test func locatesAzPreferringHomebrew() {
