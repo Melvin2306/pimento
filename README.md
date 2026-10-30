@@ -685,7 +685,7 @@ pimento history import-azure --since 30d     # add your requests from the portal
 | `pimento approvals` | Requests you can approve or deny as a PIM approver |
 | `pimento approve REQUEST-ID… -j TEXT [--yes] [--dry-run]`, `pimento deny …` | Decides them (`PATCH …/roleAssignmentApprovals/{id}/stages/{stage}`) |
 | `pimento status` | Active roles with the time left, soonest-expiring first |
-| `pimento tenants` | Tenants by ID, name and domain |
+| `pimento tenants` | Tenants by ID, name and domain (none: exit 0, with a note on stderr; `[]` with `--json`) |
 | `pimento presets [list] \| show NAME \| save NAME FILTER… [--role NAME] [--exact] [-j TEXT] [--hours N\|max] [--ticket-system NAME] [--force] \| delete NAME` | Saved presets (see below) |
 | `pimento history [WORD…] [--since WHEN] [--until WHEN] [--action NAME…] [--outcome NAME…] [--tenant ID\|NAME] [--limit N] [--json \| --csv]` | The history, newest first (50 rows in the table unless `--limit`; all with `--json`/`--csv`) |
 | `pimento history export FILE.csv [filters]`, `history import-azure [--since WHEN]`, `history clear [--yes]` | CSV to a file (`-` for stdout); add your past requests from Azure (read-only); delete it (asks, or `--yes`) |
@@ -851,7 +851,7 @@ Times are ISO 8601 in UTC. Keys without a value are left out.
 
 | Code | Meaning |
 | --- | --- |
-| 0 | Success, including "nothing to do" (everything already active) |
+| 0 | Success, including "nothing to do" (everything already active) and no tenants for `pimento tenants` |
 | 1 | An activation or request failed, no role matched (or none of a preset's roles is eligible), or you answered no |
 | 2 | Usage error: unknown option, no justification or selection, invalid tenant or `--at` time, a required ticket missing, or a command that changes roles without `--yes` when stdin is not a terminal |
 | 3 | az is missing or not signed in, Pimento sign-in has no (valid) account, or ARM rejected the token (run the `az login` or `pimento login` command it prints) |

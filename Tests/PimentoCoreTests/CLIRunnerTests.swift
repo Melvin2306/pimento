@@ -258,8 +258,19 @@ struct CLIRunnerTests {
         #expect(doc["tenants"]?.first?["displayName"] as? String == "Contoso")
         #expect(doc["tenants"]?.last?["displayName"] == nil)
 
+        // No tenants: an answer, exit 0 in both modes; the table says why on stderr.
         let none = CLIHarness()
-        #expect(await none.run("tenants") == 3)
+        #expect(await none.run("tenants") == 0)
+        #expect(none.out.isEmpty)
+        #expect(none.err.contains("note: no tenants") && none.err.contains("az login"))
+        let noneJSON = CLIHarness()
+        #expect(await noneJSON.run("tenants", "--json") == 0)
+        let empty = try #require(try JSONSerialization.jsonObject(with: Data(noneJSON.out.utf8)) as? [String: [Any]])
+        #expect(empty["tenants"]?.isEmpty == true)
+        #expect(noneJSON.err.isEmpty)
+        let pimento = CLIHarness()
+        #expect(await pimento.run("tenants", "--auth", "pimento") == 0)
+        #expect(pimento.err.contains("pimento login") && !pimento.err.contains("az login"))
 
         // The tenant is --tenant, else $PIMENTO_TENANT, as the README says.
         let env = CLIHarness()

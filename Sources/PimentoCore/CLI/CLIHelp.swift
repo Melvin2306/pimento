@@ -413,7 +413,8 @@ public enum CLIHelp {
     Usage: pimento tenants [--tenant ID] [--json]
 
     Lists the tenants your az login can reach: ARM's GET /tenants plus az's
-    account cache. Read-only.
+    account cache. Read-only. No tenants is not an error: exit 0, with a note
+    on stderr (an empty list with --json).
 
     Options:
       -t, --tenant ID     Ask ARM with a token for this tenant (default: az's current one)

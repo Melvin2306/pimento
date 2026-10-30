@@ -263,9 +263,12 @@ public struct CLIRunner: Sendable {
             out(CLIJSON.encode(CLIJSON.TenantList(tenants: tenants.map(CLIJSON.Tenant.init))))
             return .success
         }
+        // None is an answer, not an error (as `[]` is with --json); a note says why.
         guard !tenants.isEmpty else {
-            err(auth.source == .az ? "az knows no tenants. Run `az login` first." : "No tenants listed for this account. Run `pimento login` first.")
-            return .auth
+            err(errStyle.yellow("note:") + (auth.source == .az
+                ? " no tenants: az knows none. `az login` signs you in."
+                : " no tenants listed for this account. `pimento login` signs you in."))
+            return .success
         }
         var table = TextTable(headers: ["TENANT ID", "NAME", "DOMAIN"], flexible: [1, 2])
         for t in tenants {
