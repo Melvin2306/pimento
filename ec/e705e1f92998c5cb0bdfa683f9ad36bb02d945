@@ -1,0 +1,24 @@
+integrations/alfred/test.sh
+  s_4884204a812fec::t_a1a71dd9302a89 75-106
+  s_4884204a812fec::t_c4c5577817df93 145-150
+integrations/alfred/alfred.js
+  s_4884204a812fec::t_e722e32f4b333f 86-96,128-142,147,163-169,174-175,203,215,244,267-268,270,276-278,283,285
+integrations/alfred/lib.sh
+  s_4884204a812fec::t_4cafacf4f8829c 11-14,38,46-48,57
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ece705e1f92998c5cb0bdfa683f9ad36bb02d945",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
