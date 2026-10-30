@@ -31,7 +31,7 @@ private func brandingAnswer(tile: Any? = tileURL, banner: Any? = "https://aadcdn
     if let tile { branding["TileLogo"] = tile }
     if let banner { branding["BannerLogo"] = banner }
     let doc: [String: Any] = [
-        "Username": "pimento-logo-lookup@contoso.onmicrosoft.com", "IfExistsResult": 1, "ThrottleStatus": 0,
+        "Username": "pimento-logo-lookup@contoso.example.com", "IfExistsResult": 1, "ThrottleStatus": 0,
         "Credentials": ["PrefCredential": 1, "HasPassword": true],
         "EstsProperties": ["UserTenantBranding": [branding], "DomainType": 3],
     ]
@@ -81,7 +81,7 @@ struct TenantLogoTests {
 
     @Test func unusableDomainsAreSkipped() {
         let bad = ["localhost", "10.0.0.1", "[::1]", "contoso", "contoso.local", "contoso.internal", "-flag.com", "contoso.example",
-                   "contoso.invalid", "contoso.test", "contoso..com", "contoso.com/path", "contoso.com:8443", "user@contoso.com",
+                   "contoso.invalid", "contoso.test", "contoso..com", "contoso.com/path", "contoso.com:8443", "user@contoso.example.com",
                    "contoso_corp.com", "", " ", "c.o"]
         for domain in bad {
             #expect(TenantLogoPolicy.websiteDomain(for: tenant(domain, domains: [])) == nil, "\(domain)")
@@ -117,11 +117,11 @@ struct TenantLogoTests {
     // MARK: The branding lookup
 
     @Test func theLookupSendsOnlyAMadeUpUserName() throws {
-        let request = TenantLogoPolicy.brandingRequest(domain: "contoso.onmicrosoft.com")
+        let request = TenantLogoPolicy.brandingRequest(domain: "contoso.example.com")
         #expect(request.url?.absoluteString == "https://login.microsoftonline.com/common/GetCredentialType")
         #expect(request.httpMethod == "POST")
         let body = try #require(request.httpBody)
-        #expect(String(decoding: body, as: UTF8.self) == #"{"username":"pimento-logo-lookup@contoso.onmicrosoft.com"}"#)
+        #expect(String(decoding: body, as: UTF8.self) == #"{"username":"pimento-logo-lookup@contoso.example.com"}"#)
         #expect(request.value(forHTTPHeaderField: "Authorization") == nil)
         #expect(request.value(forHTTPHeaderField: "Cookie") == nil)
     }
