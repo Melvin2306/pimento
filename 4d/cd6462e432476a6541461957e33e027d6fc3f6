@@ -1,0 +1,25 @@
+Sources/PimentoCore/AzureDate.swift
+  s_4884204a812fec::t_f47b628ec3fef0 9,14-39
+Tests/PimentoCoreTests/RoleMatcherTests.swift
+  s_4884204a812fec::t_8aa9eff79a3e3f 95-102,117-123,125-135
+Tests/PimentoCoreTests/SignInTests.swift
+  s_4884204a812fec::t_1a635c7e543fef 429-467
+Sources/PimentoCore/SignIn/Loopback.swift
+  s_4884204a812fec::t_3c90d5ec694192 84-86,95-98,238-239,242-243,246,254-259
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4dcd6462e432476a6541461957e33e027d6fc3f6",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
