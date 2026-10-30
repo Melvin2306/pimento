@@ -227,8 +227,10 @@ struct CLIHistoryCommandTests {
         #expect(await stdout.run("history", "export", "-") == 0)
         #expect(stdout.out.hasPrefix("timestamp_utc,"))
 
+        // Under a regular file: unwritable on every platform (`/dev/null/…`
+        // is an ordinary, creatable path on Windows).
         let nowhere = try seeded()
-        #expect(await nowhere.run("history", "export", "/dev/null/x.csv") == 1)
+        #expect(await nowhere.run("history", "export", file.appendingPathComponent("x.csv").path) == 1)
         #expect(nowhere.err.contains("Could not write"))
     }
 
