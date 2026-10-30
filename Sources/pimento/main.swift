@@ -122,7 +122,7 @@ func isBrokenPipe(_ error: Error) -> Bool {
     return false
 }
 
-let environment = CLIEnvironment(
+var environment = CLIEnvironment(
     write: { text, stream in
         let handle = stream == .out ? FileHandle.standardOutput : FileHandle.standardError
         // `write(_:)` raises an Objective-C exception on a closed pipe, which
@@ -156,6 +156,12 @@ let environment = CLIEnvironment(
         openURL: { url in BrowserLaunch.guarded(url, openInBrowser) },
         endBrowserSignIn: { redirectPages.removeAll() })
 )
+
+// Only `pimento version --check` uses it: one GET of GitHub's latest release
+// (UpdateCheckTransport refuses anything else). No other command goes online.
+environment.updateTransport = UpdateCheckTransport(URLSessionTransport())
+// The app's bundled CLI is updated with the app, not with the installer.
+environment.executablePath = Bundle.main.executableURL?.resolvingSymlinksInPath().path
 
 #if !os(Windows)
 // A closed pipe (`pimento list | head`) should end quietly, not crash.

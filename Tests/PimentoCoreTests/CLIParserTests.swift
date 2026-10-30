@@ -26,8 +26,8 @@ struct CLIParserTests {
         #expect(try command("help", "activate") == .help(topic: "activate"))
         #expect(try command("activate", "--help") == .help(topic: "activate"))
         #expect(try command("list", "-h") == .help(topic: "list"))
-        #expect(try command("version") == .version)
-        #expect(try command("--version") == .version)
+        #expect(try command("version") == .version(VersionOptions()))
+        #expect(try command("--version") == .version(VersionOptions()))
     }
 
     @Test func listCollectsFiltersRolesAndState() throws {

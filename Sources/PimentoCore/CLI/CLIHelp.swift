@@ -29,7 +29,7 @@ public enum CLIHelp {
         case "login": login
         case "logout": logout
         case "whoami": whoami
-        case "version": "Usage: pimento version\n\nPrints the version."
+        case "version": version
         case "help": "Usage: pimento help [COMMAND]\n\nShows help for a command."
         default: main
         }
@@ -61,7 +61,7 @@ public enum CLIHelp {
       logout       Forget Pimento's sign-in
       whoami       Show the auth source and who you are signed in as
       completions  Print a completion script for zsh, bash or fish
-      version      Print the version
+      version      Print the version; --check: is there a newer release?
       help         Show help for a command
 
     Common options:
@@ -548,6 +548,24 @@ public enum CLIHelp {
     Exit 3 when the source has no valid sign-in.
     """
 
+    static let version = """
+    Usage: pimento version [--check] [--json]
+
+    Prints the version.
+
+    Options:
+          --check         Also ask GitHub for the latest release and say how to
+                          update when it is newer (re-run the installer). This is
+                          the only command that contacts GitHub, and nothing is
+                          downloaded or installed. Off in demo mode and with
+                          \(UpdateCheck.disableVariable)=1.
+          --json          JSON: {version, checked, latest, publishedAt,
+                          updateAvailable, releasePage, diskImage, installCommand, error}
+
+    Exit codes: 0 the check worked (also when a newer version exists), 1 it could
+    not be made (offline, turned off, rate limit).
+    """
+
     static let completions = """
     Usage: pimento completions zsh|bash|fish
 
@@ -595,7 +613,7 @@ public enum CLIHelp {
         'logout:Forget Pimento sign-in'
         'whoami:Show the auth source and who you are signed in as'
         'completions:Print a completion script'
-        'version:Print the version'
+        'version:Print the version, or check for a newer one'
         'help:Show help for a command'
       )
       common=(
@@ -698,6 +716,7 @@ public enum CLIHelp {
                 '--client-id[Application (client) ID]:client id: ' ;;
             logout) _arguments -s $common '--all[Every account]' ;;
             whoami) _arguments -s $common ;;
+            version) _arguments -s '--check[Check for a newer release]' '--json[Machine-readable output]' '(- *)'{-h,--help}'[Show help]' ;;
             completions) _arguments '1:shell:(zsh bash fish)' ;;
             help) _arguments '1:command:(list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets history login logout whoami completions version)' ;;
           esac ;;
@@ -752,6 +771,7 @@ public enum CLIHelp {
         login) opts="--tenant --json --auth --device-code --client-id --help" ;;
         logout) opts="--all --json --help" ;;
         whoami) opts="--tenant --json --auth --help" ;;
+        version) opts="--check --json --help" ;;
         completions) opts="zsh bash fish" ;;
         help) opts="list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets history login logout whoami completions version" ;;
         *) opts="" ;;
@@ -786,7 +806,7 @@ public enum CLIHelp {
     complete -c pimento -n __fish_use_subcommand -a logout -d 'Forget Pimento sign-in'
     complete -c pimento -n __fish_use_subcommand -a whoami -d 'Show the auth source and who you are signed in as'
     complete -c pimento -n __fish_use_subcommand -a completions -d 'Print a completion script'
-    complete -c pimento -n __fish_use_subcommand -a version -d 'Print the version'
+    complete -c pimento -n __fish_use_subcommand -a version -d 'Print the version, or check for a newer one'
     complete -c pimento -n __fish_use_subcommand -a help -d 'Show help for a command'
     complete -c pimento -n '__fish_seen_subcommand_from list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets history' -s t -l tenant -r -d 'Tenant GUID or domain'
     complete -c pimento -n '__fish_seen_subcommand_from list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets history' -l json -d 'Machine-readable output'
@@ -827,6 +847,8 @@ public enum CLIHelp {
     complete -c pimento -n '__fish_seen_subcommand_from login' -l device-code -d 'Sign in with a code on another device'
     complete -c pimento -n '__fish_seen_subcommand_from login' -l client-id -r -d 'Application (client) ID'
     complete -c pimento -n '__fish_seen_subcommand_from logout' -l all -d 'Every account'
+    complete -c pimento -n '__fish_seen_subcommand_from version' -l check -d 'Check for a newer release'
+    complete -c pimento -n '__fish_seen_subcommand_from version' -l json -d 'Machine-readable output'
     complete -c pimento -n '__fish_seen_subcommand_from completions' -a 'zsh bash fish'
     complete -c pimento -n '__fish_seen_subcommand_from help' -a 'list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets history login logout whoami completions version'
     """#

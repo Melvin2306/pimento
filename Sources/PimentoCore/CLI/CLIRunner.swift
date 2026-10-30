@@ -37,6 +37,11 @@ public struct CLIEnvironment: Sendable {
     public var azureCLITokens: @Sendable (String?) -> TokenProvider = { AzureCLITokenProvider(tenantId: $0) }
     /// Set in demo mode: what the command runs against.
     public var demo: DemoSession?
+    /// `pimento version --check`'s connection to GitHub (wrapped in
+    /// `UpdateCheckTransport`); no other command uses it. Offline unless set.
+    public var updateTransport: HTTPTransport = OfflineTransport()
+    /// This executable's resolved path, to tell the app's bundled CLI apart.
+    public var executablePath: String?
 
     public init(
         write: @escaping @Sendable (String, Stream) -> Void,
@@ -217,9 +222,7 @@ public struct CLIRunner: Sendable {
         case .help(let topic):
             out(CLIHelp.text(for: topic))
             return .success
-        case .version:
-            out("pimento \(AppInfo.version)")
-            return .success
+        case .version(let o): return await version(o)
         case .completions(let shell):
             out(CLIHelp.completionScript(for: shell))
             return .success
