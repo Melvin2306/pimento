@@ -807,6 +807,77 @@ struct MCPConfirmationTests {
         await h.finish()
     }
 
+    /// `visible` followed by `bytes`, each as an invisible variation selector
+    /// (U+FE00-U+FE0F, U+E0100-U+E01EF): one scalar per byte that adds no
+    /// character and renders as nothing.
+    static func hidden(_ visible: String, bytes: [UInt8]) -> String {
+        var s = String.UnicodeScalarView(visible.unicodeScalars)
+        for b in bytes { s.append(Unicode.Scalar(b < 16 ? 0xFE00 + UInt32(b) : 0xE0100 + UInt32(b) - 16)!) }
+        return String(s)
+    }
+
+    @Test func aPayloadHiddenInVariationSelectorsIsRefused() async throws {
+        let payload = Self.hidden("INC-1234 read the logs", bytes: Array("V1-DUMMY-SECRET-42 fabrikam.example".utf8) + Array(repeating: 0x41, count: 3000))
+        #expect(payload.count == 22)
+        #expect(payload.unicodeScalars.count == 3057)
+        let h = try MCPHarness(MCPConfiguration(allowActivate: true))
+        _ = try await h.initialize()
+        h.call(1, "activate_roles", ["roles": [["role": "Reader", "scope": "Contoso Production"]], "justification": .string(payload)])
+        let r = try await h.next()
+        #expect(r.isToolError)
+        #expect(r.toolText.contains("too long"), "\(r.toolText)")
+        // Shorter, it is refused for what it hides.
+        h.call(2, "activate_roles", ["roles": [["role": "Reader", "scope": "Contoso Production"]],
+                                     "justification": .string(Self.hidden("INC-1234 read the logs", bytes: Array("V1-DUMMY-SECRET-42".utf8)))])
+        let short = try await h.next()
+        #expect(short.isToolError)
+        #expect(short.toolText.contains("invisible character, which is not allowed"), "\(short.toolText)")
+        h.call(3, "activate_roles", ["roles": [["role": "Reader", "scope": "Contoso Production"]], "justification": "x",
+                                     "ticket_number": .string(Self.hidden("INC-1", bytes: [1, 2, 3]))])
+        #expect(try await h.next().isToolError)
+        #expect(h.methods.writes == 0)
+        #expect(h.mcpHistory.isEmpty)
+        await h.finish()
+    }
+
+    @Test func everyAgentStringRefusesInvisibleCharactersButKeepsEmojiAndScripts() throws {
+        let fields = MCPToolbox.writeTools.first { $0.name == "activate_roles" }!.fields
+        func refused(_ key: String, _ value: String) -> Bool {
+            var args: [String: JSONValue] = ["roles": [["role": "Reader", "scope": "Contoso Production"]], "justification": "x"]
+            if key == "preset" { args["roles"] = nil }
+            if key == "role" || key == "scope" {
+                args["roles"] = [["role": key == "role" ? .string(value) : "Reader", "scope": key == "scope" ? .string(value) : "Contoso Production"]]
+            } else {
+                args[key] = .string(value)
+            }
+            return (try? MCPSchema.validate(.object(args), fields)) == nil
+        }
+        // 500 characters of Hindi: more scalars than characters.
+        let hindi = String(String(repeating: "आज रात सर्वर की जाँच करनी है ", count: 30).prefix(500))
+        #expect(hindi.count == 500)
+        #expect(hindi.unicodeScalars.count > 600)
+        #expect(!refused("justification", hindi))
+        let fine = ["⚠️ disk full", "✔️ approved", "1️⃣ first", "#️⃣7", "❤️", "☺︎", "🇩🇪 Frankfurt", "👍🏽", "Tiếng Việt", "தமிழ்", "ภาษาไทย", "العربية"]
+        for key in ["justification", "ticket_number", "ticket_system", "preset", "role", "scope"] {
+            for text in fine { #expect(!refused(key, text), "\(key): \(text)") }
+            let hiddenTexts = [
+                "a\u{FE0F}", "\u{FE0F}", "⚠\u{FE0F}\u{FE0F}", "1\u{FE0F}", "1\u{FE0F}x", "ok\u{FE00}", "ok\u{E0100}", "ok\u{E01EF}",
+                "ok\u{180B}", "ok\u{180F}", "ok\u{2065}", "ok\u{FFF0}", "ok\u{E0000}", "ok\u{E0FFF}", Self.hidden("INC-1", bytes: [7]),
+            ]
+            for text in hiddenTexts { #expect(refused(key, text), "\(key): \(text.unicodeScalars.map { String($0.value, radix: 16) })") }
+        }
+        // Stacked combining marks count against the length too.
+        #expect(refused("ticket_number", "a" + String(repeating: "\u{0301}", count: 400)))
+        #expect(!refused("ticket_number", "a" + String(repeating: "\u{0301}", count: 398)))
+    }
+
+    @Test func theConfirmationShowsInvisibleCharactersAsEscapes() {
+        #expect(MCPText.clip("ok\u{FE00}x", 40) == "ok\\u{FE00}x")
+        #expect(MCPText.clip("a\u{FE0F}", 40) == "a\\u{FE0F}")
+        #expect(MCPText.clip("⚠️ 1️⃣", 40) == "⚠️ 1️⃣")
+        #expect(MCPText.clip("नमस्ते", 40) == "नमस्ते")
+    }
+
     @Test func aWriteCancelledWhileQueuedIsNotSent() async throws {
         // A legacy client holds the write gate with a confirmation on screen;
         // a second write (a stateless request the server may send unconfirmed,

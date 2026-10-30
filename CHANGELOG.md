@@ -105,6 +105,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Security
 
+- `pimento mcp` refuses every default-ignorable character in an agent's arguments (justification,
+  ticket, preset, role, scope, filters), not only the formatting and zero-width ones: variation
+  selectors (U+FE00–U+FE0F, U+E0100–U+E01EF) and similar characters render as nothing and do not
+  count as characters, so a justification that read *INC-1234 read the logs* in the confirmation
+  could carry thousands of hidden characters to Azure and the history. An emoji's own presentation
+  selector (⚠️, ✔️, 1️⃣) is still accepted, every string is also limited to four Unicode scalars per
+  allowed character, and the confirmation shows any invisible character as an escape.
 - The update check sends one HTTPS `GET` to `api.github.com` with only `User-Agent:
   Pimento/<version>` and a fixed `Accept-Language: en` (no cookies, tokens or IDs; the same two
   headers as the logo fetch), with a timeout, through a guard that

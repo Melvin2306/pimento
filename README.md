@@ -1319,7 +1319,10 @@ approval*, the failed policy rule, …) goes back to the agent and into the hist
   role whose policy cannot be read is not activated. A justification is required (1 to 500
   characters), and a ticket number and system wherever the policy requires a ticket.
 - **Strict inputs.** Tool arguments are treated as untrusted: unknown keys, wrong types, empty or
-  overlong values, control, bidi and invisible formatting characters are refused; roles are named
+  overlong values (in characters, and in Unicode scalars at four per character), and control, bidi
+  and invisible characters (every default-ignorable code point, such as the variation selectors
+  that could hide text in a justification; only an emoji's own presentation selector is kept, as in
+  ⚠️ or 1️⃣) are refused, in every string argument; roles are named
   by exact role name and scope (no wildcards), a name that fits several scopes is refused, at most
   20 roles per call, and the tenant must be a GUID or domain (and the `--tenant` one, if set).
   Nothing an agent passes is run by a shell or used as a file name.

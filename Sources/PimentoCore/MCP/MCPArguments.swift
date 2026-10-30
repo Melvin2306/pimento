@@ -91,9 +91,13 @@ enum MCPSchema {
             guard case .string(let s) = value else { throw MCPArgumentError(message: "\(path) must be a string, got \(value.typeName).") }
             let t = s.trimmingCharacters(in: .whitespaces)
             guard !t.isEmpty else { throw MCPArgumentError(message: "\(path) must not be empty.") }
-            guard s.count <= max else { throw MCPArgumentError(message: "\(path) is too long (at most \(max) characters).") }
-            if s.unicodeScalars.contains(where: MCPText.isForbidden) {
-                throw MCPArgumentError(message: "\(path) contains a control, formatting or bidi character, which is not allowed.")
+            // Characters, and Unicode scalars too: combining marks do not
+            // make a Character longer, so they are bounded separately.
+            guard s.count <= max, s.unicodeScalars.count <= max * 4 else {
+                throw MCPArgumentError(message: "\(path) is too long (at most \(max) characters).")
+            }
+            if MCPText.hidesText(s) {
+                throw MCPArgumentError(message: "\(path) contains a control, formatting, bidi or invisible character, which is not allowed.")
             }
             if let check, let why = check(t) { throw MCPArgumentError(message: "\(path): \(why)") }
         case .integer(let range):
@@ -141,7 +145,9 @@ enum MCPText {
     /// Characters refused in arguments: C0/C1 controls (line breaks and tabs
     /// too), DEL, bidi controls, line and paragraph separators, and zero-width,
     /// blank or other invisible characters that could make a confirmation say
-    /// something other than what it seems to (or a justification look empty).
+    /// something other than what it seems to (or a justification look empty,
+    /// or carry text the user never sees: every default-ignorable code point,
+    /// such as the variation selectors, can encode data invisibly).
     static func isForbidden(_ s: Unicode.Scalar) -> Bool {
         if TerminalText.isUnsafe(s) { return true }
         switch s.value {
@@ -149,14 +155,50 @@ enum MCPText {
         // Letters and symbols that render as nothing: Hangul fillers, the
         // combining grapheme joiner, Khmer inherent vowels, the blank Braille cell.
         case 0x034F, 0x115F, 0x1160, 0x17B4, 0x17B5, 0x2800, 0x3164, 0xFFA0: return true
-        default: return s.properties.generalCategory == .format || s.properties.generalCategory == .privateUse
+        // The emoji and text presentation selectors: checked in context by `hidesText`.
+        case 0xFE0E, 0xFE0F: return false
+        default:
+            return s.properties.isDefaultIgnorableCodePoint
+                || s.properties.generalCategory == .format || s.properties.generalCategory == .privateUse
         }
     }
 
-    /// At most `n` characters, control characters made visible.
+    /// True when `text` has a refused scalar, or a presentation selector
+    /// (U+FE0E/U+FE0F) that is not the one selector of an emoji: right after
+    /// an emoji, and after the keycap bases 0-9 # * only before U+20E3 (1️⃣).
+    static func hidesText(_ text: String) -> Bool {
+        let u = Array(text.unicodeScalars)
+        return u.indices.contains { isHidden(u, at: $0) }
+    }
+
+    static func isHidden(_ u: [Unicode.Scalar], at i: Int) -> Bool {
+        let s = u[i]
+        if isForbidden(s) { return true }
+        guard s.value == 0xFE0E || s.value == 0xFE0F else { return false }
+        guard i > 0, u[i - 1].properties.isEmoji, u[i - 1].value != 0xFE0E, u[i - 1].value != 0xFE0F else { return true }
+        return u[i - 1].isASCII && !(i + 1 < u.count && u[i + 1].value == 0x20E3)
+    }
+
+    /// At most `n` characters, control and invisible characters made visible.
     static func clip(_ s: String, _ n: Int) -> String {
-        let safe = TerminalText.sanitize(s)
+        let safe = TerminalText.sanitize(visible(s))
         return safe.count <= n ? safe : String(safe.prefix(max(1, n - 1))) + "…"
+    }
+
+    /// `s` with every character `hidesText` refuses shown as an escape
+    /// (`\u{FE00}`), so a confirmation never renders text as nothing.
+    static func visible(_ s: String) -> String {
+        let u = Array(s.unicodeScalars)
+        guard u.indices.contains(where: { isHidden(u, at: $0) && !TerminalText.isUnsafe(u[$0]) }) else { return s }
+        var out = String.UnicodeScalarView()
+        for i in u.indices {
+            if isHidden(u, at: i), !TerminalText.isUnsafe(u[i]) {
+                out.append(contentsOf: TerminalText.visible(u[i]).unicodeScalars)
+            } else {
+                out.append(u[i])
+            }
+        }
+        return String(out)
     }
 
     /// Absolute file paths, home-relative paths and anything that looks like a
