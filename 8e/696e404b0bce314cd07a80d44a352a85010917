@@ -1,0 +1,23 @@
+Tests/PimentoCoreTests/MCPTests.swift
+  s_4884204a812fec::t_d6c96632aa9657 378-400
+README.md
+  s_4884204a812fec::t_19979f7a259308 1131
+Sources/PimentoCore/MCP/MCPTools.swift
+  s_4884204a812fec::t_4ce7a436be9d16 345,417-425,440-453,455,459-461
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8e696e404b0bce314cd07a80d44a352a85010917",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
