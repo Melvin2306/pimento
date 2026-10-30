@@ -1,0 +1,27 @@
+Sources/PimentoCore/SignIn/Loopback.swift
+  s_4884204a812fec::t_dd19edfd7400df 97-109,111-150,157,164,172,175-180,183-185,188,190,203-208,210,212
+Tests/PimentoCoreTests/SignInTests.swift
+  s_4884204a812fec::t_d45b58c7a61717 1015-1062
+CHANGELOG.md
+  s_4884204a812fec::t_ddda510aafb4de 395-400
+README.md
+  s_4884204a812fec::t_e067bf194eb810 482-485
+SECURITY.md
+  s_4884204a812fec::t_310fc9ee1d0534 54-59
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "34e1cca56e76d98be577c129251abbb99bb47ddd",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
