@@ -6,6 +6,27 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Keep alive**: mark active roles (right-click › *Keep Alive*) or a preset (*Keep alive* in Manage
+  Presets), and Pimento renews them shortly before they expire, during working hours (Settings ›
+  Activation › Keep alive: days and hours, Mon–Fri 08:00–18:00 by default, local time). Fifteen
+  minutes before the end it schedules the next activation to start exactly when the current one
+  ends, so there is no gap (PIM has no self-service extension; `SelfExtend` / `SelfRenew` need an
+  administrator). The rules: the policy maximum and working hours apply (the last renewal of the day
+  is shortened to whole hours ending by then, or skipped); the justification and ticket of the
+  activation are reused, and a renewal whose policy needs one that is unknown is skipped with a
+  notification; roles needing approval are never renewed (the UI says why); a role ended early is
+  not brought back and its continuation is withdrawn; one that lapsed while the Mac slept is
+  activated again on wake if still inside working hours; failures back off (1, 5, 15 minutes) and
+  stop after 4 per role per window. Status icon and tooltip in the table and the menu bar, a *Keep
+  Alive* toolbar menu, and a global *Pause* (toolbar, menu bar, Settings). Notifications follow the
+  completion settings (*Renewed Contributor until 18:00*, and failures). Works in demo mode.
+- **`pimento keep-alive`**: the same rules as a foreground loop until Ctrl-C, for Linux, Windows and
+  servers (`--days`, `--window`, `--hours`, `-j`, `--preset`, `--dry-run`; asks once, or `--yes`).
+  The scheduler lives in PimentoCore (`KeepAlive`, `KeepAliveSession`), shared by the app and the CLI.
+- Presets have an optional `keepAlive` field.
+
 ## [0.1.0] - 2026-10-30
 
 The first public release. It covers everything built before it; the development history is in

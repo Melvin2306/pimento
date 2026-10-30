@@ -192,6 +192,10 @@ Use either this link or `install.sh`, not both: `install.sh` leaves a link in it
 - **End early or renew**: check active rows (or right-click one) and press *Deactivate* to end them
   now, or *Renew* to end and activate them again for a fresh duration. Expiry reminders offer
   **Renew** and **End Now** right in the notification. See [Ending and renewing](#ending-and-renewing-activations).
+- **Keep alive**: mark active roles (right-click › *Keep Alive*) or a preset, and Pimento renews them
+  shortly before they expire, during your working hours (Mon–Fri 08:00–18:00 by default), without a
+  gap: the next activation is scheduled to start when the current one ends. *Pause* in the toolbar,
+  the menu bar and Settings; `pimento keep-alive` does the same in a terminal. See [Keep alive](#keep-alive).
 - **Schedule for later**: set *Start* to *Tomorrow 08:00*, *Next working day 08:00* or any time up to
   30 days ahead and press *Schedule*; PIM activates the roles then. The **Scheduled** view lists your
   pending activations straight from Azure (also ones made elsewhere) with *Cancel*, rows show a
@@ -363,6 +367,51 @@ notification sums it up. Reminders for ended roles are withdrawn; renewed roles 
 Both act in the tenant and for the account the reminder is for; if the app shows another tenant,
 or another account is signed in, it says so instead. Signing an account out removes its reminders.
 Both need an unlocked Mac: on the lock screen, macOS asks for your password or Touch ID first.
+
+### Keep alive
+
+Long sessions should not drop out. Right-click active rows and pick **Keep Alive** (or turn on
+*Keep alive* for a preset under **Manage Presets…**), and Pimento renews those roles before they
+expire, during your working hours, for as long as it runs. Kept roles show a
+circular-arrows icon in the Status column and in the menu bar, with what happens next in the
+tooltip (*Kept alive: renews at 15:25*, *continues at 15:40 until 18:00*, *not possible: its policy
+requires approval*). The **Keep Alive** toolbar menu lists them and has **Pause Keep Alive** and
+**Check Now**; the menu bar popover has a *Pause* / *Resume* line.
+
+**How a role is continued, and the gap.** PIM has no self-service way to lengthen an activation
+(`SelfExtend` and `SelfRenew` are requests an administrator must approve, see
+[Ending and renewing](#ending-and-renewing-activations)), and *Renew* leaves the role off for a few
+minutes. But PIM accepts a scheduled `SelfActivate` while the role is active, for a start after the
+current activation ends (see [Scheduled activations](#scheduled-activations-and-tickets)). So 15
+minutes before a kept role ends, Pimento schedules its next activation to start **exactly when the
+current one ends**: one request, nothing is ended, and there is no gap beyond the moment PIM takes to
+switch. The continuation appears under **Scheduled** until it starts (and can be cancelled there).
+Starting it any earlier would overlap the current activation, which PIM refuses
+(`RoleAssignmentExists`). This hand-over has been checked against Microsoft's documentation and the
+demo simulator, not yet against a live tenant: if PIM refuses it or the continuation does not start,
+Pimento activates the role again once it has ended, and then there **is** a gap (seconds to minutes).
+
+**The rules.**
+
+| | |
+| --- | --- |
+| When | Only inside working hours (Settings › Activation › Keep alive: days, from, until; local time; Mon–Fri 08:00–18:00 by default; an end at or before the start runs overnight). Outside them nothing is sent. |
+| How long | Each renewal asks for the preset's duration, or the longest the role's policy allows, capped at the policy maximum like any activation. |
+| End of the day | Never past the end of working hours: the last renewal is shortened to end by then, in whole hours (or the policy maximum when that is shorter, e.g. 90 minutes). When not even that fits (say 40 minutes are left), the role is left to end. |
+| Justification and ticket | The new activation carries the justification and ticket of the one it continues (read from your requests); a preset's justification is used when that is unknown. When the policy requires a ticket (or a justification) that is not known, the renewal is skipped and you get a notification. |
+| Approval | Roles whose policy requires approval are never renewed (the role would wait for an approver); neither are roles whose policy cannot be read. The context menu and the tooltip say so. |
+| Ended early | A role you end (*End Now*, the CLI, the portal) is not brought back, and a continuation Pimento had scheduled for it is withdrawn. Turning keep-alive off for a role, or pausing, withdraws continuations that have not started. |
+| Sleep, closed app | A role that lapsed while the Mac slept (or Pimento was not running) is activated again when Pimento looks next, if it is still inside working hours and the role ended inside them: on wake, after a clock or time-zone change, and at least every 30 minutes. Keep-alive never starts a role that was not active. |
+| Failures | Retried after 1, 5 and 15 minutes; after 4 failures for a role it waits for the next working hours. Each failure is a notification. |
+
+**Notifications** follow Settings › Notifications › *When activations finish*: *Renewed Contributor
+until 18:00* for each renewal (or only failures and skipped renewals with *Only when something
+fails*). Expiry reminders of a continued role are withdrawn; the last renewal of the day gets one.
+Continuations get no *Scheduled activation started* notification. Every request is recorded in the
+[history](#history) like any other (as a scheduled or immediate activation).
+
+**From a terminal:** `pimento keep-alive` runs the same rules as a foreground loop (Linux, Windows, a
+server, or without the app), until Ctrl-C. See [The command line](#the-command-line).
 
 ### Scheduled activations and tickets
 
@@ -679,7 +728,7 @@ options, with an ⓘ button where an option needs more explanation. Changes appl
 | General | tenant to open with (last used, az's current, or a specific one); unhide hidden tenants; load roles on launch; refresh automatically (off, 1, 5 or 15 minutes); menu bar icon (on by default), its remaining time, hide the Dock icon, launch at login (see [Menu bar](#menu-bar)) |
 | Appearance | theme, picked from preview cards; mode (see [Themes](#themes)); show or hide the Type, Membership, Condition and Duration columns (also via right-click on a column header) |
 | Account | sign in with the Azure CLI or Pimento sign-in; the client ID of your app registration; signed-in accounts (*Use*, *Sign Out*, *Sign Out All*); *Sign In…* (browser) and *Sign In with Code…* (see [Pimento sign-in](#pimento-sign-in-without-the-azure-cli)) |
-| Activation | default duration; parallel requests (1 to 16, default 8); confirm before activating Owner roles (on by default); remember recent justifications and tickets and offer them from the clock buttons next to the fields; start with the last justification filled in |
+| Activation | default duration; parallel requests (1 to 16, default 8); confirm before activating Owner roles (on by default); remember recent justifications and tickets and offer them from the clock buttons next to the fields; start with the last justification filled in; keep alive: pause, working days and hours (Mon–Fri 08:00–18:00 by default, see [Keep alive](#keep-alive)) |
 | History | keep a history (on by default); keep records for 30, 90 or 365 days or forever; the file, Show in Finder, Clear History |
 | Notifications | macOS permission state, with a shortcut to System Settings when it is off; send a test notification; notify when activations finish, or only when something fails; expiry reminders and how long before (5, 10, 15 or 30 minutes); notify when a scheduled activation starts; approval decisions on your requests; new approval requests for you; sound |
 
@@ -832,6 +881,9 @@ pimento deactivate contoso-dev --role Contributor
 pimento renew contoso-dev --role Contributor -j "INC-1234 still on it" --hours 2
 # Ask an administrator to extend an admin-assigned, time-bound assignment
 pimento extend fabrikam --role Reader -j "project runs until March" --days 90
+# Keep roles alive during working hours, until Ctrl-C (asks first; --dry-run shows the plan)
+pimento keep-alive contoso-dev --role Contributor
+pimento keep-alive --preset On-call --days mon-thu --window 07:00-19:00 --yes
 
 # Presets (shared with the app)
 pimento presets save On-call prod --role Owner -j "on-call" --hours max
@@ -852,6 +904,7 @@ pimento history import-azure --since 30d     # add your requests from the portal
 | `pimento deactivate (FILTER… \| --role NAME \| --all \| --preset NAME) [-j TEXT] [--yes] [--dry-run]` | Ends the matching activations now (`SelfDeactivate`) |
 | `pimento renew (FILTER… \| --role NAME \| --all \| --preset NAME) -j TEXT [--hours N\|max] [--ticket NUMBER [--ticket-system NAME]] [--yes] [--dry-run]` | Ends and activates the matching roles again, for a fresh duration (the role is off for a few minutes in between), with the original activation's ticket or `--ticket` |
 | `pimento extend (FILTER… \| --role NAME \| --all) -j TEXT [--days N] [--yes] [--dry-run]` | Asks an administrator to extend admin-assigned, time-bound assignments (`SelfExtend`) |
+| `pimento keep-alive (FILTER… \| --role NAME \| --all \| --preset NAME) [--days DAYS] [--window FROM-TO] [--hours N\|max] [-j TEXT] [--yes] [--dry-run]` | Keeps the matching roles active during working hours until Ctrl-C, with the app's [keep-alive rules](#keep-alive): reads your roles at least every 10 minutes and continues each one before it ends. Continuations already scheduled still start after Ctrl-C (`pimento cancel` withdraws them) |
 | `pimento scheduled` | Your scheduled activations and requests awaiting approval, from Azure |
 | `pimento cancel (REQUEST-ID… \| FILTER… \| --role NAME \| --all) [--yes] [--dry-run]` | Cancels them (`POST …/cancel`) |
 | `pimento pending` | Your requests waiting for approval, with when you asked and when they expire |
@@ -1002,7 +1055,8 @@ written atomically, readable only by you, and contains no secrets:
 
 `roles` are matched by scope and role definition GUID, case-insensitively; the names are only for
 display. `match` holds rules (`filters` and `roles` as on the command line). `duration` is `max` or
-whole hours (`PT4H`); an optional `ticketSystem` completes `activate --ticket`; `tenantId` may be left out for a preset that applies to every tenant. Unknown
+whole hours (`PT4H`); an optional `ticketSystem` completes `activate --ticket`; `"keepAlive": true` keeps the preset's
+roles alive in the app ([Keep alive](#keep-alive); written only when on); `tenantId` may be left out for a preset that applies to every tenant. Unknown
 keys are ignored. A file with a higher `version` is refused rather than overwritten.
 
 **Safety.** `activate` lists what it will send, marks Owner roles, and asks for confirmation on a
@@ -1130,6 +1184,11 @@ directly with the PIM APIs (`api-version=2020-10-01`):
    `approvalId`; once decided it becomes `Provisioned`/`Granted`, `Denied`, `TimedOut` (after 24
    hours) or `Canceled`. A request's name is the last segment of the `targetRoleAssignmentScheduleId`
    it creates, which is how Renew finds the ticket an active role was requested with.
+10b. **Keep alive**: 15 minutes before a kept role ends, the `PUT` of step 5 with
+   `scheduleInfo.startDateTime` = the current activation's `endDateTime` (a scheduled activation,
+   status `Granted`), the justification and ticket of the request behind the current activation
+   (step 10) and a duration clipped to the working hours. A role that lapsed is activated with the
+   plain `PUT` of step 5; a continuation of a role ended early is withdrawn with `POST …/cancel`.
 11. **History import**: the same `asTarget()` listing as 10, mapped to history entries (your
    `SelfActivate`, `SelfDeactivate`, `SelfExtend` and `SelfRenew` requests; a `SelfActivate`
    starting more than a minute after it was made counts as scheduled) and merged by request name.
@@ -1167,7 +1226,9 @@ directly with the PIM APIs (`api-version=2020-10-01`):
   renew, extend), `POST …/cancel`, and the approval `PATCH` (approve, deny). They run after you
   confirm in the app (Activate asks for Owner roles, Approve for Owner and the access administrator roles; Deactivate, Renew, Cancel and
   Deny always ask), after a tap on *Renew* / *End Now* in a reminder, or when the CLI command has
-  your confirmation (or `--yes`). Following your requests for a decision is read-only (`GET`).
+  your confirmation (or `--yes`). *Keep alive* is a standing instruction: marking a role (or
+  preset) is the consent for its renewals during working hours, until you turn it off or pause it;
+  `pimento keep-alive` asks once when it starts. Following your requests for a decision is read-only (`GET`).
   **Preview** in the app and `pimento activate --dry-run` show the requests without sending them.
 - Presets are kept in `~/Library/Application Support/Pimento/presets.json` (mode 600): names,
   ARM scopes and role definition IDs, and the justification and duration you chose to save.
@@ -1200,8 +1261,17 @@ See [SECURITY.md](SECURITY.md) for how to report a vulnerability.
 - **New approval requests** are noticed when Pimento refreshes (and while your own requests wait);
   with auto-refresh off, that is at launch and on Refresh.
 - **No self-service extension of an activation.** PIM does not offer one; *Renew* starts a new
-  activation and leaves a gap of a few minutes. Extension requests for admin-assigned time-bound
+  activation and leaves a gap of a few minutes. *Keep alive* avoids the gap by scheduling the next
+  activation for the moment the current one ends; that hand-over was built from Microsoft's
+  documentation and tested against the demo simulator, not yet against a live tenant. When it does
+  not work, the role is activated again after it ended (a gap of seconds to minutes). Extension requests for admin-assigned time-bound
   assignments are CLI-only (`pimento extend`), and the app does not list those assignments.
+- **Keep alive** works only while Pimento (or `pimento keep-alive`) runs: a continuation already
+  scheduled still starts without it, but nothing further is renewed, and a role that lapsed meanwhile
+  is activated again only when Pimento looks next (inside working hours). Roles whose policy requires
+  approval, MFA or an authentication context the token lacks are not kept alive (the first are
+  skipped, the others fail and back off). The marks are per tenant on this Mac; the CLI does not read
+  them (it takes a selection or a preset).
 - **Reminder actions** need Pimento to be able to run: *End Now* works in the background, *Renew*
   brings the app forward. They act on the tenant the app is showing.
 - **Roles that require MFA or an authentication context** at activation fail with `MfaRule` /
