@@ -17,15 +17,15 @@
 # optional (without it, the formula is x86_64-only on Linux).
 set -euo pipefail
 
-cd "$(dirname "$0")/.."
+SCRIPT="$0"
 REPO="Melvin2306/pimento"
-usage() { sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit 64; }
+usage() { sed -n '2,17p' "$SCRIPT" | sed 's/^# \{0,1\}//'; exit 64; }
 
 VERSION="${1:-}"
 [[ -n "$VERSION" && "$VERSION" != -* ]] || usage
 shift
 [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$ ]] || { echo "not a version: $VERSION" >&2; exit 64; }
-FROM="build"
+FROM=""
 RELEASE=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -35,6 +35,13 @@ while [[ $# -gt 0 ]]; do
     *) echo "unknown option: $1" >&2; usage ;;
   esac
 done
+# --from is relative to where the script was started; then work from the repo root.
+if [[ -n "$FROM" ]]; then
+  [[ -d "$FROM" ]] || { echo "no such folder: $FROM" >&2; exit 1; }
+  FROM="$(cd "$FROM" && pwd)"
+fi
+cd "$(dirname "$SCRIPT")/.."
+FROM="${FROM:-build}"
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
