@@ -66,6 +66,7 @@ struct AccountSettings: View {
                     Spacer()
                     if model.signedInAccounts.count > 1 {
                         Button("Sign Out All") { model.signOutAll() }
+                            .disabled(model.isActivating)
                     }
                 }
                 SignInStatus()
@@ -113,8 +114,10 @@ private struct AccountRow: View {
                 Text("In use").font(.caption).foregroundStyle(.secondary)
             } else {
                 Button("Use") { model.useAccount(account) }
+                    .disabled(model.isActivating)
             }
             Button("Sign Out") { model.signOut(account) }
+                .disabled(model.isActivating)
         }
         .accessibilityElement(children: .combine)
     }

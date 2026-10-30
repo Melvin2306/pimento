@@ -135,6 +135,8 @@ extension AppModel {
         authSettings.claimsChallenge = nil
         clientIdDraft = clientId
         await reloadAccounts()
+        // A new session replaces the service: let a running operation finish first.
+        while isActivating { try? await Task.sleep(for: .milliseconds(300)) }
         if authSelection.isOverride {
             restartSession()
         } else {
@@ -149,13 +151,15 @@ extension AppModel {
 
     /// Makes `account` the one tokens come from.
     func useAccount(_ account: SignedInAccount) {
-        guard authSettings.accountId != account.id else { return }
+        // Not while an operation runs: restarting the session would swap its service.
+        guard authSettings.accountId != account.id, !isActivating else { return }
         authSettings.accountId = account.id
         if authSource == .pimento { restartSession() }
     }
 
     /// Deletes the account's refresh token (and its cached access tokens).
     func signOut(_ account: SignedInAccount) {
+        guard !isActivating else { return }
         Task {
             do { try await broker.signOut(account.id) } catch {
                 banner = Banner(kind: .error, text: error.localizedDescription)
@@ -167,6 +171,7 @@ extension AppModel {
     }
 
     func signOutAll() {
+        guard !isActivating else { return }
         Task {
             do { try await broker.signOutAll() } catch {
                 banner = Banner(kind: .error, text: error.localizedDescription)
