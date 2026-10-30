@@ -373,6 +373,8 @@ All notable changes to this project are documented here. The format follows
   `--json`.
 - CI and release workflows pin third-party actions to commit SHAs; tests clean up their temporary
   files.
+- An `az` that timed out while not leading its own process group (or was already reaped) made
+  Pimento call itself forever and crash; it is now simply terminated.
 
 ### Security
 

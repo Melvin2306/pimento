@@ -266,7 +266,8 @@ extension AzureCLI {
         if process.isRunning { process.terminate() }
         #else
         guard getpgid(pid) == pid, pid != getpgrp() else {
-            terminateTree(process)
+            // Not a group leader (or already reaped): end only the process.
+            if process.isRunning { process.terminate() }
             return
         }
         kill(-pid, SIGTERM)

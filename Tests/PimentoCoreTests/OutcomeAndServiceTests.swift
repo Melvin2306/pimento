@@ -139,6 +139,27 @@ struct AuthTests {
         #expect(gone)
     }
 
+    /// Regression: the branch for a process that does not lead its own group
+    /// called itself with the same process, forever (a crash at the 90 s
+    /// timeout). A process already reaped takes that branch too.
+    @Test func terminatingAProcessThatLeadsNoGroupReturns() async throws {
+        let done = Process()
+        done.executableURL = URL(fileURLWithPath: "/bin/sh")
+        done.arguments = ["-c", "exit 0"]
+        try done.run()
+        done.waitUntilExit()
+        AzureCLI.terminateTree(done)
+        #expect(!done.isRunning)
+
+        let running = Process()
+        running.executableURL = URL(fileURLWithPath: "/bin/sh")
+        running.arguments = ["-c", "exec sleep 30"]
+        try running.run()
+        AzureCLI.terminateTree(running)
+        for _ in 0..<50 where running.isRunning { try await Task.sleep(nanoseconds: 100_000_000) }
+        #expect(!running.isRunning)
+    }
+
     /// Whether `pid` runs (a zombie does not: in a container nobody may reap
     /// the orphan).
     func isRunning(_ pid: Int32) -> Bool {
