@@ -87,7 +87,7 @@ public enum CLIHelp {
     """
 
     static let list = """
-    Usage: pimento list [FILTER…] [--role NAME] [--active | --eligible] [--tenant ID] [--json]
+    Usage: pimento list [FILTER…] [--role NAME] [--id ID] [--active | --eligible] [--tenant ID] [--json]
 
     Lists your eligible Azure-resource roles and whether they are active.
 
@@ -99,6 +99,8 @@ public enum CLIHelp {
     Options:
           --role NAME     Role name, case-insensitive, whole name; * is a wildcard
                           (--role owner, --role '*contributor'). Repeatable.
+          --id ID         Exactly the role with this id or eligibilityScheduleId
+                          (from --json). Repeatable.
           --active        Only roles that are active now
           --eligible      Only roles that are not active
     \(tenantOption)
@@ -120,6 +122,8 @@ public enum CLIHelp {
 
     Selection (at least one is required):
           --role NAME     Role name, whole name, * as wildcard. Repeatable.
+          --id ID         Exactly the role with this id or eligibilityScheduleId
+                          (from `pimento list --json`), for scripts. Repeatable.
           --all           Every eligible role (filters and --role still narrow it)
           --preset NAME   The roles of a saved preset (`pimento presets list`).
                           Its justification and duration apply unless -j / --hours
@@ -326,6 +330,8 @@ public enum CLIHelp {
     Selection (at least one is required):
       FILTER              Resource name contains FILTER (as in `pimento list`)
           --role NAME     Role name, whole name, * as wildcard. Repeatable.
+          --id ID         Exactly the role with this id or eligibilityScheduleId
+                          (from `pimento list --json`), for scripts. Repeatable.
           --all           Every active role (filters and --role still narrow it)
           --preset NAME   The active roles of a saved preset
 
@@ -364,7 +370,7 @@ public enum CLIHelp {
     requested with (read from your requests), or --ticket. A role whose policy
     requires a ticket is skipped when neither is known.
 
-    Selection: as for deactivate (FILTER…, --role, --all, --preset).
+    Selection: as for deactivate (FILTER…, --role, --id, --all, --preset).
 
     Options:
       -j, --justification TEXT
@@ -722,12 +728,14 @@ public enum CLIHelp {
             list)
               _arguments -s $common \
                 '*--role[Role name, * as wildcard]:role: ' \
+                '*--id[Exactly the role with this id]:id: ' \
                 '(--eligible)--active[Only active roles]' \
                 '(--active)--eligible[Only roles that are not active]' \
                 '*:resource filter: ' ;;
             activate)
               _arguments -s $common \
                 '*--role[Role name, * as wildcard]:role: ' \
+                '*--id[Exactly the role with this id]:id: ' \
                 '--all[Every eligible role]' \
                 '(-j --justification)'{-j,--justification}'[Justification]:justification: ' \
                 '--hours[Duration in hours, or max]:hours:(max 1 2 4 8 12 24)' \
@@ -749,6 +757,7 @@ public enum CLIHelp {
             deactivate|renew)
               _arguments -s $common \
                 '*--role[Role name, * as wildcard]:role: ' \
+                '*--id[Exactly the role with this id]:id: ' \
                 '--all[Every active role]' \
                 '(-j --justification)'{-j,--justification}'[Justification]:justification: ' \
                 '--hours[New duration in hours, or max (renew)]:hours:(max 1 2 4 8 12 24)' \
@@ -850,7 +859,7 @@ public enum CLIHelp {
         return
       fi
       case "$prev" in
-        -t|--tenant|-j|--justification|--role|--max-parallel|--preset|--days|--ticket|--ticket-system|--client-id) return ;;
+        -t|--tenant|-j|--justification|--role|--id|--max-parallel|--preset|--days|--ticket|--ticket-system|--client-id) return ;;
         --auth) COMPREPLY=($(compgen -W "az pimento" -- "$cur")); return ;;
         --at) COMPREPLY=($(compgen -W "now +1h +2h tomorrow08:00 workday08:00" -- "$cur")); return ;;
         --hours) COMPREPLY=($(compgen -W "max 1 2 4 8 12 24" -- "$cur")); return ;;
@@ -861,11 +870,11 @@ public enum CLIHelp {
         -n|--limit) return ;;
       esac
       case "$cmd" in
-        list) opts="--tenant --json --role --active --eligible --help" ;;
-        activate) opts="--tenant --json --role --all --preset --justification --hours --at --ticket --ticket-system --yes --dry-run --max-parallel --help" ;;
+        list) opts="--tenant --json --role --id --active --eligible --help" ;;
+        activate) opts="--tenant --json --role --id --all --preset --justification --hours --at --ticket --ticket-system --yes --dry-run --max-parallel --help" ;;
         cancel) opts="--tenant --json --role --all --yes --dry-run --help" ;;
-        deactivate) opts="--tenant --json --role --all --preset --justification --yes --dry-run --max-parallel --help" ;;
-        renew) opts="--tenant --json --role --all --preset --justification --hours --ticket --ticket-system --yes --dry-run --max-parallel --help" ;;
+        deactivate) opts="--tenant --json --role --id --all --preset --justification --yes --dry-run --max-parallel --help" ;;
+        renew) opts="--tenant --json --role --id --all --preset --justification --hours --ticket --ticket-system --yes --dry-run --max-parallel --help" ;;
         extend) opts="--tenant --json --role --all --justification --days --yes --dry-run --help" ;;
         keep-alive) opts="--tenant --role --all --preset --justification --hours --days --window --yes --dry-run --help" ;;
         status|tenants|scheduled|pending|approvals) opts="--tenant --json --help" ;;
@@ -924,6 +933,7 @@ public enum CLIHelp {
     complete -c pimento -n '__fish_seen_subcommand_from list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets history' -l json -d 'Machine-readable output'
     complete -c pimento -n '__fish_seen_subcommand_from list activate deactivate renew extend keep-alive scheduled cancel pending wait approvals approve deny status tenants presets history' -s h -l help -d 'Show help'
     complete -c pimento -n '__fish_seen_subcommand_from list activate deactivate renew extend keep-alive cancel presets' -l role -r -d 'Role name, * as wildcard'
+    complete -c pimento -n '__fish_seen_subcommand_from list activate deactivate renew' -l id -r -d 'Exactly the role with this id'
     complete -c pimento -n '__fish_seen_subcommand_from list' -l active -d 'Only active roles'
     complete -c pimento -n '__fish_seen_subcommand_from list' -l eligible -d 'Only roles that are not active'
     complete -c pimento -n '__fish_seen_subcommand_from activate' -l all -d 'Every eligible role'

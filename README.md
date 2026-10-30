@@ -935,10 +935,10 @@ pimento version --check
 
 | Command | What it does |
 | --- | --- |
-| `pimento list [FILTER…] [--role NAME] [--active \| --eligible]` | Table of your eligible roles, with status and expiry |
-| `pimento activate (FILTER… \| --role NAME \| --all \| --preset NAME) -j TEXT [--hours N\|max] [--at WHEN] [--ticket NUMBER [--ticket-system NAME]] [--yes] [--dry-run] [--max-parallel N]` | Activates the matching roles that are not active yet, in parallel (8 at a time by default), or schedules them with `--at` |
-| `pimento deactivate (FILTER… \| --role NAME \| --all \| --preset NAME) [-j TEXT] [--yes] [--dry-run]` | Ends the matching activations now (`SelfDeactivate`) |
-| `pimento renew (FILTER… \| --role NAME \| --all \| --preset NAME) -j TEXT [--hours N\|max] [--ticket NUMBER [--ticket-system NAME]] [--yes] [--dry-run]` | Ends and activates the matching roles again, for a fresh duration (the role is off for a few minutes in between), with the original activation's ticket or `--ticket` |
+| `pimento list [FILTER…] [--role NAME] [--id ID] [--active \| --eligible]` | Table of your eligible roles, with status and expiry |
+| `pimento activate (FILTER… \| --role NAME \| --id ID \| --all \| --preset NAME) -j TEXT [--hours N\|max] [--at WHEN] [--ticket NUMBER [--ticket-system NAME]] [--yes] [--dry-run] [--max-parallel N]` | Activates the matching roles that are not active yet, in parallel (8 at a time by default), or schedules them with `--at` |
+| `pimento deactivate (FILTER… \| --role NAME \| --id ID \| --all \| --preset NAME) [-j TEXT] [--yes] [--dry-run]` | Ends the matching activations now (`SelfDeactivate`) |
+| `pimento renew (FILTER… \| --role NAME \| --id ID \| --all \| --preset NAME) -j TEXT [--hours N\|max] [--ticket NUMBER [--ticket-system NAME]] [--yes] [--dry-run]` | Ends and activates the matching roles again, for a fresh duration (the role is off for a few minutes in between), with the original activation's ticket or `--ticket` |
 | `pimento extend (FILTER… \| --role NAME \| --all) -j TEXT [--days N] [--yes] [--dry-run]` | Asks an administrator to extend admin-assigned, time-bound assignments (`SelfExtend`) |
 | `pimento keep-alive (FILTER… \| --role NAME \| --all \| --preset NAME) [--days DAYS] [--window FROM-TO] [--hours N\|max] [-j TEXT] [--yes] [--dry-run]` | Keeps the matching roles active during working hours until Ctrl-C, with the app's [keep-alive rules](#keep-alive): reads your roles at least every 10 minutes and continues each one before it ends. Continuations already scheduled still start after Ctrl-C (`pimento cancel` withdraws them) |
 | `pimento scheduled` | Your scheduled activations and requests awaiting approval, from Azure |
@@ -988,7 +988,10 @@ limit, `PIMENTO_NO_UPDATE_CHECK=1`, demo mode). See [Updates](#updates).
 filters are OR-ed. A filter starting with `/` is an ARM scope and matches it and everything below
 it. `--role` matches the whole role name, case-insensitively, with `*` as a wildcard:
 `--role owner` is Owner only, `--role '*owner'` also matches Storage Blob Data Owner. Repeat
-`--role` for several roles. `activate` needs at least one FILTER, `--role`, `--all` or `--preset`.
+`--role` for several roles. `--id ID` (`list`, `activate`, `deactivate`, `renew`) selects exactly the
+role whose `id` or `eligibilityScheduleId` in `list --json` is ID, for scripts and launchers that
+picked one row: a scope filter would also match the roles below that scope. `activate` needs at least
+one FILTER, `--role`, `--id`, `--all` or `--preset`.
 
 **Duration.** `--hours N` (1 to 24, default 8) or `--hours max`. Before activating, `pimento` reads
 each role's PIM policy (`roleManagementPolicyAssignments`) and requests at most its maximum: the
@@ -1315,6 +1318,37 @@ multi round-trip requests), and an `initialize` handshake selects 2025-11-25, 20
 or 2024-11-05 (the newest of them for an unknown version; elicitation from 2025-06-18 on, as a
 server-to-client `elicitation/create` request). It has tools only (no resources or prompts).
 
+## Integrations
+
+Pimento also works from **Raycast** and **Alfred**. Both are thin launchers: they run the installed
+`pimento` CLI with `--json`, so they need it [installed](#install-the-command-line-tool) and signed in
+(`az login` or `pimento login`). They never talk to Azure or see a token. They look for it in
+`~/.local/bin`, then `PATH` and the Homebrew folders, then inside `/Applications/Pimento.app`, or
+where their settings say. Each has a demo mode setting (`pimento --demo`) to try it with synthetic
+data. Neither is in a store; install them from this repository.
+
+**Raycast** ([`integrations/raycast`](integrations/raycast/README.md)): *Search PIM Roles*
+(activate with a justification and duration, or deactivate), *Activate PIM Preset* and *Active PIM
+Roles* (with the time left). Needs Node.js 22.22 or later to install:
+
+```sh
+cd integrations/raycast
+npm ci
+npm run dev        # imports it into Raycast; stop with Ctrl-C, the extension stays
+```
+
+**Alfred** ([`integrations/alfred`](integrations/alfred/README.md), Alfred 5 with the Powerpack):
+the `pim` keyword lists presets and roles. ↩ on a role, then `>` and a justification, activates it;
+↩ on a preset activates it; ⌥↩ on an active role deactivates it. It uses only `/bin/sh` and
+JavaScript for Automation:
+
+```sh
+integrations/alfred/build.sh       # build/Pimento.alfredworkflow; open it to import into Alfred
+```
+
+Both pick a single role with `pimento activate --id` / `deactivate --id`, the `id` from
+`pimento list --json`, which scripts can use as well.
+
 ## How it works
 
 Pimento calls [Azure Resource Manager](https://learn.microsoft.com/rest/api/authorization/privileged-role-assignment-rest-sample)
@@ -1610,6 +1644,8 @@ scripts/test-install.*   test the installers against locally built archives (use
 scripts/update-homebrew.sh fills the Homebrew templates with a release's sums (build/homebrew/)
 scripts/make-icon.swift  draws the icon with CoreGraphics and runs iconutil
 packaging/homebrew/      unpublished Homebrew formula (CLI) and cask (app), and how to publish them
+integrations/raycast/    Raycast extension (TypeScript): runs the CLI, see its README
+integrations/alfred/     Alfred workflow (sh + JXA): runs the CLI; build.sh packs it, test.sh tests it
 ```
 
 The app builds with the Command Line Tools alone. That is why it avoids SwiftUI's `@State`

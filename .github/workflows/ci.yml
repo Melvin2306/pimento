@@ -28,6 +28,8 @@ jobs:
           # install.sh is POSIX sh (it runs as `curl … | sh`): checked as such.
           shellcheck --shell=sh scripts/install.sh
           shellcheck --severity=warning scripts/*.sh
+          # The Alfred workflow's scripts are POSIX sh too (Alfred runs them with /bin/sh).
+          shellcheck --shell=sh -x integrations/alfred/*.sh
           # And it parses with the shells it will meet as sh.
           sh -n scripts/install.sh
           bash --posix -n scripts/install.sh
@@ -49,6 +51,11 @@ jobs:
         run: swift build
       - name: Test
         run: swift test
+      - name: Alfred workflow (its scripts against pimento --demo, and the package)
+        run: |
+          integrations/alfred/test.sh .build/debug/pimento
+          integrations/alfred/build.sh
+          zipinfo -1 build/Pimento.alfredworkflow | sort | tr '\n' ' ' | grep -q 'action.sh alfred.js icon.png info.plist lib.sh scriptfilter.sh'
       - name: Bundle (universal)
         run: |
           scripts/bundle.sh --zip

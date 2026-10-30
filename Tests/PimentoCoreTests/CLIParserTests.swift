@@ -48,6 +48,27 @@ struct CLIParserTests {
         #expect(eligible.tenant == "contoso.onmicrosoft.com")
     }
 
+    @Test func idIsASelectionForListActivateDeactivateAndRenew() throws {
+        let id = "/subscriptions/00000000-0000-0000-0000-000000000001/providers/Microsoft.Authorization/roleEligibilityScheduleInstances/i1"
+        guard case .list(let l) = try command("list", "--id", id, "--json") else { Issue.record("expected list"); return }
+        #expect(l.criteria.ids == [id])
+        guard case .activate(let a) = try command("activate", "--id=\(id)", "--id", " \(id)2 ", "--justification=--why") else {
+            Issue.record("expected activate"); return
+        }
+        #expect(a.criteria.ids == [id, id + "2"])
+        #expect(a.criteria.hasSelection)
+        #expect(a.justification == "--why")
+        guard case .deactivate(let d) = try command("deactivate", "--id", id, "--yes") else { Issue.record("expected deactivate"); return }
+        #expect(d.criteria.ids == [id])
+        guard case .renew(let r) = try command("renew", "--id", id, "-j", "x") else { Issue.record("expected renew"); return }
+        #expect(r.criteria.ids == [id])
+        #expect(throws: CLIParseError.emptyFilter("--id")) { try command("activate", "--id", " ", "-j", "x") }
+        #expect(throws: CLIParseError.conflicting("--preset", "filters, --role, --id or --all")) {
+            try command("activate", "--preset", "On-call", "--id", id)
+        }
+        #expect(throws: CLIParseError.unknownOption("--id", command: "extend")) { try command("extend", "--id", id, "-j", "x") }
+    }
+
     @Test func activateCollectsEveryOption() throws {
         guard case .activate(let o) = try command(
             "activate", "prod", "--role", "Reader", "-j", "  INC-42 hotfix ", "--hours", "4", "-y", "--dry-run",
@@ -251,5 +272,31 @@ struct RoleCriteriaTests {
         let c = RoleCriteria(filters: ["/subscriptions/s3/"])
         #expect(c.apply([sub, rg, other]).map(\.id) == [sub.id, rg.id])
         #expect(RoleCriteria(filters: ["/subscriptions/s3/resourcegroups/rg-app"]).apply([sub, rg]).map(\.id) == [rg.id])
+    }
+
+    @Test func idsSelectExactlyOneRowAndNarrowLikeRole() {
+        let sub = EligibleRole(
+            id: "/subscriptions/s3/providers/Microsoft.Authorization/roleEligibilityScheduleInstances/i1",
+            eligibilityScheduleId: "/subscriptions/s3/providers/Microsoft.Authorization/roleEligibilitySchedules/e1",
+            roleDefinitionId: "/x/Contributor", roleName: "Contributor", scope: "/subscriptions/s3", scopeName: "Contoso Production",
+            scopeType: "subscription", membership: .direct, isActive: false)
+        // Same role below the same scope: a scope filter would match both.
+        let rg = EligibleRole(
+            id: "/subscriptions/s3/resourceGroups/rg-app/providers/Microsoft.Authorization/roleEligibilityScheduleInstances/i2",
+            eligibilityScheduleId: "/subscriptions/s3/resourceGroups/rg-app/providers/Microsoft.Authorization/roleEligibilitySchedules/e2",
+            roleDefinitionId: "/x/Contributor", roleName: "Contributor", scope: "/subscriptions/s3/resourceGroups/rg-app",
+            scopeName: "rg-app", scopeType: "resourcegroup", membership: .direct, isActive: true)
+        let roles = [sub, rg]
+        #expect(RoleCriteria(filters: ["/subscriptions/s3"], roles: ["Contributor"]).apply(roles).count == 2)
+        #expect(RoleCriteria(ids: [sub.id]).apply(roles).map(\.id) == [sub.id])
+        // The schedule id works too, case-insensitively and with a trailing slash.
+        #expect(RoleCriteria(ids: [rg.eligibilityScheduleId.uppercased() + "/"]).apply(roles).map(\.id) == [rg.id])
+        #expect(RoleCriteria(ids: [sub.id, rg.id]).apply(roles).count == 2)
+        // Not a prefix or substring match.
+        #expect(RoleCriteria(ids: ["/subscriptions/s3"]).apply(roles).isEmpty)
+        #expect(RoleCriteria(ids: ["i1"]).apply(roles).isEmpty)
+        // Narrowed by state like everything else.
+        #expect(RoleCriteria(ids: [sub.id, rg.id], state: .active).apply(roles).map(\.id) == [rg.id])
+        #expect(RoleCriteria(ids: ["x"]).hasSelection)
     }
 }

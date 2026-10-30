@@ -13,16 +13,21 @@ public struct RoleCriteria: Equatable, Sendable {
     /// Role names, OR-ed. Matched case-insensitively and exactly, so `owner`
     /// does not also pick "Storage Blob Data Owner"; `*` is a wildcard.
     public var roles: [String] = []
+    /// `--id`: exact roles, by the `id` or `eligibilityScheduleId` that
+    /// `list --json` prints (case-insensitive), OR-ed. For scripts and
+    /// launchers that picked one row and must not also match its neighbours.
+    public var ids: [String] = []
     public var state: State = .any
 
-    public init(filters: [String] = [], roles: [String] = [], state: State = .any) {
+    public init(filters: [String] = [], roles: [String] = [], ids: [String] = [], state: State = .any) {
         self.filters = filters
         self.roles = roles
+        self.ids = ids
         self.state = state
     }
 
     /// True when the caller named something to narrow the roles down.
-    public var hasSelection: Bool { !filters.isEmpty || !roles.isEmpty }
+    public var hasSelection: Bool { !filters.isEmpty || !roles.isEmpty || !ids.isEmpty }
 
     public func matches(_ role: EligibleRole) -> Bool {
         switch state {
@@ -32,6 +37,7 @@ public struct RoleCriteria: Equatable, Sendable {
         }
         if !roles.isEmpty, !roles.contains(where: { Self.glob($0, matches: role.roleName) }) { return false }
         if !filters.isEmpty, !filters.contains(where: { Self.filter($0, matches: role) }) { return false }
+        if !ids.isEmpty, !ids.contains(where: { Self.id($0, matches: role) }) { return false }
         return true
     }
 
@@ -50,6 +56,16 @@ public struct RoleCriteria: Equatable, Sendable {
             return scope == wanted || scope.hasPrefix(wanted + "/")
         }
         return role.scopeName.localizedCaseInsensitiveContains(filter)
+    }
+
+    static func id(_ id: String, matches role: EligibleRole) -> Bool {
+        func normalized(_ s: String) -> String {
+            var s = s.lowercased()
+            while s.count > 1, s.hasSuffix("/") { s.removeLast() }
+            return s
+        }
+        let wanted = normalized(id)
+        return wanted == normalized(role.id) || (!role.eligibilityScheduleId.isEmpty && wanted == normalized(role.eligibilityScheduleId))
     }
 
     /// Case-insensitive match of the whole name; `*` matches any run of characters.
@@ -608,10 +624,12 @@ public enum CLIParser {
         "--active": Flag(key: "active", takesValue: false),
         "--eligible": Flag(key: "eligible", takesValue: false),
         "--role": Flag(key: "role", takesValue: true),
+        "--id": Flag(key: "id", takesValue: true),
     ]) { a, _ in a }
 
     private static let activateFlags = tenant.merging(json) { a, _ in a }.merging([
         "--role": Flag(key: "role", takesValue: true),
+        "--id": Flag(key: "id", takesValue: true),
         "--all": Flag(key: "all", takesValue: false),
         "--justification": Flag(key: "justification", takesValue: true),
         "-j": Flag(key: "justification", takesValue: true),
@@ -636,6 +654,7 @@ public enum CLIParser {
 
     private static let deactivateFlags = tenant.merging(json) { a, _ in a }.merging([
         "--role": Flag(key: "role", takesValue: true),
+        "--id": Flag(key: "id", takesValue: true),
         "--all": Flag(key: "all", takesValue: false),
         "--justification": Flag(key: "justification", takesValue: true),
         "-j": Flag(key: "justification", takesValue: true),
@@ -905,6 +924,7 @@ public enum CLIParser {
         o.json = scan.values["json"] != nil
         o.criteria.filters = try terms(scan.positionals, "filter")
         o.criteria.roles = try terms(scan.values["role"] ?? [], "--role")
+        o.criteria.ids = try terms(scan.values["id"] ?? [], "--id")
         switch (scan.values["active"] != nil, scan.values["eligible"] != nil) {
         case (true, true): throw CLIParseError.conflicting("--active", "--eligible")
         case (true, false): o.criteria.state = .active
@@ -922,6 +942,7 @@ public enum CLIParser {
         o.json = scan.values["json"] != nil
         o.criteria.filters = try terms(scan.positionals, "filter")
         o.criteria.roles = try terms(scan.values["role"] ?? [], "--role")
+        o.criteria.ids = try terms(scan.values["id"] ?? [], "--id")
         o.all = scan.values["all"] != nil
         o.assumeYes = scan.values["yes"] != nil
         o.dryRun = scan.values["dry-run"] != nil
@@ -937,7 +958,7 @@ public enum CLIParser {
         // A system alone is no ticket; for renew it would also replace the original ticket.
         if o.ticketSystem != nil, o.ticketNumber == nil { throw CLIParseError.ticketSystemWithoutTicket }
         if o.preset != nil {
-            if o.criteria.hasSelection || o.all { throw CLIParseError.conflicting("--preset", "filters, --role or --all") }
+            if o.criteria.hasSelection || o.all { throw CLIParseError.conflicting("--preset", "filters, --role, --id or --all") }
             // The justification may come from the preset: checked once it is loaded.
             return .activate(o)
         }
@@ -956,6 +977,7 @@ public enum CLIParser {
         o.json = scan.values["json"] != nil
         o.criteria.filters = try terms(scan.positionals, "filter")
         o.criteria.roles = try terms(scan.values["role"] ?? [], "--role")
+        o.criteria.ids = try terms(scan.values["id"] ?? [], "--id")
         o.all = scan.values["all"] != nil
         o.assumeYes = scan.values["yes"] != nil
         o.dryRun = scan.values["dry-run"] != nil
@@ -970,7 +992,7 @@ public enum CLIParser {
         // A system alone is no ticket; for renew it would also replace the original ticket.
         if o.ticketSystem != nil, o.ticketNumber == nil { throw CLIParseError.ticketSystemWithoutTicket }
         if o.preset != nil {
-            if o.criteria.hasSelection || o.all { throw CLIParseError.conflicting("--preset", "filters, --role or --all") }
+            if o.criteria.hasSelection || o.all { throw CLIParseError.conflicting("--preset", "filters, --role, --id or --all") }
             return renew ? .renew(o) : .deactivate(o)
         }
         guard o.criteria.hasSelection || o.all else { throw CLIParseError.noActiveSelection(command) }

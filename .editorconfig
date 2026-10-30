@@ -13,3 +13,7 @@ indent_size = 2
 
 [*.md]
 trim_trailing_whitespace = false
+
+# The launcher integrations follow Raycast's (Prettier) style.
+[integrations/**.{ts,tsx,js,mts}]
+indent_size = 2

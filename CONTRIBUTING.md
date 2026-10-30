@@ -41,7 +41,10 @@ Guidelines:
 - The app must build with the Command Line Tools alone, so do not use macros that need full
   Xcode (for example SwiftUI's `@State` in the macOS 26 SDK; use the shared `AppModel`).
 - To change the icon, edit `scripts/make-icon.swift`, run `swift scripts/make-icon.swift`, and
-  commit the regenerated files in `Assets/`.
+  commit the regenerated files in `Assets/` (and copy `icon_512x512.png` to
+  `integrations/raycast/assets/icon.png`).
+- The Raycast extension and the Alfred workflow in `integrations/` only run the CLI. Something
+  they need goes into the CLI first (with tests); see their READMEs for their own checks.
 
 ## Pull requests
 

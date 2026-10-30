@@ -54,6 +54,19 @@ All notable changes to this project are documented here. The format follows
   command contacts GitHub. Versions are compared as semantic versions; drafts and pre-releases are
   ignored. Nothing is downloaded or installed automatically. `PIMENTO_NO_UPDATE_CHECK=1` turns it
   off in the app and the CLI, and demo mode never checks.
+- **`--id ID`** for `pimento list`, `activate`, `deactivate` and `renew`: exactly the role whose
+  `id` or `eligibilityScheduleId` in `list --json` is ID (repeatable). For scripts and launchers
+  that picked one row, where a scope filter would also match the roles below that scope.
+- **Raycast extension** (`integrations/raycast`): *Search PIM Roles* (status, activate with a
+  justification, duration and, when the policy asks, a ticket; deactivate), *Activate PIM Preset*
+  and *Active PIM Roles* with the time left. It runs the installed `pimento` with an argument list
+  (`execFile`, no shell), finds it in a preference, `~/.local/bin`, `PATH` or `Pimento.app`, shows
+  the CLI's errors by exit code, and has a demo mode preference. Not in the Raycast Store: install
+  it with `npm ci && npm run dev`.
+- **Alfred workflow** (`integrations/alfred`): the `pim` Script Filter lists presets, active roles
+  (time left) and eligible roles from the CLI's JSON; ↩ activates a role (after `>` and a
+  justification) or a preset, ⌥↩ deactivates. POSIX `sh` and JXA only. `build.sh` packs
+  `build/Pimento.alfredworkflow`; `test.sh` runs the scripts against `pimento --demo` (also in CI).
 
 ### Changed
 
