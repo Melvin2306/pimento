@@ -422,4 +422,15 @@ public extension ScheduledRequest {
         if awaiting > 0 { parts.append("\(awaiting) request\(awaiting == 1 ? "" : "s") awaiting approval") }
         return parts.joined(separator: " and ")
     }
+
+    /// The Cancel confirmation's text: what is cancelled (up to 8 rows by
+    /// role, resource and start) and what that means. `start` formats a start.
+    static func cancelConfirmation(_ requests: [ScheduledRequest], start: (Date) -> String) -> String {
+        let rows = requests.prefix(8).map { r in
+            "• \(r.roleName) · \(r.scopeName)" + (r.kind == .scheduled ? " (\(start(r.start)))" : " (awaiting approval)")
+        }
+        let more = requests.count > 8 ? ["… and \(requests.count - 8) more"] : []
+        return "Scheduled roles will not be activated at their start times, and requests awaiting approval are withdrawn. "
+            + "You can request them again.\n\n" + (rows + more).joined(separator: "\n")
+    }
 }

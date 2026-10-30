@@ -58,15 +58,20 @@ public struct ReminderPayload: Equatable, Sendable {
     public var roles: [ReminderRole]
     /// The tenant the roles are in (nil: az's default tenant).
     public var tenantId: String?
+    /// The object id of the account that activated the roles: Renew and End
+    /// Now act only while that account is the one signed in.
+    public var principalId: String?
     /// The justification of the activation, when the user keeps recent
     /// justifications; Renew reuses it. Otherwise Renew asks.
     public var justification: String?
     /// The duration the roles were activated for, to renew them alike.
     public var duration: RequestedDuration?
 
-    public init(roles: [ReminderRole], tenantId: String? = nil, justification: String? = nil, duration: RequestedDuration? = nil) {
+    public init(roles: [ReminderRole], tenantId: String? = nil, principalId: String? = nil, justification: String? = nil,
+                duration: RequestedDuration? = nil) {
         self.roles = roles
         self.tenantId = tenantId
+        self.principalId = principalId
         self.justification = justification
         self.duration = duration
     }
@@ -76,6 +81,7 @@ public struct ReminderPayload: Equatable, Sendable {
         static let lines = "roleLines"
         static let owners = "ownerKeys"
         static let tenant = "tenantId"
+        static let principal = "principalId"
         static let justification = "justification"
         static let duration = "duration"
     }
@@ -87,6 +93,7 @@ public struct ReminderPayload: Equatable, Sendable {
             Keys.owners: roles.filter(\.isOwner).map(\.key),
         ]
         if let tenantId { info[Keys.tenant] = tenantId }
+        if let principalId { info[Keys.principal] = principalId }
         if let justification, !justification.isEmpty { info[Keys.justification] = justification }
         if let duration { info[Keys.duration] = duration.stringValue }
         return info
@@ -101,6 +108,7 @@ public struct ReminderPayload: Equatable, Sendable {
             ReminderRole(key: key, line: i < lines.count ? lines[i] : key, isOwner: owners.contains(key))
         }
         tenantId = userInfo[Keys.tenant] as? String
+        principalId = userInfo[Keys.principal] as? String
         justification = (userInfo[Keys.justification] as? String).flatMap { $0.isEmpty ? nil : $0 }
         duration = (userInfo[Keys.duration] as? String).flatMap(RequestedDuration.init(stringValue:))
     }
@@ -117,6 +125,14 @@ public struct ReminderPayload: Equatable, Sendable {
     public func matchingActive(in roles: [EligibleRole]) -> [EligibleRole] {
         let wanted = Set(self.roles.map(\.key))
         return roles.filter { $0.isActive && wanted.contains(ReminderRole.key($0.policyKey)) }
+    }
+
+    /// Whether the reminder was set for `current` (the signed-in account's
+    /// object id). Unknown on either side is no: a reminder without an
+    /// account (or before the account is known) never acts.
+    public func isPrincipal(_ current: String?) -> Bool {
+        guard let principalId, let current else { return false }
+        return principalId.caseInsensitiveCompare(current) == .orderedSame
     }
 
     /// Whether the reminder's tenant is `current` (both nil counts).

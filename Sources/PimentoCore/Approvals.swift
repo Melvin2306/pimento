@@ -537,10 +537,30 @@ public struct ApprovalTracker: Equatable, Sendable {
     /// dropped silently (it should not vanish; if it does, nothing is said).
     public static let maxMisses = 3
 
+    /// Whose requests these are (object id) and in which tenant: a listing
+    /// for another account or tenant starts over instead of matching them.
+    public private(set) var principalId: String?
+    public private(set) var tenantId: String?
+
     public init() {}
 
     public var isEmpty: Bool { pending.isEmpty }
     public var count: Int { pending.count }
+
+    /// Forgets everything tracked when `principalId` or `tenantId` differ
+    /// from those of the requests tracked so far.
+    mutating func bind(principalId: String?, tenantId: String?) {
+        func differs(_ a: String?, _ b: String?) -> Bool {
+            guard let a, let b else { return false }
+            return a.caseInsensitiveCompare(b) != .orderedSame
+        }
+        if differs(self.principalId, principalId) || differs(self.tenantId, tenantId) {
+            pending = [:]
+            misses = [:]
+        }
+        if let principalId { self.principalId = principalId }
+        if let tenantId { self.tenantId = tenantId }
+    }
 
     /// Starts following `requests` (they must be waiting for approval).
     public mutating func track(_ requests: [ScheduledRequest]) {
@@ -559,8 +579,9 @@ public struct ApprovalTracker: Equatable, Sendable {
     /// decision are returned (and no longer tracked); with `trackNew`, requests
     /// that newly wait for approval are followed from now on.
     public mutating func update(
-        items: [AssignmentScheduleRequestItem], principalId: String?, now: Date, trackNew: Bool = true
+        items: [AssignmentScheduleRequestItem], principalId: String?, tenantId: String? = nil, now: Date, trackNew: Bool = true
     ) -> [ApprovalTransition] {
+        bind(principalId: principalId, tenantId: tenantId)
         var byName: [String: AssignmentScheduleRequestItem] = [:]
         for item in items {
             guard let p = item.properties else { continue }

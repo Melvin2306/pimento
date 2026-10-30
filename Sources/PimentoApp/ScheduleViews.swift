@@ -190,7 +190,7 @@ struct ScheduledSheet: View {
                 HStack {
                     Text("\(model.scheduledRequests.count) requests").font(.caption).foregroundStyle(.secondary)
                     Spacer()
-                    Button("Cancel All…", role: .destructive) { model.showCancelAllConfirmation = true }
+                    Button("Cancel All…", role: .destructive) { model.requestCancel(model.scheduledRequests) }
                         .themedButton(.secondary)
                         .disabled(!model.cancelling.isEmpty)
                 }
@@ -200,14 +200,11 @@ struct ScheduledSheet: View {
         }
         .themedPageBackground()
         .frame(minWidth: 760, idealWidth: 860, minHeight: 360, idealHeight: 460)
-        .alert("Cancel \(ScheduledRequest.countLabel(model.scheduledRequests))?", isPresented: $model.showCancelAllConfirmation) {
-            Button("Cancel All", role: .destructive) {
-                let all = model.scheduledRequests
-                Task { await model.cancelScheduled(all) }
-            }
+        .alert("Cancel \(ScheduledRequest.countLabel(model.cancelTargets))?", isPresented: $model.showCancelConfirmation) {
+            Button(model.cancelTargets.count == 1 ? "Cancel Request" : "Cancel All", role: .destructive) { model.confirmCancel() }
             Button("Keep", role: .cancel) {}
         } message: {
-            Text("Scheduled roles will not be activated at their start times, and requests awaiting approval are withdrawn. You can request them again.")
+            Text(ScheduledRequest.cancelConfirmation(model.cancelTargets, start: model.startLabel))
         }
     }
 
@@ -322,7 +319,7 @@ private struct ScheduledRow: View {
                 .foregroundStyle(.red)
                 .help(outcome.summary)
         } else {
-            Button("Cancel") { Task { await model.cancelScheduled([request]) } }
+            Button("Cancel…") { model.requestCancel([request]) }
                 .themedButton(.secondary)
                 .help(request.kind == .scheduled
                 ? "Cancel this request: the role will not be activated at \(model.startLabel(request.start))"

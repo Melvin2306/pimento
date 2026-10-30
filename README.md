@@ -271,7 +271,8 @@ notification sums it up. Reminders for ended roles are withdrawn; renewed roles 
 - **End Now** ends them right away; with an Owner role (and the Owner confirmation on), the app
   comes forward and asks first.
 
-Both act in the tenant the reminder is for; if the app shows another tenant, it says so instead.
+Both act in the tenant and for the account the reminder is for; if the app shows another tenant,
+or another account is signed in, it says so instead. Signing an account out removes its reminders.
 Both need an unlocked Mac: on the lock screen, macOS asks for your password or Touch ID first.
 
 ### Scheduled activations and tickets
@@ -292,7 +293,9 @@ The result column says *Scheduled for Fri 08:00*, and the start goes back to *No
 was scheduled. **Scheduled** in the toolbar (<kbd>⇧</kbd><kbd>⌘</kbd><kbd>L</kbd>) lists your activations that
 have not started and requests waiting for approval, read from Azure
 (`roleAssignmentScheduleRequests`, `$filter=asTarget()`), so it includes requests made in the
-portal or with the CLI. **Cancel** sends `POST …/roleAssignmentScheduleRequests/{id}/cancel`; a
+portal or with the CLI. **Cancel…** on a row and **Cancel All…** ask first, naming the requests,
+and send only those (not what a refresh added meanwhile); switching the account or tenant closes
+the question. Cancel sends `POST …/roleAssignmentScheduleRequests/{id}/cancel`; a
 request that started or was decided meanwhile cannot be cancelled (`RequestCannotBeCancelled`):
 end an active role with *Deactivate*. Eligible rows with a pending request show *Scheduled Fri 08:00*
 or *Awaiting approval*; active ones a calendar icon.
@@ -1061,7 +1064,7 @@ directly with the PIM APIs (`api-version=2020-10-01`):
   10 justifications (Settings › Activation clears them).
 - The only write calls are the `roleAssignmentScheduleRequests` `PUT`s (activate, deactivate,
   renew, extend), `POST …/cancel`, and the approval `PATCH` (approve, deny). They run after you
-  confirm in the app (Activate asks for Owner roles, Approve for Owner and the access administrator roles; Deactivate, Renew, Cancel All and
+  confirm in the app (Activate asks for Owner roles, Approve for Owner and the access administrator roles; Deactivate, Renew, Cancel and
   Deny always ask), after a tap on *Renew* / *End Now* in a reminder, or when the CLI command has
   your confirmation (or `--yes`). Following your requests for a decision is read-only (`GET`).
   **Preview** in the app and `pimento activate --dry-run` show the requests without sending them.

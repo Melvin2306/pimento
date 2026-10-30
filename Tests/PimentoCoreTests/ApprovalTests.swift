@@ -288,6 +288,29 @@ struct ApprovalTrackerTests {
         }
     }
 
+    /// Requests followed for one account or tenant are dropped, not matched,
+    /// when a listing comes for another (switching accounts or tenants).
+    @Test func anotherAccountOrTenantStartsOver() {
+        var tracker = ApprovalTracker()
+        _ = tracker.update(items: [requestItem(name, status: "PendingApproval")], principalId: Fixture.userOID, tenantId: "T1", now: Fixture.now)
+        #expect(tracker.count == 1)
+        // The same request name listed as decided for another account: nothing reported.
+        let other = "99999999-0000-4000-8000-000000000099"
+        #expect(tracker.update(items: [requestItem(name, status: "Provisioned", principal: other)], principalId: other, tenantId: "T1",
+                               now: Fixture.now).isEmpty)
+        #expect(tracker.isEmpty && tracker.principalId == other)
+        // Another tenant for the same account starts over too.
+        var t2 = ApprovalTracker()
+        _ = t2.update(items: [requestItem(name, status: "PendingApproval")], principalId: Fixture.userOID, tenantId: "T1", now: Fixture.now)
+        #expect(t2.update(items: [requestItem(name, status: "Denied")], principalId: Fixture.userOID, tenantId: "t2", now: Fixture.now).isEmpty)
+        #expect(t2.isEmpty)
+        // Same account and tenant (any case): followed as before.
+        var t3 = ApprovalTracker()
+        _ = t3.update(items: [requestItem(name, status: "PendingApproval")], principalId: Fixture.userOID, tenantId: "T1", now: Fixture.now)
+        #expect(t3.update(items: [requestItem(name, status: "Denied")], principalId: Fixture.userOID.uppercased(), tenantId: "t1",
+                          now: Fixture.now).count == 1)
+    }
+
     @Test func decisionsMadeBeforeTrackingAreNotReported() {
         var tracker = ApprovalTracker()
         #expect(tracker.update(items: [requestItem(name, status: "Denied")], principalId: Fixture.userOID, now: Fixture.now).isEmpty)
@@ -454,6 +477,57 @@ struct AccessGrantingRoleTests {
         let views = try String(contentsOf: AppSourceTests.appSources.appendingPathComponent("ApprovalViews.swift"), encoding: .utf8)
         #expect(views.contains("ApprovalRequest.privilegedNote(owners: owners, admins: admins)"))
         #expect(views.contains("request.isAccessAdministrator"))
+    }
+}
+
+/// Per-session app state (the app has no test target: checked on its sources).
+@Suite("App: state belongs to one account and tenant")
+struct AppSessionStateTests {
+    static func source(_ name: String) throws -> String {
+        try String(contentsOf: AppSourceTests.appSources.appendingPathComponent(name), encoding: .utf8)
+    }
+
+    @Test func aNewSessionDropsEveryOpenConfirmationAndItsTargets() throws {
+        let model = try Self.source("AppModel.swift")
+        let start = try #require(model.range(of: "func restartSession() {"))
+        let body = String(model[start.upperBound...].prefix(2000))
+        for reset in ["cancelTargets = []", "showCancelConfirmation = false", "showOwnerConfirmation = false",
+                      "showDeactivateConfirmation = false", "showRenewConfirmation = false", "lifecycleTargets = []",
+                      "showDecisionConfirmation = false", "dryRunPlans = []", "showDryRunSheet = false",
+                      "approvalTracker = ApprovalTracker()", "activationTickets = [:]", "approvalSelection = []"] {
+            #expect(body.contains(reset), "restartSession does not reset \(reset)")
+        }
+    }
+
+    @Test func cancelAsksAndSendsOnlyWhatItShowed() throws {
+        let views = try Self.source("ScheduleViews.swift")
+        #expect(views.contains("model.requestCancel([request])"))
+        #expect(views.contains("model.requestCancel(model.scheduledRequests)"))
+        #expect(!views.contains("cancelScheduled("), "a view cancels without the confirmation")
+        let model = try Self.source("AppModel.swift")
+        #expect(model.contains("let targets = cancelTargets.filter { listed.contains($0.name) }"))
+    }
+
+    @Test func remindersActOnlyForTheirAccountAndLeaveWithIt() throws {
+        let model = try Self.source("AppModel.swift")
+        #expect(model.contains("guard payload.isPrincipal(identity?.objectId) else {"))
+        #expect(model.contains("principalId: identity?.objectId,"))
+        let accounts = try Self.source("AccountModel.swift")
+        #expect(accounts.contains("Notifier.removeReminders(forPrincipals: [account.objectId])"))
+        #expect(accounts.contains("Notifier.removeReminders(forPrincipals: principals)"))
+    }
+
+    @Test func cancelConfirmationNamesWhatItCancels() {
+        let requests = (0..<10).map { i in
+            ScheduledRequest(id: "/x/\(i)", name: "\(i)", scope: "/subscriptions/s", roleDefinitionId: "r/Owner", roleName: "Owner",
+                             scopeName: "rg-\(i)", scopeType: "resourcegroup", status: i == 0 ? "PendingApproval" : "Granted",
+                             start: Fixture.now, end: nil)
+        }
+        let text = ScheduledRequest.cancelConfirmation(Array(requests.prefix(2)), start: { _ in "Fri 08:00" })
+        #expect(text.contains("• Owner · rg-1 (Fri 08:00)"))
+        #expect(text.hasPrefix("Scheduled roles will not be activated"))
+        let many = ScheduledRequest.cancelConfirmation(requests, start: { _ in "x" })
+        #expect(many.contains("… and 2 more") && !many.contains("rg-9"))
     }
 }
 

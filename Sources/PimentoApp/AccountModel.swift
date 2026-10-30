@@ -177,6 +177,7 @@ extension AppModel {
             do { try await broker.signOut(account.id) } catch {
                 banner = Banner(kind: .error, text: error.localizedDescription)
             }
+            Notifier.removeReminders(forPrincipals: [account.objectId])
             if authSettings.accountId == account.id { authSettings.accountId = nil }
             await reloadAccounts()
             if authSource == .pimento { restartSession() }
@@ -185,7 +186,9 @@ extension AppModel {
 
     func signOutAll() {
         guard !isActivating else { return }
+        let principals = Set(signedInAccounts.map(\.objectId))
         Task {
+            Notifier.removeReminders(forPrincipals: principals)
             do { try await broker.signOutAll() } catch {
                 banner = Banner(kind: .error, text: error.localizedDescription)
             }

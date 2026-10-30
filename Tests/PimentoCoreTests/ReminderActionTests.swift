@@ -36,7 +36,7 @@ struct ReminderActionTests {
 
     @Test func payloadRoundTripsThroughUserInfo() throws {
         let payload = ReminderPayload(
-            roles: try roles().map(ReminderRole.init), tenantId: "contoso.onmicrosoft.com",
+            roles: try roles().map(ReminderRole.init), tenantId: "contoso.onmicrosoft.com", principalId: Fixture.userOID,
             justification: "INC-1 on-call", duration: .hours(2))
         // userInfo goes through a property list in UserNotifications.
         let data = try PropertyListSerialization.data(fromPropertyList: payload.userInfo, format: .binary, options: 0)
@@ -48,6 +48,18 @@ struct ReminderActionTests {
         let bare = ReminderPayload(roles: payload.roles)
         #expect(bare.userInfo["justification"] == nil)
         #expect(ReminderPayload(userInfo: bare.userInfo)?.justification == nil)
+    }
+
+    /// A reminder acts only for the account that activated its roles: after
+    /// switching accounts the same scope and role are someone else's.
+    @Test func payloadActsOnlyForItsAccount() {
+        let mine = ReminderPayload(roles: [], principalId: Fixture.userOID.uppercased())
+        #expect(mine.isPrincipal(Fixture.userOID))
+        #expect(!mine.isPrincipal("99999999-0000-4000-8000-000000000099"))
+        #expect(!mine.isPrincipal(nil))
+        // Without an account (an older reminder) nothing is done.
+        #expect(!ReminderPayload(roles: []).isPrincipal(Fixture.userOID))
+        #expect(ReminderPayload(userInfo: ["roleKeys": ["k"], "principalId": "p"])?.principalId == "p")
     }
 
     @Test func payloadFindsItsActiveRolesAndTenant() throws {

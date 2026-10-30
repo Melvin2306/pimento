@@ -63,6 +63,7 @@ enum Notifier {
     /// What an expiry reminder needs for its actions.
     struct ReminderContext {
         var tenantId: String?
+        var principalId: String?
         var justification: String?
         var duration: RequestedDuration?
     }
@@ -83,7 +84,7 @@ enum Notifier {
 
         guard prefs.expiryReminders else { return }
         for reminder in summary.reminders {
-            let payload = ReminderPayload(roles: reminder.roles, tenantId: context.tenantId,
+            let payload = ReminderPayload(roles: reminder.roles, tenantId: context.tenantId, principalId: context.principalId,
                                           justification: context.justification, duration: context.duration)
             scheduleReminder(reminder, payload: payload, prefs: prefs)
         }
@@ -141,6 +142,26 @@ enum Notifier {
                 return payload.removing(keys) == nil
             }
             center.removeDeliveredNotifications(withIdentifiers: stale.map(\.request.identifier))
+        }
+    }
+
+    /// Removes pending and delivered expiry reminders set for `principals`
+    /// (object ids of accounts that signed out): their actions could no
+    /// longer act, and they should not outlive the account in Pimento.
+    static func removeReminders(forPrincipals principals: Set<String>) {
+        let ids = Set(principals.map { $0.lowercased() })
+        guard isAvailable, !ids.isEmpty else { return }
+        let center = UNUserNotificationCenter.current()
+        func isFor(_ request: UNNotificationRequest) -> Bool {
+            guard ActivationSummary.isReminder(request.identifier), DemoNotifications.isOwn(request.content),
+                  let principal = ReminderPayload(userInfo: request.content.userInfo)?.principalId else { return false }
+            return ids.contains(principal.lowercased())
+        }
+        center.getPendingNotificationRequests { requests in
+            center.removePendingNotificationRequests(withIdentifiers: requests.filter(isFor).map(\.identifier))
+        }
+        center.getDeliveredNotifications { delivered in
+            center.removeDeliveredNotifications(withIdentifiers: delivered.map(\.request).filter(isFor).map(\.identifier))
         }
     }
 
@@ -215,7 +236,7 @@ enum Notifier {
               let summary = ActivationSummary(roles: roles, outcomes: outcomes, operation: .activate, reminderLead: prefs.reminderLead)
         else { return }
         for reminder in summary.reminders {
-            let payload = ReminderPayload(roles: reminder.roles, tenantId: context.tenantId,
+            let payload = ReminderPayload(roles: reminder.roles, tenantId: context.tenantId, principalId: context.principalId,
                                           justification: context.justification, duration: context.duration)
             scheduleReminder(reminder, payload: payload, prefs: prefs)
         }

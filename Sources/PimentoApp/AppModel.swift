@@ -95,7 +95,10 @@ final class AppModel {
     /// Requests being cancelled, and how cancelling went.
     var cancelling: Set<String> = []
     var cancelResults: [String: CancelOutcome] = [:]
-    var showCancelAllConfirmation = false
+    /// The Cancel confirmation (a row's Cancel, or Cancel All) and the
+    /// requests it showed, picked when the button was pressed.
+    var showCancelConfirmation = false
+    private(set) var cancelTargets: [ScheduledRequest] = []
 
     // Ticket information: shown when a checked role's policy needs it, or on request.
     var ticketNumber = ""
@@ -523,7 +526,8 @@ final class AppModel {
             activationTickets = history.activationTickets
             scheduledLoadState = .loaded
             Notifier.syncScheduledStarts(requests, tenantId: history.identity.tenantId ?? effectiveTenantId, prefs: prefs)
-            let decided = approvalTracker.update(items: history.items, principalId: history.identity.objectId, now: AppClock.now())
+            let decided = approvalTracker.update(items: history.items, principalId: history.identity.objectId,
+                                                 tenantId: history.identity.tenantId, now: AppClock.now())
             updateApprovalPolling()
             if !decided.isEmpty { Task { await self.announce(decided) } }
         } catch {
@@ -592,6 +596,25 @@ final class AppModel {
         Task { await loadScheduled() }
     }
 
+    /// Asks before cancelling `requests` (a row, or every listed one): the
+    /// confirmation shows them, and only they are sent when it is accepted.
+    func requestCancel(_ requests: [ScheduledRequest]) {
+        let targets = requests.filter { !cancelling.contains($0.name) }
+        guard !targets.isEmpty else { return }
+        cancelTargets = targets
+        showCancelConfirmation = true
+    }
+
+    /// The confirmation was accepted: cancels what it showed that is still
+    /// listed (a refresh may have dropped some; a new session drops all).
+    func confirmCancel() {
+        let listed = Set(scheduledRequests.map(\.name))
+        let targets = cancelTargets.filter { listed.contains($0.name) }
+        cancelTargets = []
+        guard !targets.isEmpty else { return }
+        Task { await cancelScheduled(targets) }
+    }
+
     /// Cancels `requests` (POST …/cancel), then reads the list again.
     func cancelScheduled(_ requests: [ScheduledRequest]) async {
         let targets = requests.filter { !cancelling.contains($0.name) }
@@ -600,16 +623,20 @@ final class AppModel {
             cancelling.insert(r.name)
             cancelResults[r.name] = nil
         }
+        let generation = tenantGeneration
         do {
             try await service.cancel(targets) { r, outcome in
                 await MainActor.run {
+                    guard generation == self.tenantGeneration else { return }
                     self.cancelling.remove(r.name)
                     self.cancelResults[r.name] = outcome
                 }
             }
         } catch {
+            guard generation == tenantGeneration else { return }
             for r in targets { cancelResults[r.name] = .failed(code: "Auth", message: error.localizedDescription) }
         }
+        guard generation == tenantGeneration else { return }
         for r in targets { cancelling.remove(r.name) }
         let done = targets.filter { cancelResults[$0.name] == .canceled }
         let failed = targets.count - done.count
@@ -692,21 +719,27 @@ final class AppModel {
             decisionResults[r.name] = nil
         }
         let service = service
+        let generation = tenantGeneration
         do {
             let plans = try PlannedDecision.plan(await service.resolvingStages(targets), decision: decision,
                                                  justification: trimmedApprovalJustification)
+            // Switched account or tenant while the stages loaded: send nothing.
+            guard generation == tenantGeneration else { return }
             for p in plans where p.url == nil { decisionResults[p.request.name] = .notPending(DecisionOutcome.noOpenStageMessage) }
             try await service.decide(plans.filter { $0.url != nil }) { p, outcome in
                 await MainActor.run {
+                    guard generation == self.tenantGeneration else { return }
                     self.deciding.remove(p.request.name)
                     self.decisionResults[p.request.name] = outcome
                 }
             }
         } catch {
+            guard generation == tenantGeneration else { return }
             for r in targets where decisionResults[r.name] == nil {
                 decisionResults[r.name] = .failed(code: "Error", message: error.localizedDescription)
             }
         }
+        guard generation == tenantGeneration else { return }
         for r in targets { deciding.remove(r.name) }
         let done = targets.filter { decisionResults[$0.name] == .decided(decision) }
         let failed = targets.count - done.count
@@ -917,7 +950,20 @@ final class AppModel {
         policyTask = nil
         scheduledRequests = []
         scheduledLoadState = .idle
+        activationTickets = [:]
         cancelResults = [:]
+        cancelling = []
+        // Nothing asked in the previous session may be sent in this one.
+        cancelTargets = []
+        showCancelConfirmation = false
+        showOwnerConfirmation = false
+        showDeactivateConfirmation = false
+        showRenewConfirmation = false
+        lifecycleTargets = []
+        showDecisionConfirmation = false
+        deciding = []
+        dryRunPlans = []
+        showDryRunSheet = false
         approvalTracker = ApprovalTracker()
         updateApprovalPolling()
         approvalInbox = ApprovalInbox()
@@ -1111,6 +1157,8 @@ final class AppModel {
         Notifier.ReminderContext(
             // The GUID when known: the selection may be a domain.
             tenantId: identity?.tenantId ?? tenant.tenantId,
+            // Whose roles: the actions refuse to run as anyone else.
+            principalId: identity?.objectId,
             // Kept only when the user keeps recent justifications.
             justification: prefs.rememberJustifications && !justification.isEmpty ? justification : nil,
             duration: duration ?? self.duration)
@@ -1403,6 +1451,14 @@ final class AppModel {
         guard loadState == .loaded else {
             NSApp.activate(ignoringOtherApps: true)
             banner = Banner(kind: .error, text: "Could not load the roles to act on that reminder. Refresh, then renew or end them here.")
+            return
+        }
+        // Only for the account that activated the roles: after switching
+        // accounts the same scope and role would be someone else's.
+        guard payload.isPrincipal(identity?.objectId) else {
+            NSApp.activate(ignoringOtherApps: true)
+            banner = Banner(kind: .error, text: "That reminder is for another account than the one signed in now. "
+                + "Switch back to it, then renew or end the roles here.")
             return
         }
         // The reminder names the tenant by GUID (older ones as selected).

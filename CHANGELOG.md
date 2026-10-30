@@ -474,6 +474,15 @@ All notable changes to this project are documented here. The format follows
   root run, is refused when a folder on the way to the tool can be changed by someone other than
   root or you (another user's, group-writable outside wheel/admin, or world-writable); the
   administrator prompt names the link and its target.
+- The app keeps what it does to one account and tenant. Expiry reminders carry the object id of
+  the account that activated the roles, and **Renew** / **End Now** act only while that account is
+  signed in (a reminder without one, from an earlier version, only says so); signing an account
+  out removes its reminders. Switching account or tenant closes every open confirmation (Activate
+  Owner, End, Renew, Approve/Deny, Cancel) and the preview, forgets their targets, the followed
+  approval requests and the tickets of the previous session, and results of a decision or cancel
+  still running for it no longer land in the new one; the followed requests also start over when a
+  listing is for another account or tenant. **Cancel** on a row now asks first, and **Cancel All**
+  sends exactly the requests its confirmation showed instead of re-reading the list when tapped.
 
 ## [0.1.0] - 2026-10-29
 
