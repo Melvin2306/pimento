@@ -1,6 +1,7 @@
 Sources/PimentoApp/DemoSupport.swift
   s_4884204a812fec::t_b74bff5cfd5e16 1-280,283-287,303-334,336,339,341,343-345
   s_4884204a812fec::t_a8c1b1c445fda5 335,337-338,340,342,346-352
+  s_4884204a812fec::t_d180528cb30aff 281-282,288-302
 Sources/PimentoApp/AccountModel.swift
   s_4884204a812fec::t_bf7d2f318b0858 24,82-94
 Sources/PimentoApp/AppModel.swift
@@ -27,6 +28,10 @@ Sources/PimentoCore/PIMService.swift
   s_4884204a812fec::t_4677eab891d8a5 158-160
 Sources/PimentoCore/ScheduledRequest.swift
   s_4884204a812fec::t_794c2143ddeedb 314,320-322
+Sources/PimentoApp/SettingsView.swift
+  s_4884204a812fec::t_d180528cb30aff 91
+Sources/PimentoApp/AppearanceSettings.swift
+  s_4884204a812fec::t_5cbf4e572dd965 290
 ---
 {
   "schema_version": "authorship/3.0.0",
