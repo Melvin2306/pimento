@@ -270,6 +270,10 @@ All notable changes to this project are documented here. The format follows
   a small preview of each, the mode from a segmented control (the time-of-day times in one row),
   and the table columns as one row of checkboxes. Every option, its default and where it is
   stored are unchanged.
+- New app icon, "Countdown pepper": a flat red pimento with an up-chevron (elevation) inside an amber
+  countdown arc (time-boxed) on a deep wine squircle; the arc drops out at 32 px and the chevron at
+  16 px. The menu bar glyph matches: the pepper's silhouette with the chevron cut out, instead of
+  the shield. Both are drawn by `scripts/make-icon.swift`.
 - The `az not found` error names the install command of the platform (`brew`, Microsoft's Linux
   packages, `winget`). An HTTP error without a body reads the same on every platform ("forbidden").
 - The app binary is `Pimento.app/Contents/MacOS/Pimento` (SwiftPM product `PimentoApp`:
