@@ -343,52 +343,74 @@ struct HistoryFilterTests {
 @Suite("History CSV")
 struct HistoryCSVTests {
     @Test func escapesPerRFC4180() {
-        #expect(HistoryCSV.field("plain") == "plain")
+        // Every field is quoted.
+        #expect(HistoryCSV.field("plain") == "\"plain\"")
         #expect(HistoryCSV.field("a,b") == "\"a,b\"")
         #expect(HistoryCSV.field("say \"hi\"") == "\"say \"\"hi\"\"\"")
         #expect(HistoryCSV.field("two\nlines") == "\"two\nlines\"")
         #expect(HistoryCSV.field("cr\r\nlf") == "\"cr\r\nlf\"")
-        #expect(HistoryCSV.field("") == "")
+        #expect(HistoryCSV.field("") == "\"\"")
         #expect(HistoryCSV.field("Grüße, 東京") == "\"Grüße, 東京\"")
+        #expect(HistoryCSV.field("a;b") == "\"a;b\"")
     }
 
     @Test func guardsAgainstFormulaInjection() {
-        #expect(HistoryCSV.field("=1+2") == "'=1+2")
-        #expect(HistoryCSV.field("+SUM(A1)") == "'+SUM(A1)")
-        #expect(HistoryCSV.field("-2+3") == "'-2+3")
-        #expect(HistoryCSV.field("@cmd") == "'@cmd")
-        #expect(HistoryCSV.field("\tx") == "'\tx")
+        #expect(HistoryCSV.field("=1+2") == "\"'=1+2\"")
+        #expect(HistoryCSV.field("+SUM(A1)") == "\"'+SUM(A1)\"")
+        #expect(HistoryCSV.field("-2+3") == "\"'-2+3\"")
+        #expect(HistoryCSV.field("@cmd") == "\"'@cmd\"")
+        #expect(HistoryCSV.field("\tx") == "\"'\tx\"")
         #expect(HistoryCSV.field("\rx") == "\"'\rx\"")
         #expect(HistoryCSV.field("\r\nx") == "\"'\r\nx\"")
         #expect(HistoryCSV.field("=HYPERLINK(\"http://example.invalid\",\"x\")") == "\"'=HYPERLINK(\"\"http://example.invalid\"\",\"\"x\"\")\"")
-        // Only the first character counts.
-        #expect(HistoryCSV.field("a=b") == "a=b")
-        #expect(HistoryCSV.field(" =b") == " =b")
+        // Inside a field only what follows a ; or a tab counts.
+        #expect(HistoryCSV.field("a=b") == "\"a=b\"")
+        #expect(HistoryCSV.field(" =b") == "\" =b\"")
+        #expect(HistoryCSV.field("a,=b") == "\"a,=b\"")
+    }
+
+    /// A spreadsheet that splits on `;` (a regional list separator) or tabs,
+    /// quotes or not, must find no cell that starts a formula.
+    @Test func noCellStartsAFormulaWhenSplitOnSemicolonsOrTabs() {
+        let hostile = ["INC1;=1+1;", ";=HYPERLINK(T2);x", "Mallory;=2+2; <m@example.com>", "a\t=1", "x;+1;-2;@3", "a;\t=b"]
+        for value in hostile {
+            let f = HistoryCSV.field(value)
+            #expect(f.hasPrefix("\"") && f.hasSuffix("\""), "\(value)")
+            for raw in [f, String(f.dropFirst().dropLast())] {
+                let cells = raw.components(separatedBy: CharacterSet(charactersIn: ";\t"))
+                for cell in cells {
+                    let first = cell.trimmingCharacters(in: CharacterSet(charactersIn: "\"")).unicodeScalars.first
+                    #expect(first.map { !HistoryCSV.formulaStarts.contains($0) } ?? true, "\(value) → \(cell)")
+                }
+            }
+        }
+        #expect(HistoryCSV.field("INC1;=1+1;") == "\"INC1;'=1+1;\"")
     }
 
     @Test func documentHasHeaderCRLFAndBothTimes() throws {
         var r = HistoryRecord.sample(1, tenantLabel: "Contoso", justification: "deploy, release \"2.4\"")
         r.message = "=cmd|' /C calc'!A0"
+        r.ticketNumber = "INC1;=1+1;"
         let csv = HistoryCSV.encode([r], timeZone: TimeZone(identifier: "Europe/Berlin")!)
         #expect(csv.hasSuffix("\r\n"))
         let lines = csv.components(separatedBy: "\r\n")
         #expect(lines.count == 3 && lines[2].isEmpty)
-        #expect(lines[0] == HistoryCSV.columns.joined(separator: ","))
-        #expect(lines[1].hasPrefix("2026-10-29T12:00:00.000Z,2026-10-29 13:00:00 +01:00,activate,succeeded,Provisioned,'=cmd|' /C calc'!A0,"))
+        #expect(lines[0] == HistoryCSV.columns.map { "\"\($0)\"" }.joined(separator: ","))
+        #expect(lines[1].hasPrefix("\"2026-10-29T12:00:00.000Z\",\"2026-10-29 13:00:00 +01:00\",\"activate\",\"succeeded\",\"Provisioned\",\"'=cmd|' /C calc'!A0\","))
         #expect(lines[1].contains(",\"deploy, release \"\"2.4\"\"\","))
-        #expect(lines[1].contains(",Contoso,Owner,Contoso Production,"))
-        #expect(lines[1].hasSuffix(",cli,0.1.0"))
+        #expect(lines[1].contains(",\"INC1;'=1+1;\","))
+        #expect(lines[1].contains(",\"Contoso\",\"Owner\",\"Contoso Production\","))
+        #expect(lines[1].hasSuffix(",\"cli\",\"0.1.0\""))
         // No bare LF outside quoted fields.
         #expect(!csv.replacingOccurrences(of: "\r\n", with: "").contains("\n"))
-        #expect(HistoryCSV.columns.count == lines[1].split(separator: ",", omittingEmptySubsequences: false).count - 1,
-                "one extra comma inside the quoted justification")
+        #expect(HistoryCSV.columns.count == lines[1].components(separatedBy: "\",\"").count)
     }
 
     @Test func writesTheFileReadableOnlyByYou() throws {
         let url = temporaryHistoryURL().deletingLastPathComponent().appendingPathComponent("export.csv")
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try HistoryCSV.write([.sample(1)], to: url, timeZone: TimeZone(identifier: "UTC")!)
-        #expect(try String(contentsOf: url, encoding: .utf8).hasPrefix("timestamp_utc,local_time,"))
+        #expect(try String(contentsOf: url, encoding: .utf8).hasPrefix("\"timestamp_utc\",\"local_time\","))
         #expect(hasMode(url.path, 0o600))
     }
 }

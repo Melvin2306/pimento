@@ -402,6 +402,9 @@ All notable changes to this project are documented here. The format follows
   (`authenticationRequired`): someone at the locked screen can no longer end (or renew) your roles
   from the notification. End Now on an Owner role brings the app forward and asks first, as the
   app's own Deactivate does.
+- The history CSV quotes every field and puts the formula guard (`'`) also after each `;` or tab
+  inside a field: a ticket number such as `INC1;=1+1;` from a requester no longer becomes a formula
+  cell in a spreadsheet that splits on `;` (the list separator of many locales).
 
 ## [0.1.0] - 2026-10-29
 

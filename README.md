@@ -377,12 +377,14 @@ Readers ignore fields they do not know and skip lines they cannot read.
 ```
 
 The CSV export is [RFC 4180](https://www.rfc-editor.org/rfc/rfc4180): UTF-8, a header row, CRLF line
-ends, fields with a comma, quote or line break quoted. Columns: `timestamp_utc` (ISO 8601),
+ends, every field quoted. Columns: `timestamp_utc` (ISO 8601),
 `local_time`, `action`, `result`, `status`, `message`, `tenant_id`, `tenant`, `role`, `resource`,
 `scope`, `requested_duration`, `duration_minutes`, `start_utc`, `end_utc`, `justification`,
 `ticket_number`, `ticket_system`, `request_id`, `requester` (approve/deny), `source`,
-`pimento_version`. A field that starts with `=`, `+`, `-`, `@`, a tab or a carriage return gets a
-leading `'`, so a spreadsheet does not run it as a formula. The file is written with mode 600.
+`pimento_version`. Text that starts with `=`, `+`, `-`, `@`, a tab or a carriage return gets a `'` in
+front, at the start of a field and after every `;` or tab inside it, so a spreadsheet does not run
+it as a formula, even one that splits cells on `;` (the list separator of many locales). The file is
+written with mode 600.
 
 ### Presets
 

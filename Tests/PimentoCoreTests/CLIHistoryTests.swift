@@ -207,10 +207,10 @@ struct CLIHistoryCommandTests {
 
         let c = try seeded()
         #expect(await c.run("history", "--csv") == 0)
-        #expect(c.out.hasPrefix("timestamp_utc,local_time,action,"))
+        #expect(c.out.hasPrefix("\"timestamp_utc\",\"local_time\",\"action\","))
         #expect(c.out.hasSuffix("\r\n"))
         #expect(c.out.components(separatedBy: "\r\n").count == 5)
-        #expect(c.out.contains(",'=cmd,"))
+        #expect(c.out.contains(",\"'=cmd\","))
         #expect(c.out.contains("\"deploy, release 2.4\""))
     }
 
@@ -221,12 +221,12 @@ struct CLIHistoryCommandTests {
         #expect(h.err.contains("Exported 1 record to \(file.path)"))
         let text = try String(contentsOf: file, encoding: .utf8)
         #expect(text.components(separatedBy: "\r\n").count == 3)
-        #expect(text.contains(",approve,") && text.contains(",'=cmd,"))
+        #expect(text.contains(",\"approve\",") && text.contains(",\"'=cmd\","))
         #expect(hasMode(file.path, 0o600))
 
         let stdout = try seeded()
         #expect(await stdout.run("history", "export", "-") == 0)
-        #expect(stdout.out.hasPrefix("timestamp_utc,"))
+        #expect(stdout.out.hasPrefix("\"timestamp_utc\","))
 
         // Under a regular file: unwritable on every platform (`/dev/null/…`
         // is an ordinary, creatable path on Windows).

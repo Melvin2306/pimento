@@ -1,10 +1,12 @@
 import Foundation
 
 /// The history as CSV (RFC 4180): a header row, CRLF line endings, UTF-8,
-/// fields quoted when they hold a comma, quote or line break. Times are ISO
-/// 8601 UTC, plus one column in local time. Text that a spreadsheet would run
-/// as a formula (starting with `=`, `+`, `-`, `@`, tab or CR) gets a leading
-/// `'`, so a justification cannot become a formula when the file is opened.
+/// every field quoted. Times are ISO 8601 UTC, plus one column in local time.
+/// Text that a spreadsheet would run as a formula (`=`, `+`, `-`, `@`, tab or
+/// CR) gets a `'` in front, at the start of a field and after every `;` or
+/// tab in it: a spreadsheet that splits cells on `;` (the list separator of
+/// many locales) or tabs still finds no formula there. Most of the text is
+/// someone else's (a requester's ticket, a display name).
 public enum HistoryCSV {
     public static let columns = [
         "timestamp_utc", "local_time", "action", "result", "status", "message", "tenant_id", "tenant", "role", "resource",
@@ -38,12 +40,20 @@ public enum HistoryCSV {
     /// (Unicode scalars: `"\r\n"` is a single `Character`.)
     static let formulaStarts: Set<Unicode.Scalar> = ["=", "+", "-", "@", "\t", "\r"]
 
-    /// One field: formula-guarded, then quoted if needed.
+    /// Cell separators other than the comma that a spreadsheet may split on.
+    static let otherSeparators: Set<Unicode.Scalar> = [";", "\t"]
+
+    /// One field: formula-guarded at its start and after each `;` or tab,
+    /// then quoted.
     public static func field(_ value: String) -> String {
-        var s = value
-        if let first = s.unicodeScalars.first, formulaStarts.contains(first) { s = "'" + s }
-        guard s.unicodeScalars.contains(where: { $0 == "," || $0 == "\"" || $0 == "\n" || $0 == "\r" }) else { return s }
-        return "\"" + s.replacingOccurrences(of: "\"", with: "\"\"") + "\""
+        var guarded = String.UnicodeScalarView()
+        var cellStart = true
+        for scalar in value.unicodeScalars {
+            if cellStart, formulaStarts.contains(scalar) { guarded.append("'") }
+            guarded.append(scalar)
+            cellStart = otherSeparators.contains(scalar)
+        }
+        return "\"" + String(guarded).replacingOccurrences(of: "\"", with: "\"\"") + "\""
     }
 
     /// Writes the CSV to `url`, readable only by you (it holds justifications).
