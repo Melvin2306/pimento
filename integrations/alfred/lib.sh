@@ -23,9 +23,32 @@ pim_demo() {
   esac
 }
 
+# True when FILE (a regular executable file) can be run: the real file
+# (symbolic links followed) and its folder belong to root or you, nobody else
+# may write them (unless root's and sticky, like /tmp), and their group may
+# only for wheel or admin. The CLI's rule for az (PathTrust.isTrusted).
+pim_trusted() {
+  [ -f "$1" ] && [ -x "$1" ] || return 1
+  real=$(realpath "$1" 2>/dev/null) || return 1
+  me=$(id -u)
+  for p in "$real" "$(dirname -- "$real")"; do
+    info=$(stat -f '%u %g %Lp' "$p" 2>/dev/null) || return 1
+    IFS=' ' read -r uid gid perm <<EOF
+$info
+EOF
+    perm=$((0$perm))
+    [ "$uid" = 0 ] || [ "$uid" = "$me" ] || return 1
+    if [ $((perm & 2)) -ne 0 ] && ! { [ "$uid" = 0 ] && [ $((perm & 512)) -ne 0 ]; }; then return 1; fi
+    if [ $((perm & 16)) -ne 0 ]; then
+      case $gid in 0 | 80) ;; *) return 1 ;; esac
+    fi
+  done
+  return 0
+}
+
 # Prints the pimento to run: pimento_path when set; else ~/.local/bin/pimento,
 # then PATH plus the Homebrew folders (Alfred's PATH is short), then the copy
-# inside Pimento.app. Fails when there is none.
+# inside Pimento.app, each only when pim_trusted. Fails when there is none.
 pim_find() {
   if [ -n "${pimento_path:-}" ]; then
     case $pimento_path in
@@ -35,7 +58,7 @@ pim_find() {
     esac
     return 0
   fi
-  if [ -f "$HOME/.local/bin/pimento" ] && [ -x "$HOME/.local/bin/pimento" ]; then
+  if pim_trusted "$HOME/.local/bin/pimento"; then
     printf '%s\n' "$HOME/.local/bin/pimento"
     return 0
   fi
@@ -45,7 +68,7 @@ pim_find() {
   for dir in $PATH /opt/homebrew/bin /usr/local/bin; do
     # Absolute folders only: a relative PATH entry would depend on the working directory.
     case $dir in /*) ;; *) continue ;; esac
-    if [ -f "$dir/pimento" ] && [ -x "$dir/pimento" ]; then
+    if pim_trusted "$dir/pimento"; then
       IFS=$old_ifs
       set +f
       printf '%s\n' "$dir/pimento"
@@ -54,7 +77,7 @@ pim_find() {
   done
   IFS=$old_ifs
   set +f
-  if [ -f "$pim_app_helper" ] && [ -x "$pim_app_helper" ]; then
+  if pim_trusted "$pim_app_helper"; then
     printf '%s\n' "$pim_app_helper"
     return 0
   fi

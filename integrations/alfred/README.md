@@ -36,7 +36,7 @@ Open `build/Pimento.alfredworkflow` to import it into Alfred, then fill in its c
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
-| pimento path | empty | The `pimento` binary. Empty: `~/.local/bin/pimento`, then `PATH`, `/opt/homebrew/bin` and `/usr/local/bin` (Alfred's `PATH` is short), then `/Applications/Pimento.app/Contents/Helpers/pimento`. |
+| pimento path | empty | The `pimento` binary. Empty: `~/.local/bin/pimento`, then `PATH`, `/opt/homebrew/bin` and `/usr/local/bin` (Alfred's `PATH` is short), then `/Applications/Pimento.app/Contents/Helpers/pimento`, skipping one that someone else could have placed or changed (the file or its folder not yours or root's, or writable by others or by a group other than wheel or admin). |
 | Tenant | empty | Passed as `--tenant`. Empty: `$PIMENTO_TENANT`, then the signed-in tenant. A preset uses its own tenant. |
 | Duration | 8 hours | The duration for ↩, capped at each role's maximum. |
 | Demo mode | off | Runs everything with `--demo`: synthetic data (Contoso), offline, without your files or tokens. Each command starts from the demo data, so an activation does not show up in the next list. |

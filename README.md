@@ -1359,7 +1359,8 @@ Pimento also works from **Raycast** and **Alfred**. Both are thin launchers: the
 `pimento` CLI with `--json`, so they need it [installed](#install-the-command-line-tool) and signed in
 (`az login` or `pimento login`). They never talk to Azure or see a token. They look for it in
 `~/.local/bin`, then `PATH` and the Homebrew folders, then inside `/Applications/Pimento.app`, or
-where their settings say. Each has a demo mode setting (`pimento --demo`) to try it with synthetic
+where their settings say; like the CLI with `az`, they skip a `pimento` whose file or folder another
+user could change. Each has a demo mode setting (`pimento --demo`) to try it with synthetic
 data. Neither is in a store; install them from this repository.
 
 **Raycast** ([`integrations/raycast`](integrations/raycast/README.md)): *Search PIM Roles*

@@ -149,6 +149,19 @@ printf '#!/bin/sh\n: >"%s/ran"\n' "$cache" >"$cache/cwd/relbin/pimento"
 chmod 755 "$cache/cwd/relbin/pimento"
 (cd "$cache/cwd" && pimento_path='' PATH=relbin:/usr/bin:/bin HOME="$cache/home" "$here/scriptfilter.sh" "" >/dev/null)
 if [ -e "$cache/ran" ]; then fail "a relative PATH entry is not searched"; else pass "a relative PATH entry is not searched"; fi
+# A pimento someone else could have placed or changed is skipped: one in a folder
+# others can write, or one its group can write. One only you can change is used.
+for d in shared grp own; do
+  mkdir -p "$cache/$d"
+  printf '#!/bin/sh\n: >"%s/ran-%s"\nexit 3\n' "$cache" "$d" >"$cache/$d/pimento"
+  chmod 755 "$cache/$d" "$cache/$d/pimento"
+done
+chmod 777 "$cache/shared"
+chgrp "$(id -g)" "$cache/grp/pimento"
+chmod 775 "$cache/grp/pimento"
+pimento_path='' PATH="$cache/shared:$cache/grp:$cache/own:/usr/bin:/bin" HOME="$cache/home" alfred_workflow_cache="$cache/fresh" "$here/scriptfilter.sh" "" >/dev/null
+if [ -e "$cache/ran-shared" ] || [ -e "$cache/ran-grp" ]; then fail "a pimento others can change is not run"; else pass "a pimento others can change is not run"; fi
+if [ -e "$cache/ran-own" ]; then pass "a pimento only you can change is run"; else fail "a pimento only you can change is run"; fi
 out=$(pim_action=bogus "$here/action.sh")
 check "an unknown action does nothing" '"Unknown action" in d["alfredworkflow"]["arg"]' "$out"
 

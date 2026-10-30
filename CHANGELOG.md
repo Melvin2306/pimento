@@ -127,6 +127,10 @@ All notable changes to this project are documented here. The format follows
   justification and the ticket system as plain text, no longer as Markdown, in which a name from
   Azure or the presets file (`![](https://…)`) could load a remote image as soon as the row was
   selected, or show a link.
+- The Raycast extension and the Alfred workflow skip a `pimento` that another user could have
+  placed or changed when they look for it (the file, after following links, or its folder not
+  owned by you or root, or writable by others or by a group other than wheel or admin), as the CLI
+  does for `az`. Before, a `pimento` in a shared, writable folder on the `PATH` would have been run.
 - The update check sends one HTTPS `GET` to `api.github.com` with only `User-Agent:
   Pimento/<version>` and a fixed `Accept-Language: en` (no cookies, tokens or IDs; the same two
   headers as the logo fetch), with a timeout, through a guard that

@@ -3,9 +3,9 @@
 // can load this file with plain Node.
 
 import { execFile } from "node:child_process";
-import { accessSync, constants, statSync } from "node:fs";
+import { accessSync, constants, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { delimiter, isAbsolute, join } from "node:path";
+import { delimiter, dirname, isAbsolute, join } from "node:path";
 
 // MARK: - JSON shapes (README › The command line › Output)
 
@@ -133,10 +133,46 @@ function isExecutable(path: string): boolean {
   }
 }
 
+export interface FileOwner {
+  uid: number;
+  gid: number;
+  mode: number;
+}
+
+/** The groups that may share a system folder: wheel (0) and admin (80). */
+const systemGroups = new Set([0, 80]);
+
+/**
+ * The CLI's rule for `az` and `xdg-open` (PathTrust.isTrusted): owned by
+ * root or `user`, not writable by others (unless root's and sticky, like
+ * /tmp), and writable by its group only for wheel or admin.
+ */
+export function isTrustedOwner(i: FileOwner, user: number): boolean {
+  if (i.uid !== 0 && i.uid !== user) return false;
+  if (i.mode & 0o002 && !(i.uid === 0 && i.mode & 0o1000)) return false;
+  if (i.mode & 0o020 && !systemGroups.has(i.gid)) return false;
+  return true;
+}
+
+/**
+ * The real file (symbolic links followed) and its folder belong to root or
+ * you and nobody else can change them: a `pimento` someone else could have
+ * placed or replaced is skipped.
+ */
+export function isTrusted(path: string, user: number = process.getuid?.() ?? -1): boolean {
+  try {
+    const real = realpathSync(path);
+    return [real, dirname(real)].every((p) => isTrustedOwner(statSync(p), user));
+  } catch {
+    return false;
+  }
+}
+
 /**
  * The `pimento` to run: the configured path when there is one (used as is,
  * even if missing, so the error names it); otherwise ~/.local/bin/pimento,
- * then PATH (plus the Homebrew folders), then the copy inside Pimento.app.
+ * then PATH (plus the Homebrew folders), then the copy inside Pimento.app,
+ * each only when it is executable and trusted (`isTrusted`).
  */
 export function candidatePaths(
   configured: string | undefined,
@@ -154,7 +190,7 @@ export function candidatePaths(
 export function findPimento(
   configured: string | undefined,
   env: NodeJS.ProcessEnv = process.env,
-  exists: (path: string) => boolean = isExecutable,
+  exists: (path: string) => boolean = (p) => isExecutable(p) && isTrusted(p),
 ): string | undefined {
   const own = configured?.trim();
   if (own) return expandHome(own);

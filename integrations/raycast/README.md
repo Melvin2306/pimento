@@ -25,6 +25,10 @@ submitted and shows *Awaiting approval*: nothing is active until an approver dec
   3. `PATH`, then `/opt/homebrew/bin` and `/usr/local/bin` (Raycast's own `PATH` is short);
   4. `/Applications/Pimento.app/Contents/Helpers/pimento`, the copy inside the app.
 
+  In 2 to 4 it skips a `pimento` that someone else could have placed or changed, as the CLI does
+  for `az`: the file (after following links) and its folder must belong to you or root, and
+  neither may be writable by others, nor by its group unless that is wheel or admin.
+
 ## Install
 
 The extension is not in the Raycast Store. Install it from this folder:

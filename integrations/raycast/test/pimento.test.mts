@@ -5,7 +5,8 @@
 // skipped when neither exists.
 
 import assert from "node:assert/strict";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { describe as suite, test } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -24,6 +25,8 @@ import {
   findPimento,
   formatDuration,
   formatTimeLeft,
+  isTrusted,
+  isTrustedOwner,
   listArgs,
   PimentoError,
   presetDetail,
@@ -74,6 +77,46 @@ suite("finding pimento", () => {
       "/usr/local/bin/pimento",
       appHelperPath,
     ]);
+  });
+});
+
+suite("trusting a pimento", () => {
+  const me = 501;
+  test("the CLI's rule: root or you, nobody else may write", () => {
+    assert.equal(isTrustedOwner({ uid: me, gid: 20, mode: 0o755 }, me), true);
+    assert.equal(isTrustedOwner({ uid: 0, gid: 0, mode: 0o755 }, me), true);
+    assert.equal(isTrustedOwner({ uid: 502, gid: 20, mode: 0o755 }, me), false);
+    assert.equal(isTrustedOwner({ uid: me, gid: 20, mode: 0o757 }, me), false);
+    assert.equal(isTrustedOwner({ uid: me, gid: 20, mode: 0o775 }, me), false);
+    // A group-writable system folder (admin, wheel) and root's sticky /tmp are fine.
+    assert.equal(isTrustedOwner({ uid: 0, gid: 80, mode: 0o775 }, me), true);
+    assert.equal(isTrustedOwner({ uid: 0, gid: 0, mode: 0o1777 }, me), true);
+    assert.equal(isTrustedOwner({ uid: me, gid: 20, mode: 0o1777 }, me), false);
+  });
+
+  test("a pimento in a folder others can write, or that others can write, is skipped", (t) => {
+    if (!process.getuid) return t.skip("no POSIX owners here");
+    const root = mkdtempSync(join(tmpdir(), "pimento-trust-"));
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    const shared = join(root, "shared");
+    const own = join(root, "own");
+    for (const dir of [shared, own]) mkdirSync(dir);
+    chmodSync(shared, 0o777);
+    chmodSync(own, 0o755);
+    for (const dir of [shared, own]) {
+      writeFileSync(join(dir, "pimento"), "#!/bin/sh\n");
+      chmodSync(join(dir, "pimento"), 0o755);
+    }
+    assert.equal(isTrusted(join(own, "pimento")), true);
+    assert.equal(isTrusted(join(shared, "pimento")), false);
+    // The real file counts, not the link.
+    symlinkSync(join(shared, "pimento"), join(own, "via-link"));
+    assert.equal(isTrusted(join(own, "via-link")), false);
+    symlinkSync(join(own, "pimento"), join(shared, "to-own"));
+    assert.equal(isTrusted(join(shared, "to-own")), true);
+    chmodSync(join(own, "pimento"), 0o775);
+    assert.equal(isTrusted(join(own, "pimento")), false);
+    assert.equal(isTrusted(join(own, "missing")), false);
   });
 });
 
