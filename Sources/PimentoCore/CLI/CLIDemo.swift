@@ -10,7 +10,7 @@ extension CLIEnvironment {
     /// the user's tenant, auth source, client ID and token store.
     static let demoIgnoredVariables = [
         TenantResolver.environmentVariable, AuthSourceResolver.environmentVariable, AuthSourceResolver.clientIdVariable,
-        TokenStores.storeVariable, FileTokenStore.fileVariable,
+        TokenStores.storeVariable, FileTokenStore.fileVariable, CLIHelp.mcpTenantVariable,
     ]
 
     /// `base` (terminal, time zone) with everything Azure- and file-facing
@@ -44,7 +44,15 @@ extension CLIRunner {
     func runDemo(_ invocation: CLIInvocation) async -> Int32 {
         let options = DemoOptions().applying(environment: env.variables)
         let start = options.frozenAt.map { DemoClock.today(atMinutes: $0, now: env.now(), timeZone: env.timeZone) } ?? env.now()
-        let clock = DemoClock.manual(at: start)
+        // A command's clock stands still and its waits move it. The MCP
+        // server runs for a while: its clock runs (unless frozen), so
+        // activations expire and approvers decide; waits still move it.
+        let clock: DemoClock
+        if case .mcp = invocation.command, options.frozenAt == nil {
+            clock = DemoClock(start: start, rate: options.speed)
+        } else {
+            clock = DemoClock.manual(at: start)
+        }
         let workspace = DemoWorkspace.temporary()
         defer { workspace.remove() }
         do { try workspace.reset(now: start, timeZone: env.timeZone) } catch {

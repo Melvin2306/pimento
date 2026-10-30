@@ -228,6 +228,9 @@ Use either this link or `install.sh`, not both: `install.sh` leaves a link in it
 - **A real command-line tool**, `pimento`: `list`, `activate` (also `--at` and `--ticket`), `deactivate`, `renew`,
   `scheduled`, `cancel`, `pending`, `wait`, `approvals`, `approve`, `deny`, `status`, `tenants`, `history`, `login`, with JSON
   output, exit codes and shell completions. Download it on its own, or get it with the app.
+- **AI agents (MCP)**: `pimento mcp` lets Claude Code, Claude Desktop, Cursor and other MCP clients
+  read your roles, and, if you allow it, activate them after you confirm each request in the client.
+  Read-only by default. See [AI agents (MCP)](#ai-agents-mcp).
 - **Demo mode**: every feature against a simulated Azure with synthetic data, offline and apart from
   your own settings, for trying Pimento out and for screenshots (see [Demo mode](#demo-mode)).
 - **No client secret or service principal, no dependencies, no telemetry.**
@@ -440,7 +443,7 @@ activate, schedule, cancel, deactivate, renew, extend, approve and deny. Each en
 the tenant (ID and name when known), role, resource and scope, the outcome (*Succeeded*, *Pending*,
 *Skipped*, *Failed*, with Azure's status or error code and a short message), the duration asked for
 and the one requested after the policy cap, the start, the justification, the ticket, the request ID,
-where it came from (app or CLI) and the Pimento version. Never tokens, and never request or response
+where it came from (app, CLI or `mcp` for [AI agents](#ai-agents-mcp)) and the Pimento version. Never tokens, and never request or response
 bodies. A renewal is one entry however many attempts it took. Previews and dry runs are not recorded.
 
 **History…** (<kbd>⇧</kbd><kbd>⌘</kbd><kbd>H</kbd>, the toolbar or the View menu) shows it as a table, newest
@@ -866,6 +869,7 @@ pimento history import-azure --since 30d     # add your requests from the portal
 | `pimento login [--device-code] [--client-id ID] [--tenant ID]` | Signs in without the Azure CLI (browser, or a code to enter on another device) and makes Pimento sign-in the auth source |
 | `pimento logout [--all]` | Forgets the signed-in account (or all); with none left, the Azure CLI is the auth source again |
 | `pimento whoami` | The auth source and where it was chosen, who its token is for, and Pimento sign-in's accounts (exit 3 when not signed in) |
+| `pimento mcp [--allow-activate [--allow-privileged] [--no-confirm]] [--tenant ID]` | A Model Context Protocol server on stdin/stdout for AI agents; read-only unless `--allow-activate` (see [AI agents (MCP)](#ai-agents-mcp)) |
 | `pimento completions zsh\|bash\|fish` | Prints a shell completion script |
 | `pimento version`, `pimento help [COMMAND]` | Version; help for a command (also `COMMAND --help`) |
 
@@ -1077,6 +1081,145 @@ The history lock on Windows is `LockFileEx` on `history.jsonl.lock`, so several 
 append at the same time there too.
 <!-- cli-readme:end -->
 
+### AI agents (MCP)
+
+`pimento mcp` is a [Model Context Protocol](https://modelcontextprotocol.io) server: AI agents such as
+Claude Code, Claude Desktop and Cursor can ask it which roles you have, which are active and until
+when, and what each role's policy requires. With `--allow-activate` they can also activate,
+deactivate and renew roles, and you confirm each request in the client before anything is sent. It
+uses the CLI's sign-in (your `az login` or `pimento login`), presets and history, and runs as you.
+
+**Setup.** The client starts the server; register it once.
+
+```sh
+# Claude Code: read-only
+claude mcp add pimento -- pimento mcp
+# Claude Code: may also activate, deactivate and renew (you confirm each request)
+claude mcp add pimento -- pimento mcp --allow-activate
+# Try it without Azure: the offline Contoso demo
+claude mcp add pimento-demo -- pimento mcp --demo --allow-activate
+```
+
+Claude Desktop (*Settings › Developer › Edit Config*, `claude_desktop_config.json`) and Cursor
+(`~/.cursor/mcp.json`, or `.cursor/mcp.json` in a project) take the same JSON:
+
+```json
+{
+  "mcpServers": {
+    "pimento": {
+      "command": "pimento",
+      "args": ["mcp", "--allow-activate"]
+    }
+  }
+}
+```
+
+Leave out `--allow-activate` for a read-only server. Desktop apps often do not see your shell's
+`PATH`: if the server does not start, put the full path that `command -v pimento` (Windows:
+`where pimento`) prints in `command`. Add `--tenant contoso.onmicrosoft.com` (or set
+`PIMENTO_MCP_TENANT`) to keep the agent in one tenant, and `--demo` to try it on the demo data.
+
+**Tools.**
+
+| Tool | What it does |
+| --- | --- |
+| `list_tenants` | Tenants your sign-in can reach |
+| `list_eligible_roles` | Your eligible roles (filter by resource, role, active/eligible), whether each is active and until when, and its policy: maximum duration, approval, ticket, justification, MFA; `highPrivilege` marks Owner and the access administrator roles |
+| `list_active_roles` | Active roles, soonest-expiring first, with the minutes left |
+| `list_presets` | Your saved presets |
+| `list_pending_approvals` | Your requests waiting for an approver |
+| `get_history` | What Pimento sent and how it went (filters as `pimento history`; with `--tenant`, only that tenant's records) |
+| `activate_roles` | *With `--allow-activate`.* Activates roles named by exact role and scope (or a preset), with a justification, `hours` (capped at each policy's maximum) and a ticket where the policy needs one |
+| `deactivate_roles` | *With `--allow-activate`.* Ends active roles |
+| `renew_roles` | *With `--allow-activate`.* Ends and activates roles again for a fresh duration (roles that need approval are not renewed) |
+
+Results are JSON (`structuredContent`, and the same as text). The read tools are marked
+`readOnlyHint`, `deactivate_roles` and `renew_roles` `destructiveHint`.
+
+**A read-only example.** *"Which of my PIM roles run out in the next hour?"* The agent calls
+`list_active_roles` and answers from `minutesLeft`. *"Can I activate Contributor on Contoso
+Production for 8 hours?"* It calls `list_eligible_roles` with `"role": "Contributor"` and reads
+the policy: maximum 4 hours, a ticket required.
+
+**An activation example.** *"Give me Reader on Contoso Production for the INC-1234 log
+investigation."* The agent calls
+
+```json
+{"name": "activate_roles", "arguments": {"roles": [{"role": "Reader", "scope": "Contoso Production"}],
+ "justification": "INC-1234 log investigation", "hours": 8}}
+```
+
+and your client shows Pimento's confirmation, with a checkbox you have to tick:
+
+```text
+An AI agent asks Pimento to ACTIVATE this Azure role for alex@example.com in tenant …:
+
+1. Reader on "Contoso Production" (Subscription) for 8 h
+   /subscriptions/00000000-0000-0000-0000-000000000000
+
+Justification (from the agent): "INC-1234 log investigation"
+
+Only confirm if you asked for this. Nothing is sent unless you check the box and accept.
+```
+
+Only after you accept does Pimento send the `PUT`; the result (*activated until 18:42*, *awaiting
+approval*, the failed policy rule, …) goes back to the agent and into the history.
+
+**Safety model.**
+
+- **Read-only by default.** Without `--allow-activate` the write tools are not listed, a call to
+  them is refused, and every request the server makes goes through the GET-only transport the
+  CLI's read-only commands use.
+- **You confirm every write.** With `--allow-activate`, each activation, deactivation and renewal
+  is planned first (read-only), shown to you through MCP *elicitation* (a form in the client: the
+  roles, their scopes by name and full ARM path, durations, the agent's justification and ticket, warnings), and sent only when you
+  accept with the box ticked. Declining, dismissing, an unticked box, no answer within 10 minutes,
+  or the end of the session sends nothing. Before sending, Pimento plans again from fresh data and
+  sends only if the plan is still exactly what you confirmed. On the stateless protocol revision the
+  confirmation is a random, single-use handle that expires after 10 minutes and is bound to the tool
+  and its exact arguments; a client cannot forge or replay it.
+- **Clients that cannot ask you.** If the client does not support elicitation, the server refuses to
+  write and says why (on the 2026-07-28 revision as `MissingRequiredClientCapability`). Writing
+  anyway needs `--no-confirm`, which you choose for that client: the client's own tool approval
+  (Claude Code and Cursor ask before running a tool unless you allowed it permanently) is then the
+  only confirmation. A client that can ask is always asked, `--no-confirm` or not. (Pimento does
+  not ask in a terminal or a window of its own: a server started by the client has no terminal,
+  and on Linux, Windows or over SSH there may be no screen to show a window on.)
+- **High-privilege roles need a second opt-in.** Activating or renewing Owner, User Access
+  Administrator or Role Based Access Control Administrator (roles that can grant anyone access; the
+  CLI marks them `(!)`) is refused unless the server runs with `--allow-privileged`, and then the
+  confirmation has a second box for them. Deactivating them needs no extra flag.
+- **Policy limits.** Every duration is capped at the role's policy maximum (1 to 24 hours asked); a
+  role whose policy cannot be read is not activated. A justification is required (1 to 500
+  characters), and a ticket number and system wherever the policy requires a ticket.
+- **Strict inputs.** Tool arguments are treated as untrusted: unknown keys, wrong types, empty or
+  overlong values, control, bidi and invisible formatting characters are refused; roles are named
+  by exact role name and scope (no wildcards), a name that fits several scopes is refused, at most
+  20 roles per call, and the tenant must be a GUID or domain (and the `--tenant` one, if set).
+  Nothing an agent passes is run by a shell or used as a file name.
+- **History.** Every write is recorded in Pimento's history like the CLI's, with the source `mcp`.
+- **Nothing secret in results.** Tool results never contain tokens, the sign-in state, or file
+  paths; error messages are filtered for paths and anything token-like. Reads and writes are rate
+  limited, writes run one at a time, and logs go to stderr only.
+
+**Threat model.** The agent is not trusted: text it reads (a web page, an issue, a file) can tell it
+to grant itself access, so Pimento treats every tool argument as hostile and puts a human decision
+between the agent and every write. The trust boundary is the MCP client and its configuration: the
+client shows the confirmation, so a compromised client, or an agent that can edit the client's MCP
+configuration (adding `--no-confirm --allow-privileged`) or run `pimento activate --yes` in a shell,
+is outside what the server can defend against; keep agents that have shell or file access away
+from those. The confirmation shows the agent's justification and ticket as quoted text: read the
+roles, not just the reason. Pimento itself acts only as you, with your own sign-in and Azure's own
+checks (PIM policies, approvals, MFA), so an agent can never get more than you could activate
+yourself.
+
+**Protocol.** `pimento mcp` speaks MCP over stdio, one JSON-RPC message per line, Foundation only. It
+is *dual-era*: requests with `_meta["io.modelcontextprotocol/protocolVersion"]` are served
+statelessly under the current revision, **2026-07-28** (`server/discover`, confirmation through
+multi round-trip requests), and an `initialize` handshake selects 2025-11-25, 2025-06-18, 2025-03-26
+or 2024-11-05 (the newest of them for an unknown version; elicitation from 2025-06-18 on, as a
+server-to-client `elicitation/create` request). It has tools only (no resources or prompts).
+
 ## How it works
 
 Pimento calls [Azure Resource Manager](https://learn.microsoft.com/rest/api/authorization/privileged-role-assignment-rest-sample)
@@ -1180,6 +1323,10 @@ directly with the PIM APIs (`api-version=2020-10-01`):
 - The `pimento` CLI keeps no other state: no settings of its own beyond `auth.json`, no access-token
   cache. It writes the presets file (`pimento presets save` and `delete`), the history, and with
   `pimento login` / `logout` the refresh token and `auth.json`.
+- **`pimento mcp`** (for AI agents) is read-only unless started with `--allow-activate`; then
+  every write is confirmed by you in the MCP client first, high-privilege roles need
+  `--allow-privileged` as well, and tool results never contain tokens or file paths. See
+  [AI agents (MCP)](#ai-agents-mcp).
 - No analytics, no update checks, no third-party dependencies (the CLI's argument parser is
   hand-written, so the build needs no package downloads).
 
@@ -1206,6 +1353,10 @@ See [SECURITY.md](SECURITY.md) for how to report a vulnerability.
   brings the app forward. They act on the tenant the app is showing.
 - **Roles that require MFA or an authentication context** at activation fail with `MfaRule` /
   `AuthenticationContextRule` unless your az token already carries the required claims (see FAQ).
+- **High privilege means three built-in roles.** Owner, User Access Administrator and Role Based
+  Access Control Administrator are flagged (`(!)` in the CLI, `highPrivilege` and `--allow-privileged`
+  in `pimento mcp`). Custom roles with `Microsoft.Authorization/roleAssignments/write`, which can
+  grant access too, are not flagged: Pimento does not read role definitions' permissions.
 - You choose whole hours (or *Maximum allowed*); a role whose policy allows less, such as 90
   minutes, is requested for exactly its maximum.
 - **History** covers what Pimento sent from this Mac (and what *Import from Azure* reads). An
@@ -1319,6 +1470,8 @@ Sources/PimentoCore/SignIn/ Pimento sign-in: PKCE, loopback listener, device cod
                          endpoint requests and errors, Keychain/file token store. Unit-tested.
 Sources/PimentoCore/CLI/ the CLI's commands: parser, selection, confirmation, exit codes,
                          tables, JSON, completions, install paths. Unit-tested.
+Sources/PimentoCore/MCP/ `pimento mcp`: JSON-RPC over stdio, tools, argument validation,
+                         confirmation (elicitation). Unit-tested, and end to end on the demo.
 Sources/pimento/         the `pimento` executable (Foundation only: terminal + network wiring)
 Sources/PimentoApp/      SwiftUI app (product PimentoApp, Pimento.app/Contents/MacOS/Pimento)
 Tests/PimentoCoreTests/  Swift Testing tests with synthetic JSON fixtures and a fake transport

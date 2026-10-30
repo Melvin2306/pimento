@@ -122,7 +122,22 @@ func isBrokenPipe(_ error: Error) -> Bool {
     return false
 }
 
-let environment = CLIEnvironment(
+/// Raw bytes from stdin for `pimento mcp`'s bounded line reader; retried
+/// when a signal interrupts the read. On Windows fd 0 is in text mode, as
+/// `readLine` reads it.
+@Sendable func readStdin(_ buffer: UnsafeMutableRawPointer, _ count: Int) -> Int {
+    #if os(Windows)
+    return Int(_read(0, buffer, UInt32(min(count, Int(Int32.max)))))
+    #else
+    while true {
+        let n = read(0, buffer, count)
+        if n < 0, errno == EINTR { continue }
+        return n
+    }
+    #endif
+}
+
+var environment = CLIEnvironment(
     write: { text, stream in
         let handle = stream == .out ? FileHandle.standardOutput : FileHandle.standardError
         // `write(_:)` raises an Objective-C exception on a closed pipe, which
@@ -156,6 +171,8 @@ let environment = CLIEnvironment(
         openURL: { url in BrowserLaunch.guarded(url, openInBrowser) },
         endBrowserSignIn: { redirectPages.removeAll() })
 )
+
+environment.readInput = readStdin
 
 #if !os(Windows)
 // A closed pipe (`pimento list | head`) should end quietly, not crash.

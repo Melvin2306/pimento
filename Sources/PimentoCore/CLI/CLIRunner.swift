@@ -12,6 +12,9 @@ public struct CLIEnvironment: Sendable {
     public var write: @Sendable (String, Stream) -> Void
     /// One line from stdin (the confirmation answer); nil at end of input.
     public var readLine: @Sendable () -> String?
+    /// Raw reads from stdin, like read(2) (`pimento mcp`, which reads its
+    /// lines with a bounded reader); nil: `readLine` is used instead.
+    public var readInput: MCPLineReader.Read?
     public var stdoutIsTTY: Bool
     public var stderrIsTTY: Bool
     public var stdinIsTTY: Bool
@@ -241,6 +244,7 @@ public struct CLIRunner: Sendable {
         case .login(let o): return try await login(o)
         case .logout(let o): return try await logout(o)
         case .whoami(let o): return try await whoami(o)
+        case .mcp(let o): return try await mcp(o)
         }
     }
 
@@ -503,25 +507,15 @@ public struct CLIRunner: Sendable {
         }
         // Scheduled: a role whose activation has ended by the start can be
         // scheduled (PIM accepts that while it is active); one still active then is skipped.
-        func activeAtStart(_ r: EligibleRole) -> Bool {
-            guard r.isActive else { return false }
-            guard let start, let until = r.activeUntil else { return true }
-            return until > start
-        }
-        let skipped = matched.filter(activeAtStart)
-        let toActivate = matched.filter { !activeAtStart($0) }
+        let (skipped, toActivate) = ActivationPlanning.split(matched, start: start)
         let policies = await self.policies(for: toActivate, service: service)
         let needTicket = TicketRequirement.missing(toActivate, ticket: ticket) { policies[$0.policyKey] }
         if !needTicket.isEmpty {
             throw CLIParseError.missingTicket(roles: needTicket.map { "\($0.roleName) · \($0.scopeName)" })
         }
-        let plans = try ActivationRequestBuilder.plan(
-            toActivate, principalId: snapshot.identity.objectId, justification: justification, now: now,
-            start: start, ticket: ticket
-        ) { role in
-            EffectiveDuration.resolve(requested, policyMaxMinutes: policies[role.policyKey]?.maxMinutes,
-                                      fallbackHours: ActivationRequestBuilder.defaultHours)
-        }
+        let plans = try ActivationPlanning.activationPlans(
+            toActivate, policies: policies, principalId: snapshot.identity.objectId, justification: justification,
+            requested: requested, ticket: ticket, now: now, start: start)
 
         func json(_ outcomes: [String: ActivationOutcome]) -> CLIJSON.Activation {
             let byRole = Dictionary(plans.map { ($0.role.id, $0) }, uniquingKeysWith: { a, _ in a })

@@ -224,40 +224,13 @@ extension CLIRunner {
         let style = o.json ? errStyle : outStyle
         for m in s.missing { human(style.yellow("missing") + "  \(m.label): no longer eligible, left out") }
 
-        let active = s.matched.filter(\.isActive)
-        let policies = await self.policies(for: active, service: s.service)
         // The ticket to send again: --ticket, else the one the activation was requested with.
         let given = TicketInfo.make(number: o.ticketNumber,
                                     system: o.ticketSystem ?? (o.ticketNumber != nil ? s.preset?.trimmedTicketSystem : nil))
-        let originals = active.isEmpty ? [:] : ((try? await s.service.loadRequestHistory(now: now))?.activationTickets ?? [:])
-        func ticket(_ role: EligibleRole) -> TicketInfo? {
-            RenewTicket.choose(given: given, original: RequestHistory.ticket(for: role, in: originals))
-        }
-        let selection = RoleLifecycle.select(
-            s.matched, now: now, forRenewal: true,
-            needsTicket: { RenewTicket.isMissing($0, ticket: ticket($0), policy: policies[$0.policyKey]) },
-            requiresApproval: { policies[$0.policyKey]?.policy?.requiresApproval == true },
-            // A policy that could not be read is not taken as "no approval needed".
-            policyKnown: { policies[$0.policyKey]?.policy != nil })
-        let plans = try ActivationRequestBuilder.renewPlan(
-            selection.ready, principalId: s.snapshot.identity.objectId, justification: justification, now: now, ticket: ticket
-        ) { role in
-            EffectiveDuration.resolve(requested, policyMaxMinutes: policies[role.policyKey]?.maxMinutes,
-                                      fallbackHours: ActivationRequestBuilder.defaultHours)
-        }
-        var outcomes: [String: ActivationOutcome] = [:]
-        for r in selection.tooSoon { outcomes[r.id] = .tooSoon(possibleAt: RoleLifecycle.earliestDeactivation(of: r)) }
-        for r in selection.needsApproval {
-            outcomes[r.id] = .failed(code: "ApprovalRequired", message: "the role's policy requires approval; renewing would leave it off until approved")
-        }
-        for r in selection.policyUnknown {
-            outcomes[r.id] = .failed(code: "PolicyUnknown",
-                                     message: "the role's policy could not be read; renewing might leave it off until approved")
-        }
-        for r in selection.needsTicket {
-            outcomes[r.id] = .failed(code: "TicketRequired",
-                                     message: "the role's policy requires a ticket and the current activation's is unknown; add --ticket NUMBER --ticket-system NAME")
-        }
+        let renewal = try await s.service.planRenewal(
+            s.matched, principalId: s.snapshot.identity.objectId, justification: justification, requested: requested,
+            given: given, now: now)
+        let selection = renewal.selection, plans = renewal.plans, outcomes = renewal.outcomes
 
         func json(_ outcomes: [String: ActivationOutcome]) -> CLIJSON.Lifecycle {
             let byRole = Dictionary(plans.map { ($0.role.id, $0) }, uniquingKeysWith: { a, _ in a })

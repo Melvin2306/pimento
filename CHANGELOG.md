@@ -6,6 +6,27 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **`pimento mcp`**: a Model Context Protocol server on stdin/stdout, so AI agents (Claude Code,
+  Claude Desktop, Cursor, …) can work with your PIM roles. Read-only by default: `list_tenants`,
+  `list_eligible_roles` (with each role's policy), `list_active_roles`, `list_presets`,
+  `list_pending_approvals` and `get_history`. With `--allow-activate` also `activate_roles`,
+  `deactivate_roles` and `renew_roles`: each request is planned read-only, shown to you through MCP
+  elicitation and sent only after you confirm it; clients without elicitation cannot write unless
+  the server runs with `--no-confirm`. Owner, User Access Administrator and Role Based Access
+  Control Administrator need `--allow-privileged` and a second confirmation. Durations are capped
+  at the policy maximum, a justification is required, arguments are validated strictly, results
+  never contain tokens or file paths, and every write is recorded in the history (source `mcp`).
+  `--tenant` (or `PIMENTO_MCP_TENANT`) keeps it in one tenant; `--demo` runs it on the demo data.
+  Speaks the stateless 2026-07-28 revision and the `initialize`-based revisions 2024-11-05 to
+  2025-11-25, without new dependencies, on macOS, Linux and Windows. See README › AI agents (MCP).
+
+### Changed
+
+- `pimento activate` and `renew` plan their requests with the same code as `pimento mcp`
+  (`ActivationPlanning`); their behaviour is unchanged.
+
 ## [0.1.0] - 2026-10-30
 
 The first public release. It covers everything built before it; the development history is in
