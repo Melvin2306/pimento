@@ -15,7 +15,7 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -31,7 +31,7 @@ jobs:
           build/Pimento.app/Contents/Helpers/pimento version
       - name: Package the CLI on its own (universal, ad-hoc signed)
         run: scripts/package-cli.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: release-macos
           path: |
@@ -50,14 +50,14 @@ jobs:
     # Jammy: the binary runs on glibc 2.35 and later.
     container: swift:6.4.1-jammy
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
       - name: Test
         run: swift test
       - name: Package the CLI (Swift runtime linked in)
         run: scripts/package-cli.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: release-linux-${{ matrix.runner }}
           path: build/pimento-cli-*-linux-*.tar.gz
@@ -68,10 +68,10 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
-      - uses: compnerd/gha-setup-swift@v0.5.1
+      - uses: compnerd/gha-setup-swift@9ff1ee4c44888c5817fc14d1b257ac8cabb4935f # v0.5.1
         with:
           swift-version: swift-6.4.1-release
           swift-build: 6.4.1-RELEASE
@@ -80,7 +80,7 @@ jobs:
       - name: Package the CLI (with the Swift runtime DLLs)
         shell: bash
         run: scripts/package-cli.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: release-windows
           path: build/pimento-cli-*-windows-*.zip
@@ -94,7 +94,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: build
           pattern: release-*
