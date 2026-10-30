@@ -1,0 +1,39 @@
+Sources/PimentoCore/TenantLogos.swift
+  s_4884204a812fec::t_d554479d83964f 1-214,217-502
+  s_4884204a812fec::t_2613a8dcaabb79 215-216
+Sources/PimentoCore/TenantMonogram.swift
+  s_4884204a812fec::t_3fe6f68fefed20 1-171
+Sources/PimentoApp/TenantBadge.swift
+  s_4884204a812fec::t_aabc6b76677e27 1-160
+  s_4884204a812fec::t_1e279113fcd61f 161-165
+Sources/PimentoApp/AppModel.swift
+  s_4884204a812fec::t_d7f93e8256c5fb 196-197,373,407-422,1891
+Sources/PimentoApp/HistoryViews.swift
+  s_4884204a812fec::t_e26de92bd135c9 193-200
+Sources/PimentoApp/MenuBarViews.swift
+  s_4884204a812fec::t_cf3a70b51eb037 241-250
+Sources/PimentoApp/SettingsView.swift
+  s_4884204a812fec::t_2b21f574eac896 56-62,82-98,159-160,163
+Sources/PimentoApp/TenantViews.swift
+  s_4884204a812fec::t_dc7aef4eeafa37 18-36,141,227-228
+Sources/PimentoCore/Preferences.swift
+  s_4884204a812fec::t_9cda88c431a3e2 134-137,241,248,283,316
+Sources/PimentoCore/Tenant.swift
+  s_4884204a812fec::t_980765e1078a95 90-91,93,98,168-180,187-188,211-212
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bd83193d38f0e1144b2ae68c7f688bd8da0010c5",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
