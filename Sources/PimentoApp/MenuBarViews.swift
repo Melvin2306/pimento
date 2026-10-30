@@ -171,6 +171,11 @@ struct MenuBarPanel: View {
         let colors = MenuBarColors(theme: theme, palette: palette)
         VStack(alignment: .leading, spacing: 0) {
             MenuBarHeader(model: model, colors: colors)
+            if model.updates.notice != nil {
+                MenuBarUpdateNotice(updates: model.updates, colors: colors)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 8)
+            }
             if let banner = model.banner {
                 MenuBarBanner(banner: banner, colors: colors) { model.banner = nil }
                     .padding(.horizontal, 12)

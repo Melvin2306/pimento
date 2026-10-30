@@ -131,6 +131,9 @@ public struct Preferences: Equatable, Sendable {
     public var appearanceMode: AppearanceMode = .system
     /// When light, dark and ultra dark apply in `.timeOfDay` mode.
     public var appearanceSchedule = AppearanceSchedule()
+    /// Ask GitHub once a day whether a newer release exists (`UpdateCheck`).
+    /// Only tells; nothing is downloaded or installed.
+    public var checkForUpdates = true
 
     // Menu bar
     /// The menu bar extra: active roles with their countdown, presets, quick actions.
@@ -234,13 +237,14 @@ public struct Preferences: Equatable, Sendable {
         static let showInMenuBar = "general.showInMenuBar"
         static let menuBarShowsRemainingTime = "general.menuBarRemainingTime"
         static let hideDockIcon = "general.hideDockIcon"
+        static let checkForUpdates = "general.checkForUpdates"
 
         static let all = [
             notifyOnCompletion, notifyOnlyOnFailure, playSound, expiryReminders, reminderLeadMinutes, notifyScheduledStart,
             notifyApprovalDecisions, notifyNewApprovals,
             defaultHours, rememberJustifications, prefillLastJustification, confirmOwnerRoles, maxParallelRequests,
             launchTenant, refreshOnLaunch, autoRefreshMinutes, theme, appearanceMode, appearanceSchedule,
-            showInMenuBar, menuBarShowsRemainingTime, hideDockIcon,
+            showInMenuBar, menuBarShowsRemainingTime, hideDockIcon, checkForUpdates,
         ]
     }
 
@@ -275,6 +279,7 @@ public struct Preferences: Equatable, Sendable {
         bool(Key.showInMenuBar, &p.showInMenuBar)
         bool(Key.menuBarShowsRemainingTime, &p.menuBarShowsRemainingTime)
         bool(Key.hideDockIcon, &p.hideDockIcon)
+        bool(Key.checkForUpdates, &p.checkForUpdates)
         return p.validated()
     }
 
@@ -307,6 +312,7 @@ public struct Preferences: Equatable, Sendable {
         store.set(p.showInMenuBar, forKey: Key.showInMenuBar)
         store.set(p.menuBarShowsRemainingTime, forKey: Key.menuBarShowsRemainingTime)
         store.set(p.hideDockIcon, forKey: Key.hideDockIcon)
+        store.set(p.checkForUpdates, forKey: Key.checkForUpdates)
     }
 
     /// Removes every stored setting, so the defaults apply again.
