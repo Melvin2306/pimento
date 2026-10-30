@@ -215,7 +215,7 @@ public struct MCPToolbox: Sendable {
             fields: [tenantField], isWrite: false, destructive: false, openWorld: true),
         MCPToolDefinition(
             name: "get_history", title: "Pimento history",
-            description: "What Pimento (app, CLI and this server) sent and how it went, newest first. Read-only, local.",
+            description: "What Pimento (app, CLI, keep-alive and this server) sent and how it went, newest first. Read-only, local.",
             fields: [
                 MCPField("since", .string(maxLength: 40), "7d, 24h, today, yesterday, 2026-10-01, or ISO 8601."),
                 MCPField("until", .string(maxLength: 40), "As since."),

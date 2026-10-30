@@ -379,9 +379,12 @@ struct MCPValidationTests {
         func tenants(_ config: MCPConfiguration) async throws -> [String] {
             let h = try MCPHarness(config)
             let at = MCPHarness.now.addingTimeInterval(-3600)
-            try h.workspace.historyStore.append(([DemoDirectory.contoso.id, DemoDirectory.fabrikam.id, nil] as [String?]).map {
-                HistoryRecord(at: at, action: .activate, result: .succeeded, tenantId: $0, scope: "/subscriptions/x",
-                              justification: "pin-check", source: .cli)
+            // Keep-alive's records are filtered like the others.
+            try h.workspace.historyStore.append(([DemoDirectory.contoso.id, DemoDirectory.fabrikam.id, nil] as [String?]).flatMap { id in
+                [HistorySource.cli, .keepAlive].map {
+                    HistoryRecord(at: at, action: .activate, result: .succeeded, tenantId: id, scope: "/subscriptions/x",
+                                  justification: "pin-check", source: $0)
+                }
             })
             _ = try await h.initialize()
             h.call(1, "get_history", ["text": "pin-check"])
@@ -390,10 +393,10 @@ struct MCPValidationTests {
             await h.finish()
             return (r["result"]?["structuredContent"]?["records"]?.arrayValue ?? []).map { $0["tenantId"]?.stringValue ?? "none" }
         }
-        #expect(try await tenants(MCPConfiguration()).count == 3)
-        #expect(try await tenants(MCPConfiguration(tenant: DemoDirectory.fabrikam.id)) == [DemoDirectory.fabrikam.id])
+        #expect(try await tenants(MCPConfiguration()).count == 6)
+        #expect(try await tenants(MCPConfiguration(tenant: DemoDirectory.fabrikam.id)) == [DemoDirectory.fabrikam.id, DemoDirectory.fabrikam.id])
         // A domain pin is resolved to the tenant's GUID through its token.
-        #expect(try await tenants(MCPConfiguration(tenant: "CONTOSO.example")) == [DemoDirectory.contoso.id])
+        #expect(try await tenants(MCPConfiguration(tenant: "CONTOSO.example")) == [DemoDirectory.contoso.id, DemoDirectory.contoso.id])
         // A pin that cannot be resolved shows nothing rather than everything.
         #expect(try await tenants(MCPConfiguration(tenant: "unknown.example")) == [])
     }
