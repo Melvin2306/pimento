@@ -69,6 +69,8 @@ public enum CLIHelp {
           --json          Machine-readable output on stdout
           --auth SOURCE   az (your Azure CLI session) or pimento (`pimento login`).
                           Default: $\(AuthSourceResolver.environmentVariable), then the saved setting, then az.
+          --demo          Demo mode: a simulated Azure with synthetic data; nothing is
+                          sent and none of your files are used ($\(DemoMode.environmentVariable)=1)
       -h, --help          Show help
 
     By default Pimento uses your Azure CLI session (`az login`); with
@@ -599,6 +601,7 @@ public enum CLIHelp {
         '(-t --tenant)'{-t,--tenant}'[Tenant GUID or domain]:tenant: '
         '--json[Machine-readable output]'
         '--auth[Auth source]:source:(az pimento)'
+        '--demo[Demo mode: simulated Azure, synthetic data]'
         '(- *)'{-h,--help}'[Show help]'
       )
       _arguments -C '1: :->command' '*:: :->args' && return
@@ -753,6 +756,7 @@ public enum CLIHelp {
         *) opts="" ;;
       esac
       [[ "$cmd" != completions && "$cmd" != help && "$cmd" != logout ]] && opts="$opts --auth"
+      [[ "$cmd" != completions && "$cmd" != help ]] && opts="$opts --demo"
       COMPREPLY=($(compgen -W "$opts" -- "$cur"))
     }
     complete -F _pimento pimento
@@ -816,6 +820,7 @@ public enum CLIHelp {
     complete -c pimento -n '__fish_seen_subcommand_from history' -l csv -d 'CSV on stdout'
     complete -c pimento -n '__fish_seen_subcommand_from history' -s y -l yes -d 'Do not ask (clear)'
     complete -c pimento -n '__fish_seen_subcommand_from list activate deactivate renew extend scheduled cancel pending wait approvals approve deny status tenants presets history login whoami' -l auth -x -a 'az pimento' -d 'Auth source'
+    complete -c pimento -l demo -d 'Demo mode: simulated Azure, synthetic data'
     complete -c pimento -n '__fish_seen_subcommand_from login whoami' -s t -l tenant -r -d 'Tenant GUID or domain'
     complete -c pimento -n '__fish_seen_subcommand_from login logout whoami' -l json -d 'Machine-readable output'
     complete -c pimento -n '__fish_seen_subcommand_from login' -l device-code -d 'Sign in with a code on another device'

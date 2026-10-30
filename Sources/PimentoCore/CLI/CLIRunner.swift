@@ -33,6 +33,10 @@ public struct CLIEnvironment: Sendable {
     public var history: HistoryStore?
     /// Pimento's own sign-in: settings file, token store, network, browser.
     public var signIn: CLISignIn
+    /// The Azure CLI's tokens for a tenant (`--auth az`).
+    public var azureCLITokens: @Sendable (String?) -> TokenProvider = { AzureCLITokenProvider(tenantId: $0) }
+    /// Set in demo mode: what the command runs against.
+    public var demo: DemoSession?
 
     public init(
         write: @escaping @Sendable (String, Stream) -> Void,
@@ -180,12 +184,19 @@ public struct CLIRunner: Sendable {
             err(errStyle.red("error:") + " " + error.localizedDescription)
             return CLIExit.usage.rawValue
         }
+        if env.demo == nil, invocation.demo || DemoMode.isOn(env.variables[DemoMode.environmentVariable]) {
+            return await runDemo(invocation)
+        }
+        return await run(invocation)
+    }
+
+    func run(_ invocation: CLIInvocation) async -> Int32 {
         if let note = invocation.deprecation { err(errStyle.yellow("note:") + " " + note) }
         var runner = self
         do {
             let settings = env.signIn.settings?.load() ?? AuthSettings()
             let selection = try AuthSourceResolver.resolve(commandLine: invocation.auth, environment: env.variables, saved: settings.source)
-            runner.auth = AuthContext(selection: selection, broker: broker, accountId: settings.accountId)
+            runner.auth = AuthContext(selection: selection, broker: broker, accountId: settings.accountId, azureCLI: env.azureCLITokens)
         } catch {
             guard !invocation.command.needsAzure else {
                 err(errStyle.red("error:") + " " + error.localizedDescription)

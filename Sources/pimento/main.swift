@@ -161,6 +161,11 @@ let environment = CLIEnvironment(
 signal(SIGPIPE, SIG_IGN)
 #endif
 
-let status = await CLIRunner(environment: environment).run(Array(CommandLine.arguments.dropFirst()))
+let arguments = Array(CommandLine.arguments.dropFirst())
+// Demo mode never reaches the network: block it for the whole process.
+if (try? CLIParser.parse(arguments))?.demo == true || DemoMode.isOn(variables[DemoMode.environmentVariable]) {
+    NetworkGuard.blockForProcess()
+}
+let status = await CLIRunner(environment: environment).run(arguments)
 redirectPages.removeAll()
 exit(status)

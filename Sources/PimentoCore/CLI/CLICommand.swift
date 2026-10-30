@@ -372,11 +372,14 @@ public struct CLIInvocation: Equatable, Sendable {
     public var deprecation: String?
     /// `--auth az|pimento`, accepted by every command (validated when resolved).
     public var auth: String?
+    /// `--demo`, accepted by every command: run against the demo simulator.
+    public var demo = false
 
-    public init(_ command: CLICommand, deprecation: String? = nil, auth: String? = nil) {
+    public init(_ command: CLICommand, deprecation: String? = nil, auth: String? = nil, demo: Bool = false) {
         self.command = command
         self.deprecation = deprecation
         self.auth = auth
+        self.demo = demo
     }
 }
 
@@ -650,10 +653,20 @@ public enum CLIParser {
     static let legacyModes = ["--list": "list", "--dry-run": "activate --dry-run", "--tenants": "tenants"]
 
     public static func parse(_ args: [String]) throws -> CLIInvocation {
-        let (rest, auth) = try extractAuth(args)
+        let (withoutDemo, demo) = extractDemo(args)
+        let (rest, auth) = try extractAuth(withoutDemo)
         var invocation = try parseCommand(rest)
         invocation.auth = auth
+        invocation.demo = demo
         return invocation
+    }
+
+    /// Removes `--demo` (before `--`) from anywhere in the line.
+    static func extractDemo(_ args: [String]) -> ([String], Bool) {
+        let end = args.firstIndex(of: "--") ?? args.endIndex
+        let head = args[..<end]
+        guard head.contains(DemoMode.argument) else { return (args, false) }
+        return (head.filter { $0 != DemoMode.argument } + args[end...], true)
     }
 
     /// Removes `--auth VALUE` / `--auth=VALUE` (before `--`) from anywhere in the line.
