@@ -812,7 +812,9 @@ A time in the past, more than 30 days ahead, or unreadable stops with exit code 
 is sent. A role that is active now is scheduled when its activation ends by the start, and skipped
 when it is still active then. `pimento scheduled` lists pending activations (ID is the start of the
 request id); `pimento cancel` takes request ids (the first 4 or more characters), resource filters,
-`--role` or `--all`, shows what it will cancel and asks, like `activate`.
+`--role` or `--all`, shows what it will cancel and asks, like `activate`. A target of only hex digits
+and dashes is always a request id: one that matches no pending request is reported as not found
+(exit 1), never retried as a resource filter.
 
 **Tickets.** `--ticket NUMBER --ticket-system NAME` sends `ticketInfo` with every request; any role
 accepts it. When a role's policy requires a ticket and the number or the system is missing,

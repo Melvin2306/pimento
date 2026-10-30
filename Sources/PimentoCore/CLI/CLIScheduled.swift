@@ -8,9 +8,11 @@ public struct CancelSelection: Equatable, Sendable {
     public var unknownIds: [String] = []
 
     /// A target of at least 4 characters made of hex digits and dashes is
-    /// tried as the start of a request id first; anything else (and an id
-    /// that matches nothing) is a resource filter as in `pimento list`.
-    /// `roles` narrows the filters (and `--all`), not the ids.
+    /// a request id: it must be the start of exactly one pending request's
+    /// id, or it is reported in `unknownIds` (never retried as a resource
+    /// filter, which could pick another request). Anything else is a
+    /// resource filter as in `pimento list`. `roles` narrows the filters
+    /// (and `--all`), not the ids.
     public static func select(_ pending: [ScheduledRequest], targets: [String], roles: [String], all: Bool) throws -> CancelSelection {
         var picked = Set<String>()
         var filters: [String] = []
@@ -21,14 +23,8 @@ public struct CancelSelection: Equatable, Sendable {
             if isIdLike(t) {
                 let hits = pending.filter { $0.name.lowercased().hasPrefix(t.lowercased()) }
                 if hits.count > 1 { throw CLIParseError.ambiguousRequestId(t, matches: hits.count) }
-                if let hit = hits.first {
-                    picked.insert(hit.name)
-                    continue
-                }
-                if t.count >= 8, !pending.contains(where: { RoleCriteria(filters: [t], roles: roles).matches($0.asRole) }) {
-                    unknown.append(t)
-                    continue
-                }
+                if let hit = hits.first { picked.insert(hit.name) } else { unknown.append(t) }
+                continue
             }
             filters.append(t)
         }
@@ -221,7 +217,9 @@ extension CLIRunner {
                 notFound: selection.unknownIds)
         }
 
-        for id in selection.unknownIds { human(style.yellow("not found") + "  \(id): no pending request with this id") }
+        for id in selection.unknownIds {
+            human(style.yellow("not found") + "  \(id): no pending request id starts with this (only hex digits and dashes: a request id)")
+        }
         guard !selection.requests.isEmpty else {
             err(pending.isEmpty
                 ? "You have no scheduled or pending activations."

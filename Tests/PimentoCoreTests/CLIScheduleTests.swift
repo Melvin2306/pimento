@@ -91,9 +91,17 @@ struct CLIScheduleParserTests {
         #expect(throws: CLIParseError.ambiguousRequestId("abcd", matches: 2)) {
             try CancelSelection.select(pending, targets: ["abcd"], roles: [], all: false)
         }
-        // Not an id (or no id matches): a resource filter. `cafe` is hex but matches a name.
+        // Not an id: a resource filter.
         #expect(try CancelSelection.select(pending, targets: ["web"], roles: [], all: false).requests.count == 2)
-        #expect(try CancelSelection.select(pending, targets: ["cafe"], roles: [], all: false).requests.map(\.scopeName) == ["rg-cafe"])
+        #expect(try CancelSelection.select(pending, targets: ["rg-cafe"], roles: [], all: false).requests.map(\.scopeName) == ["rg-cafe"])
+        // An id that matches no request is not found, never a filter: `cafe` and
+        // `ef00` (hex) would otherwise pick rg-cafe or a name containing them.
+        let miss = try CancelSelection.select(pending, targets: ["cafe"], roles: [], all: false)
+        #expect(miss.requests.isEmpty)
+        #expect(miss.unknownIds == ["cafe"])
+        let missLong = try CancelSelection.select(pending, targets: ["0000-cafe"], roles: [], all: false)
+        #expect(missLong.requests.isEmpty)
+        #expect(missLong.unknownIds == ["0000-cafe"])
         #expect(try CancelSelection.select(pending, targets: ["web"], roles: ["owner"], all: false).requests.map(\.name) == ["ef001111-0000"])
         #expect(try CancelSelection.select(pending, targets: [], roles: [], all: true).requests.count == 3)
         let unknown = try CancelSelection.select(pending, targets: ["deadbeef", "abcd1"], roles: [], all: false)
@@ -280,5 +288,14 @@ struct CLIPendingRunnerTests {
         #expect(unknown.out.contains("not found  deadbeef"))
         #expect(unknown.err.contains("No pending request matches"))
         #expect(await unknown.posts.isEmpty)
+
+        // A hex target that is no request's id sends nothing.
+        let miss = CLIHarness()
+        #expect(await miss.run("cancel", "cccccccc", "--yes") == 1)
+        #expect(miss.out.contains("not found  cccccccc"))
+        #expect(await miss.posts.isEmpty)
+        let filter = CLIHarness()
+        #expect(await filter.run("cancel", "cccccccc-0000", "--dry-run") == 1)
+        #expect(!filter.out.contains("Would cancel"))
     }
 }

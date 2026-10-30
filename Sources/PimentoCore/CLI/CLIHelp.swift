@@ -196,7 +196,8 @@ public enum CLIHelp {
 
     Selection (at least one is required):
       REQUEST-ID          A request id from `pimento scheduled`, or its first
-                          characters (at least 4)
+                          characters (at least 4). Only hex digits and dashes
+                          make an id: it must match a request or it is not found.
       FILTER              Resource name contains FILTER (as in `pimento list`)
           --role NAME     Role name, whole name, * as wildcard. Repeatable.
           --all           Every scheduled or pending activation

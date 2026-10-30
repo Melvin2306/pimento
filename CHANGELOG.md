@@ -457,6 +457,10 @@ All notable changes to this project are documented here. The format follows
   Linux container `swift:6.4.1-jammy` by digest, and releases attach build provenance attestations
   (`actions/attest-build-provenance`, SHA-pinned; `id-token`/`attestations: write` only in the
   publish job). Developer ID signing and notarization remain out of scope.
+- `pimento cancel` treats a target of only hex digits and dashes as a request id, always: one that
+  matches no pending request is reported as not found (exit 1) instead of being retried as a
+  resource filter, which with `--yes` could cancel another of your requests (`cancel cafe` picked
+  `rg-cafe`). Give more of the resource name (`rg-cafe`) to filter.
 
 ## [0.1.0] - 2026-10-29
 
