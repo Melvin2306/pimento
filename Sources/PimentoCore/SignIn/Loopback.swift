@@ -107,6 +107,7 @@ public final class LoopbackListener: @unchecked Sendable {
     /// ::1) does Pimento listen on 127.0.0.1 alone. `ports`: the 127.0.0.1
     /// port of each attempt (0: the kernel's choice; tests pick their own).
     init(connectionTimeout: TimeInterval, ports: [UInt16] = Array(repeating: 0, count: LoopbackListener.bindAttempts)) throws {
+        try NetworkGuard.check("a sign-in listener on 127.0.0.1")
         self.connectionTimeout = connectionTimeout
         for candidate in ports {
             let (v4, port) = try Self.bindIPv4Loopback(port: candidate)

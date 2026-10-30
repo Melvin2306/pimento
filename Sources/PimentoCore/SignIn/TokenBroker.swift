@@ -218,11 +218,15 @@ public struct AuthContext: Sendable {
     /// Pimento sign-in only.
     public let broker: TokenBroker?
     public let accountId: String?
+    /// The Azure CLI's tokens for a tenant (the demo simulates them).
+    public let azureCLI: @Sendable (String?) -> TokenProvider
 
-    public init(selection: AuthSelection, broker: TokenBroker?, accountId: String?) {
+    public init(selection: AuthSelection, broker: TokenBroker?, accountId: String?,
+                azureCLI: @escaping @Sendable (String?) -> TokenProvider = { AzureCLITokenProvider(tenantId: $0) }) {
         self.selection = selection
         self.broker = broker
         self.accountId = accountId
+        self.azureCLI = azureCLI
     }
 
     public static let azureCLI = AuthContext(selection: AuthSelection(source: .az, origin: .default), broker: nil, accountId: nil)
@@ -232,7 +236,7 @@ public struct AuthContext: Sendable {
     /// az for `.az`; the broker's account for `.pimento`.
     public func tokens(tenantId: String?) -> TokenProvider {
         switch source {
-        case .az: return AzureCLITokenProvider(tenantId: tenantId)
+        case .az: return azureCLI(tenantId)
         case .pimento:
             guard let broker else { return FailingTokenProvider(error: SignInError.notSignedIn) }
             return broker.provider(accountId: accountId, tenantId: tenantId)

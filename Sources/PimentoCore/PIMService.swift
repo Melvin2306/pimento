@@ -25,6 +25,7 @@ public struct URLSessionTransport: HTTPTransport {
     public init() {}
 
     public func send(_ request: URLRequest) async throws -> (Data, Int) {
+        try NetworkGuard.check("an HTTPS request to \(request.url?.host ?? "?")")
         // The delegate goes to the task as well: swift-corelibs-foundation asks
         // only the task's delegate about redirects of an async request.
         let (data, response) = try await Self.session.data(for: request, delegate: RedirectRefusal.shared)

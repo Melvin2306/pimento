@@ -168,6 +168,7 @@ public enum AzureCLI {
 
     /// Runs `az` with `arguments` off the main thread and returns its stdout.
     public static func run(_ arguments: [String], azPath: String? = nil, timeout: TimeInterval = 90) async throws -> Data {
+        try NetworkGuard.check("the Azure CLI (az \(arguments.prefix(2).joined(separator: " ")))")
         guard let az = azPath ?? locate() else { throw AzureCLIError.notFound }
         return try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
