@@ -1080,6 +1080,37 @@ The history lock on Windows is `LockFileEx` on `history.jsonl.lock`, so several 
 append at the same time there too.
 <!-- cli-readme:end -->
 
+## Integrations
+
+Pimento also works from **Raycast** and **Alfred**. Both are thin launchers: they run the installed
+`pimento` CLI with `--json`, so they need it [installed](#install-the-command-line-tool) and signed in
+(`az login` or `pimento login`). They never talk to Azure or see a token. They look for it in
+`~/.local/bin`, then `PATH` and the Homebrew folders, then inside `/Applications/Pimento.app`, or
+where their settings say. Each has a demo mode setting (`pimento --demo`) to try it with synthetic
+data. Neither is in a store; install them from this repository.
+
+**Raycast** ([`integrations/raycast`](integrations/raycast/README.md)): *Search PIM Roles*
+(activate with a justification and duration, or deactivate), *Activate PIM Preset* and *Active PIM
+Roles* (with the time left). Needs Node.js 22.22 or later to install:
+
+```sh
+cd integrations/raycast
+npm ci
+npm run dev        # imports it into Raycast; stop with Ctrl-C, the extension stays
+```
+
+**Alfred** ([`integrations/alfred`](integrations/alfred/README.md), Alfred 5 with the Powerpack):
+the `pim` keyword lists presets and roles. ↩ on a role, then `>` and a justification, activates it;
+↩ on a preset activates it; ⌥↩ on an active role deactivates it. It uses only `/bin/sh` and
+JavaScript for Automation:
+
+```sh
+integrations/alfred/build.sh       # build/Pimento.alfredworkflow; open it to import into Alfred
+```
+
+Both pick a single role with `pimento activate --id` / `deactivate --id`, the `id` from
+`pimento list --json`, which scripts can use as well.
+
 ## How it works
 
 Pimento calls [Azure Resource Manager](https://learn.microsoft.com/rest/api/authorization/privileged-role-assignment-rest-sample)
@@ -1335,6 +1366,8 @@ scripts/test-install.*   test the installers against locally built archives (use
 scripts/update-homebrew.sh fills the Homebrew templates with a release's sums (build/homebrew/)
 scripts/make-icon.swift  draws the icon with CoreGraphics and runs iconutil
 packaging/homebrew/      unpublished Homebrew formula (CLI) and cask (app), and how to publish them
+integrations/raycast/    Raycast extension (TypeScript): runs the CLI, see its README
+integrations/alfred/     Alfred workflow (sh + JXA): runs the CLI; build.sh packs it, test.sh tests it
 ```
 
 The app builds with the Command Line Tools alone. That is why it avoids SwiftUI's `@State`

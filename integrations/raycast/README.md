@@ -16,7 +16,7 @@ submitted and shows *Awaiting approval*: nothing is active until an approver dec
 
 ## Requirements
 
-- macOS with [Raycast](https://www.raycast.com) and Node.js 22 or later (only to install).
+- macOS with [Raycast](https://www.raycast.com) and Node.js 22.22 or later (only to install).
 - The `pimento` CLI, signed in: `az login`, or `pimento login`
   (see [Install the command-line tool](../../README.md#install-the-command-line-tool)). The
   extension finds it in this order:
