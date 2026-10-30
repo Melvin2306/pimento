@@ -1,0 +1,38 @@
+Tests/PimentoCoreTests/CLIRunnerTests.swift
+  s_4884204a812fec::t_b2e257418fe23f 37-38,150-151
+Tests/PimentoCoreTests/CLIAuthTests.swift
+  s_4884204a812fec::t_b2e257418fe23f 191-192
+Sources/PimentoCore/CLI/CLIRunner.swift
+  s_4884204a812fec::t_d2c15f6175c30c 101-103,106-107,113
+Sources/pimento/main.swift
+  s_4884204a812fec::t_d2c15f6175c30c 16-18,69-77,80,82-92,97-110,155-156,165
+Tests/PimentoCoreTests/SignInTests.swift
+  s_4884204a812fec::t_b2e257418fe23f 951-973,975-1014
+  s_4884204a812fec::t_229cd477d960e7 974
+Sources/PimentoCore/CLI/CLIAuth.swift
+  s_4884204a812fec::t_d2c15f6175c30c 26
+README.md
+  s_4884204a812fec::t_2e636939b1f9e9 890
+SECURITY.md
+  s_4884204a812fec::t_2e636939b1f9e9 50-53
+Sources/PimentoCore/SignIn/BrowserLaunch.swift
+  s_4884204a812fec::t_418ef30e55f0fe 1-131
+CHANGELOG.md
+  s_4884204a812fec::t_2e636939b1f9e9 384-388
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "db118af58ecba8035a59da482c8c35f53690fcfa",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
