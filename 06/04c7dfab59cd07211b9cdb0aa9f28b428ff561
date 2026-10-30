@@ -1,0 +1,53 @@
+integrations/raycast/src/roles.tsx
+  s_4884204a812fec::t_14c95422c2bd9a 1-91
+  s_4884204a812fec::t_a6822ef5d769c6 92-100
+integrations/raycast/src/lib/raycast.ts
+  s_4884204a812fec::t_79e7073661148f 1-51
+  s_4884204a812fec::t_c5b54af92d187e 52
+integrations/raycast/src/lib/pimento.ts
+  s_4884204a812fec::t_1557eb58aebd26 1-495,504-505,508
+  s_4884204a812fec::t_5956013e33d4d0 496-503,506-507,509-512
+integrations/raycast/src/active.tsx
+  s_4884204a812fec::t_a29f529d8894dd 1-68
+  s_4884204a812fec::t_07b8c480101429 69-72
+integrations/raycast/test/pimento.test.mts
+  s_4884204a812fec::t_8e18205f6a8dc3 1-234
+integrations/raycast/README.md
+  s_4884204a812fec::t_b2b926700d6d79 1-74
+integrations/raycast/src/components.tsx
+  s_4884204a812fec::t_edaeab3c7dc5a9 1-274
+  s_4884204a812fec::t_0e519b7b3fdec8 275-328
+integrations/raycast/src/presets.tsx
+  s_4884204a812fec::t_44f7363b8e0920 1-92
+  s_4884204a812fec::t_b676dd2ef9d561 93-94
+.editorconfig
+  s_4884204a812fec::t_e9d9d9cae40f38 16-19
+integrations/raycast/.gitignore
+  s_4884204a812fec::t_6e60fd8f12366d 1-5
+integrations/raycast/.prettierrc
+  s_4884204a812fec::t_9ef521efc76bb2 1-4
+integrations/raycast/eslint.config.js
+  s_4884204a812fec::t_243d439c983719 1-4
+integrations/raycast/package-lock.json
+  s_4884204a812fec::t_985b718406d108 1-3068
+integrations/raycast/package.json
+  s_4884204a812fec::t_14652e2af09726 1-88
+integrations/raycast/tsconfig.json
+  s_4884204a812fec::t_10f6988e5f039b 1-17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0604c7dfab59cd07211b9cdb0aa9f28b428ff561",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
