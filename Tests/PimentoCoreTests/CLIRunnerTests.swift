@@ -214,6 +214,7 @@ struct CLIRunnerTests {
         let first = roles[0]
         #expect(first["roleName"] as? String == "Owner")
         #expect(first["isOwner"] as? Bool == true)
+        #expect(first["grantsAccess"] as? Bool == true)
         #expect(first["isActive"] as? Bool == true)
         #expect(first["activeUntil"] as? String == "2026-10-29T18:42:17.913Z")
         #expect(first["membership"] as? String == "direct")

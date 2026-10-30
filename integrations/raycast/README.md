@@ -11,7 +11,8 @@ in, the PIM policies, the confirmation rules and the history stay with the CLI.
 | **Activate PIM Preset** | Your presets (`pimento presets list`) with their roles. ↩ activates one after a confirmation, with its saved justification and duration; ⌘↩ (or ↩ when it has no justification) asks for a justification and duration first. |
 | **Active PIM Roles** | The roles that are active now (`pimento status`), soonest-expiring first, with the time left (orange under an hour, red under 15 minutes). ↩ deactivates. |
 
-Owner roles ask once more before they are activated. A role whose policy requires approval is
+Roles that can grant anyone access (Owner, User Access Administrator, Role Based Access Control
+Administrator) are tagged and ask once more before they are activated. A role whose policy requires approval is
 submitted and shows *Awaiting approval*: nothing is active until an approver decides.
 
 ## Requirements

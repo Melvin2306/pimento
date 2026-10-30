@@ -79,8 +79,24 @@ function scopeTypeLabel(t) {
   }
 }
 
+/** Owner, User Access Administrator, RBAC Administrator: roles that can grant anyone access. */
+function grantsAccess(role) {
+  return role.grantsAccess === undefined ? Boolean(role.isOwner) : Boolean(role.grantsAccess);
+}
+
+function accessWarning(role) {
+  if (role.isOwner) return "Owner: full control, including access. ";
+  return grantsAccess(role) ? role.roleName + ": can grant anyone access. " : "";
+}
+
 function label(role) {
-  return role.roleName + (role.isOwner ? " (!)" : "") + " · " + role.scopeName;
+  return role.roleName + (grantsAccess(role) ? " (!)" : "") + " · " + role.scopeName;
+}
+
+/** For pasting into a shell: as is when plain, else in single quotes (as `pimento presets save` prints it). */
+function shellQuote(s) {
+  const text = String(s || "");
+  return /^[\p{L}\p{N}._-]+$/u.test(text) ? text : "'" + text.replace(/'/g, "'\\''") + "'";
 }
 
 /**
@@ -166,7 +182,7 @@ function presetItem(p, q, defaultHours) {
         variables: Object.assign({}, vars, { pim_hours: "max" }),
       },
     },
-    text: { copy: 'pimento activate --preset "' + p.name + '"', largetype: lines.join("\n") },
+    text: { copy: "pimento activate --preset " + shellQuote(p.name), largetype: lines.join("\n") },
   };
 }
 
@@ -190,7 +206,7 @@ function eligibleItem(r, q, defaultHours) {
   if (needsTicket) {
     subtitle = facts.join(" · ") + " · needs a ticket: use the Pimento app or pimento activate --ticket";
   } else if (q.justification) {
-    subtitle = (r.isOwner ? "Owner: full control, including access. " : "") + "↩ Activate for " + hoursLabel(defaultHours) + (max ? " (at most " + max + ")" : "") + ": " + q.justification;
+    subtitle = accessWarning(r) + "↩ Activate for " + hoursLabel(defaultHours) + (max ? " (at most " + max + ")" : "") + ": " + q.justification;
     valid = true;
   } else if (q.arrow) {
     subtitle = "Type the justification, then ↩ to activate for " + hoursLabel(defaultHours) + " (⌘↩ for the maximum)";

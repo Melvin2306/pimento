@@ -6,6 +6,7 @@
 
 import assert from "node:assert/strict";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { describe as suite, test } from "node:test";
@@ -29,6 +30,9 @@ import {
   isTrustedOwner,
   listArgs,
   PimentoError,
+  accessWarning,
+  grantsAccess,
+  presetCommand,
   presetDetail,
   presetsArgs,
   readJSON,
@@ -148,6 +152,30 @@ suite("presets", () => {
   });
 });
 
+suite("roles that can grant access", () => {
+  test("Owner, User Access Administrator and RBAC Administrator get the extra confirmation", () => {
+    assert.match(accessWarning({ roleName: "Owner", isOwner: true, grantsAccess: true }) ?? "", /^Owner has full control/);
+    const uaa = { roleName: "User Access Administrator", isOwner: false, grantsAccess: true };
+    assert.equal(grantsAccess(uaa), true);
+    assert.equal(accessWarning(uaa), "User Access Administrator can grant anyone access to the resource.");
+    assert.equal(accessWarning({ roleName: "Reader", isOwner: false, grantsAccess: false }), undefined);
+    // An older CLI without grantsAccess: Owner still counts.
+    assert.equal(grantsAccess({ isOwner: true }), true);
+  });
+});
+
+suite("copying a preset's command", () => {
+  test("the name is quoted for a shell", (t) => {
+    assert.equal(presetCommand({ name: "On-call" }), "pimento activate --preset On-call");
+    const name = "It's $(nope) `nope`; x";
+    if (process.platform === "win32") return t.skip("no sh");
+    const parsed = execFileSync("/bin/sh", ["-c", `pimento() { printf '%s' "$3"; }; ${presetCommand({ name })}`], {
+      encoding: "utf8",
+    });
+    assert.equal(parsed, name);
+  });
+});
+
 suite("arguments", () => {
   const role = { id: "/subscriptions/00000000-0000-0000-0000-000000000001/x/i1" };
 
@@ -241,6 +269,7 @@ suite("against pimento --demo", { skip: bin ? false : "no pimento build: run `sw
     assert.ok(list.roles.length >= 10);
     assert.ok(list.roles.some((r) => r.isActive && r.activeUntil));
     assert.ok(list.roles.every((r) => r.id && r.roleName && r.scopeName));
+    assert.ok(list.roles.some((r) => r.roleName === "User Access Administrator" && r.grantsAccess && !r.isOwner));
     const status = await readJSON<RoleList>(bin, statusArgs(demo));
     assert.ok(status.roles.length > 0 && status.roles.every((r) => r.isActive && typeof r.secondsLeft === "number"));
     const presets = await readJSON<PresetList>(bin, presetsArgs(demo));

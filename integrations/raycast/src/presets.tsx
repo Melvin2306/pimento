@@ -3,6 +3,7 @@ import { usePromise } from "@raycast/utils";
 import { activatePreset, ActivatePresetForm } from "./components";
 import {
   PimentoError,
+  presetCommand,
   presetDetail,
   presetRoleLines,
   presetsArgs,
@@ -91,7 +92,7 @@ function PresetItem(props: { preset: Preset }) {
           )}
           <Action.CopyToClipboard
             title="Copy Command"
-            content={`pimento activate --preset ${JSON.stringify(preset.name)}`}
+            content={presetCommand(preset)}
             shortcut={Keyboard.Shortcut.Common.Copy}
           />
         </ActionPanel>

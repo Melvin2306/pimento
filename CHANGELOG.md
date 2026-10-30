@@ -141,6 +141,11 @@ All notable changes to this project are documented here. The format follows
   placed or changed when they look for it (the file, after following links, or its folder not
   owned by you or root, or writable by others or by a group other than wheel or admin), as the CLI
   does for `az`. Before, a `pimento` in a shared, writable folder on the `PATH` would have been run.
+- The Raycast extension and the Alfred workflow treat User Access Administrator and Role Based
+  Access Control Administrator like Owner (Raycast asks once more before activating them, Alfred
+  warns before ↩), from the new `grantsAccess` field of `pimento list --json`; they used to
+  warn for Owner only. A preset's copied command (*Copy Command*, Alfred's ⌘C) quotes the name
+  for a shell, so pasting it cannot run what a name like `$(…)` contains.
 - The update check sends one HTTPS `GET` to `api.github.com` with only `User-Agent:
   Pimento/<version>` and a fixed `Accept-Language: en` (no cookies, tokens or IDs; the same two
   headers as the logo fetch), with a timeout, through a guard that

@@ -72,6 +72,10 @@ check "a typed justification overrides the preset's" \
 out=$("$here/scriptfilter.sh" "zzz-nothing")
 check "no match says so" 'd["items"][0]["title"] == "No matching role or preset"' "$out"
 
+out=$("$here/scriptfilter.sh" "user access staging > Grant x")
+check "so does a role that can grant access" \
+  '[i["subtitle"] for i in d["items"] if i.get("uid","").startswith("role:")][0].startswith("User Access Administrator: can grant anyone access")' "$out"
+
 out=$("$here/scriptfilter.sh" "owner staging > Rotate keys")
 check "an Owner role says so before ↩" \
   '[i["subtitle"] for i in d["items"] if i.get("uid","").startswith("role:")][0].startswith("Owner: full control")' "$out"
@@ -88,7 +92,8 @@ cat >"$cache/fx-presets.json" <<'EOF'
 {"id":"p1","name":"Prod","roles":[{"scope":"/s/x","roleDefinitionId":"r"}]},
 {"id":"p2","name":"Prod > Admin","roles":[{"scope":"/s/y","roleDefinitionId":"r"}]},
 {"id":"p3","name":"Shared","roles":[{"scope":"/s/x","roleDefinitionId":"r"}],"justification":"j"},
-{"id":"p4","name":"shared","tenantId":"00000000-0000-0000-0000-00000000000a","roles":[{"scope":"/s/y","roleDefinitionId":"r"}],"justification":"j"}
+{"id":"p4","name":"shared","tenantId":"00000000-0000-0000-0000-00000000000a","roles":[{"scope":"/s/y","roleDefinitionId":"r"}],"justification":"j"},
+{"id":"p5","name":"It's $(nope) `nope`; x","roles":[{"scope":"/s/y","roleDefinitionId":"r"}]}
 ]}
 EOF
 fx() { osascript -l JavaScript "$here/alfred.js" items "$cache/fx-roles.json" "$cache/fx-presets.json" "$1" 8; }
@@ -103,6 +108,14 @@ check "a preset name with >: that preset, not the shorter one" \
 out=$(fx "shared")
 check "presets that share a name are each activated by their own id" \
   '{i["variables"]["pim_preset_tenant"]: (i["valid"], i["variables"]["pim_preset_id"]) for i in d["items"] if i["title"].startswith("Preset")} == {"": (True, "p3"), "00000000-0000-0000-0000-00000000000a": (True, "p4")}' "$out"
+
+# The copied command, pasted into a shell, names exactly the preset.
+copy=$(fx "preset" | python3 -c 'import json,sys; print([i["text"]["copy"] for i in json.load(sys.stdin)["items"] if i.get("variables",{}).get("pim_preset_id") == "p5"][0])')
+parsed=$(sh -c 'pimento() { printf "%s" "$3"; }; '"$copy" 2>&1)
+if [ "$parsed" = "It's \$(nope) \`nope\`; x" ]; then pass "a preset's copied command quotes its name"; else
+  fail "a preset's copied command quotes its name"
+  printf '%s\n%s\n' "$copy" "$parsed"
+fi
 
 # Run Script
 out=$(pim_action=activate pim_id="$role_id" pim_justification="-Release; rm -rf ~" pim_hours=2 pim_label="x" "$here/action.sh")

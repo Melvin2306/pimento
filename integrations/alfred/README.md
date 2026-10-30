@@ -17,7 +17,8 @@ shows the result. It never talks to Azure and never sees a token.
 A role is picked by an `@` handle that ↩ fills in (`Contributor · Contoso Staging @924638b9 > `),
 so the role you chose is the one activated (`pimento activate --id …`), never a neighbour with a
 similar name. The result (activated until …, awaiting approval, or the CLI's error) comes as a
-notification. Roles whose policy requires a ticket are shown but not activated from Alfred: use the
+notification. Roles that can grant anyone access (Owner, User Access Administrator, Role Based
+Access Control Administrator) are marked `(!)` and say so before ↩. Roles whose policy requires a ticket are shown but not activated from Alfred: use the
 app or `pimento activate --ticket`.
 
 The role list is cached for a minute while you type, and cleared by every action.

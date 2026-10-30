@@ -14,6 +14,7 @@ import {
 } from "@raycast/api";
 import { useEffect, useState } from "react";
 import {
+  accessWarning,
   activatePresetArgs,
   activateRoleArgs,
   change,
@@ -72,10 +73,11 @@ export function ActivateRoleForm(props: { role: Role; onDone?: () => void }) {
       setTicketError("Its PIM policy requires a ticket number and system");
       return;
     }
-    if (role.isOwner) {
+    const warning = accessWarning(role);
+    if (warning) {
       const ok = await confirmAlert({
         title: `Activate ${roleLabel(role)}?`,
-        message: "Owner has full control of the resource, including granting access to others.",
+        message: warning,
         icon: { source: Icon.ExclamationMark, tintColor: Color.Red },
         primaryAction: { title: "Activate", style: Alert.ActionStyle.Destructive },
       });
@@ -106,7 +108,7 @@ export function ActivateRoleForm(props: { role: Role; onDone?: () => void }) {
       ? "Needs approval: an approver decides within 24 hours; nothing is active until then."
       : undefined,
     role.policy?.requiresMfa ? "Its policy asks for MFA; sign in with MFA if PIM refuses." : undefined,
-    role.isOwner ? "Owner: full control of the resource, including access." : undefined,
+    accessWarning(role),
     role.policy?.status && role.policy.status !== "loaded"
       ? "Its PIM policy could not be read: the duration is not capped in advance."
       : undefined,
@@ -275,7 +277,8 @@ export function timeLeftTag(role: Role, now: Date): List.Item.Accessory {
 
 export function roleAccessories(role: Role, now: Date): List.Item.Accessory[] {
   const a: List.Item.Accessory[] = [];
-  if (role.isOwner) a.push({ tag: { value: "Owner", color: Color.Red }, tooltip: "Full control, including access" });
+  const warning = accessWarning(role);
+  if (warning) a.push({ tag: { value: role.isOwner ? "Owner" : "Grants access", color: Color.Red }, tooltip: warning });
   if (role.policy?.requiresApproval) a.push({ icon: Icon.TwoPeople, tooltip: "Needs approval" });
   if (role.policy?.requiresTicket) a.push({ icon: Icon.Receipt, tooltip: "Needs a ticket" });
   if (role.group) a.push({ icon: Icon.PersonLines, tooltip: `Through ${role.group}` });

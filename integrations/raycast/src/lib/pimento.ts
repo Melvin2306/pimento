@@ -29,6 +29,8 @@ export interface Role {
   membership: "direct" | "group";
   group?: string;
   isOwner: boolean;
+  /** Owner, User Access Administrator or RBAC Administrator (older CLIs: absent). */
+  grantsAccess?: boolean;
   hasCondition: boolean;
   isActive: boolean;
   activeUntil?: string;
@@ -424,6 +426,16 @@ export function deactivateArgs(settings: Settings, role: Pick<Role, "id">): stri
 
 // MARK: - Presets
 
+/** For pasting into a shell: as is when plain, else in single quotes (as `pimento presets save` prints it). */
+export function shellQuote(s: string): string {
+  return /^[\p{L}\p{N}._-]+$/u.test(s) ? s : `'${s.replace(/'/g, "'\\''")}'`;
+}
+
+/** The command that activates `preset` by name, for the clipboard. */
+export function presetCommand(preset: Pick<Preset, "name">): string {
+  return `pimento activate --preset ${shellQuote(preset.name)}`;
+}
+
 export function presetSummary(p: Preset): string {
   const roles = p.roles?.length ?? 0;
   const rules = p.match?.length ?? 0;
@@ -515,6 +527,21 @@ export function formatClock(iso: string | undefined): string | undefined {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return undefined;
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+/**
+ * Owner, User Access Administrator and Role Based Access Control
+ * Administrator can grant anyone access: they get the extra confirmation.
+ */
+export function grantsAccess(role: Pick<Role, "isOwner" | "grantsAccess">): boolean {
+  return role.grantsAccess ?? role.isOwner;
+}
+
+/** What the extra confirmation and the row's tag say about such a role. */
+export function accessWarning(role: Pick<Role, "roleName" | "isOwner" | "grantsAccess">): string | undefined {
+  if (role.isOwner) return "Owner has full control of the resource, including granting access to others.";
+  if (grantsAccess(role)) return `${role.roleName} can grant anyone access to the resource.`;
+  return undefined;
 }
 
 export function roleLabel(role: Pick<Role, "roleName" | "scopeName">): string {

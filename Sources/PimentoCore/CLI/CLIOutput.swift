@@ -256,6 +256,9 @@ public enum CLIJSON {
         public let membership: String
         public let group: String?
         public let isOwner: Bool
+        /// Owner, User Access Administrator or Role Based Access Control
+        /// Administrator: the role can grant anyone access.
+        public let grantsAccess: Bool
         public let hasCondition: Bool
         public let isActive: Bool
         public let activeUntil: String?
@@ -279,6 +282,7 @@ public enum CLIJSON {
             case .group(let name): membership = "group"; group = name
             }
             isOwner = role.isOwner
+            grantsAccess = role.grantsAccess
             hasCondition = role.hasCondition
             isActive = role.isActive
             activeUntil = role.activeUntil.map(AzureDate.format)

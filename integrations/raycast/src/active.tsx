@@ -1,7 +1,15 @@
 import { Action, ActionPanel, Keyboard, Color, Icon, List } from "@raycast/api";
 import { usePromise } from "@raycast/utils";
 import { CopyActions, deactivate, timeLeftTag, useNow } from "./components";
-import { formatClock, PimentoError, readJSON, scopeTypeLabel, statusArgs, type RoleList } from "./lib/pimento";
+import {
+  formatClock,
+  grantsAccess,
+  PimentoError,
+  readJSON,
+  scopeTypeLabel,
+  statusArgs,
+  type RoleList,
+} from "./lib/pimento";
 import { binary, demoNote, settings, showError } from "./lib/raycast";
 
 export default function Command() {
@@ -42,7 +50,9 @@ export default function Command() {
             keywords={[role.scopeType, role.group ?? ""].filter(Boolean)}
             icon={{ source: Icon.Clock, tintColor: Color.Green }}
             accessories={[
-              ...(role.isOwner ? [{ tag: { value: "Owner", color: Color.Red } }] : []),
+              ...(grantsAccess(role)
+                ? [{ tag: { value: role.isOwner ? "Owner" : "Grants access", color: Color.Red } }]
+                : []),
               { text: scopeTypeLabel(role.scopeType) },
               ...(role.activeUntil ? [{ text: `until ${formatClock(role.activeUntil)}` }] : []),
               timeLeftTag(role, now),
