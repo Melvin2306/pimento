@@ -1,0 +1,45 @@
+Sources/PimentoApp/ScheduleViews.swift
+  s_4884204a812fec::t_e9f05beac97ded 193,203-204,207,322
+Sources/PimentoApp/AppModel.swift
+  s_4884204a812fec::t_e9f05beac97ded 98-101,529-530,599-617,626,630,636,639,722,726-727,731,737,742,953,955-966,1160-1161,1456-1461
+  s_4884204a812fec::t_25942ec62af48d 1462-1463
+Sources/PimentoCore/ScheduledRequest.swift
+  s_4884204a812fec::t_a883296a5460c4 425-435
+Sources/PimentoApp/AccountModel.swift
+  s_4884204a812fec::t_84c645a5fb1b42 180,191
+  s_4884204a812fec::t_d4e4d34a3084a1 189
+Sources/PimentoApp/Notifier.swift
+  s_4884204a812fec::t_e9f05beac97ded 66,87,239
+  s_4884204a812fec::t_84c645a5fb1b42 148-167
+Sources/PimentoCore/Approvals.swift
+  s_4884204a812fec::t_a883296a5460c4 540-544,550-564,582,584
+Sources/PimentoCore/ReminderActions.swift
+  s_4884204a812fec::t_a883296a5460c4 61-63,70-71,74,84,96,111,130-135
+  s_4884204a812fec::t_77f3db44d14645 136-137
+Tests/PimentoCoreTests/ApprovalTests.swift
+  s_4884204a812fec::t_4c743892389422 291-313,483-531
+  s_4884204a812fec::t_ae27e8200c2ea6 532-533
+Tests/PimentoCoreTests/ReminderActionTests.swift
+  s_4884204a812fec::t_4c743892389422 39,53-62
+  s_4884204a812fec::t_9c281054592c89 63-64
+CHANGELOG.md
+  s_4884204a812fec::t_d5ed39d70b6f52 477-485
+README.md
+  s_4884204a812fec::t_4ccfcc1f71f256 274-275,296-298,1067
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "128dab3b3f0a6f26961990dba028a4a120048904",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
