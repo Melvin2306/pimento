@@ -62,6 +62,19 @@ struct SemanticVersionTests {
         #expect(versions.shuffled().sorted() == versions)
         #expect(SemanticVersion("1.0.0+a") == SemanticVersion("1.0.0+b"))
     }
+
+    @Test func numericPrereleaseIdentifiersOfAnyLengthAndHyphens() throws {
+        // `-5` is an alphanumeric identifier (a hyphen and a digit), not the number -5:
+        // above every numeric one.
+        let numeric = try #require(SemanticVersion("1.0.0-rc.5"))
+        let hyphen = try #require(SemanticVersion("1.0.0-rc.-5"))
+        #expect(numeric < hyphen && !(hyphen < numeric))
+        // Numbers longer than Int are still compared as numbers.
+        let small = try #require(SemanticVersion("1.0.0-rc.99999999999999999999"))
+        let large = try #require(SemanticVersion("1.0.0-rc.100000000000000000000"))
+        #expect(small < large && !(large < small))
+        #expect(SemanticVersion("1.0.0-rc.11")! > SemanticVersion("1.0.0-rc.9")!)
+    }
 }
 
 @Suite("Update check: GitHub's answer")

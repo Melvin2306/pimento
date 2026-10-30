@@ -78,14 +78,23 @@ public struct SemanticVersion: Comparable, Hashable, Sendable, CustomStringConve
         case (false, false): break
         }
         for (x, y) in zip(a.prerelease, b.prerelease) where x != y {
-            switch (Int(x), Int(y)) {
-            case let (i?, j?): return i < j
+            switch (numeric(x), numeric(y)) {
+            case let (i?, j?): return i.count != j.count ? i.count < j.count : i < j
             case (.some, nil): return true
             case (nil, .some): return false
             case (nil, nil): return x < y
             }
         }
         return a.prerelease.count < b.prerelease.count
+    }
+
+    /// The digits of a numeric pre-release identifier without leading zeros,
+    /// to compare by length, then lexically: any length, and `-5` (allowed,
+    /// alphanumeric) is not a number, as `Int(_:)` would have it.
+    private static func numeric(_ s: String) -> Substring? {
+        guard !s.isEmpty, s.utf8.allSatisfy({ (UInt8(ascii: "0")...UInt8(ascii: "9")).contains($0) }) else { return nil }
+        let digits = s.drop { $0 == "0" }
+        return digits.isEmpty ? "0" : digits
     }
 
     /// A numeric identifier: digits only, no leading zero, at most `maxDigits`.
