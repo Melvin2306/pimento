@@ -1,0 +1,25 @@
+CHANGELOG.md
+  s_4884204a812fec::t_43c3d1e2385415 9,11-12,14,16-121,125-162,164,166-176
+CONTRIBUTING.md
+  s_4884204a812fec::t_d652a2aa2c97a2 25-28,51-53,57-66
+README.md
+  s_4884204a812fec::t_94f6d07cd45645 20-26,40-172,1052-1054,1217-1218,1279-1308,1322-1323,1325-1327
+SECURITY.md
+  s_4884204a812fec::t_6194e717ff1a93 9-11,19-26,54-57,130-132
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d1bca745ca68500f0ccfe0a405c00453e411c2e5",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
