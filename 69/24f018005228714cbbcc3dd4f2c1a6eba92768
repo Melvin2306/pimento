@@ -1,0 +1,25 @@
+README.md
+  s_4884204a812fec::t_dae386a97ec82e 1194-1196,1206-1212
+Sources/PimentoApp/HistoryViews.swift
+  s_4884204a812fec::t_24066ea4f06857 193
+Sources/PimentoApp/TenantBadge.swift
+  s_4884204a812fec::t_9aceb247a664bc 88-90,141,151-153,156,161,163
+Sources/PimentoCore/TenantLogos.swift
+  s_4884204a812fec::t_5d52be1c34b9ae 50-51,234-241,243-246,300,321-322,453-454,461-464,488,491-500,504,506,518,527-550
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6924f018005228714cbbcc3dd4f2c1a6eba92768",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
