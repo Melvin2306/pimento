@@ -1698,16 +1698,23 @@ final class AppModel {
             checked = [role.id]
             checkedActive = []
             scheduleStart = nil
-            if let text = record.justification { justification = text }
+            // Exactly what that request carried: a justification or ticket
+            // left in the fields from something else is not sent with it.
+            justification = record.justification ?? ""
             if let d = HistoryReplay.duration(of: record) { duration = d }
             if let ticket = record.ticket {
                 ticketNumber = ticket.ticketNumber ?? ""
                 if let system = ticket.ticketSystem { ticketSystem = system }
                 showTicketFields = true
+            } else {
+                ticketNumber = ""
             }
             loadPolicies(for: [role])
-            banner = Banner(kind: .info, text: "\(role.roleName) · \(role.scopeName) selected with the justification"
-                + (record.ticket == nil ? "" : " and ticket") + " of \(record.at.formatted(date: .abbreviated, time: .shortened)). Press Activate.")
+            let carried = [record.justification == nil ? nil : "justification", record.ticket == nil ? nil : "ticket"].compactMap { $0 }
+            let when = record.at.formatted(date: .abbreviated, time: .shortened)
+            banner = Banner(kind: .info, text: "\(role.roleName) · \(role.scopeName) selected"
+                + (carried.isEmpty ? " (that request of \(when) kept no justification: enter one)" : " with the \(carried.joined(separator: " and ")) of \(when)")
+                + ". Press Activate.")
             justificationFocusRequest += 1
         case .alreadyActive(let role):
             historyMessage = Banner(kind: .info, text: "\(role.roleName) · \(role.scopeName) is active now.")
