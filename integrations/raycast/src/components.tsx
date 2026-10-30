@@ -21,6 +21,7 @@ import {
   durationHours,
   formatDuration,
   formatTimeLeft,
+  presetRoleLines,
   roleLabel,
   scopeTypeLabel,
   secondsLeft,
@@ -174,23 +175,6 @@ export async function deactivate(role: Role, onDone?: () => void): Promise<void>
 }
 
 // MARK: - Presets
-
-export function presetSummary(p: Preset): string {
-  const roles = p.roles?.length ?? 0;
-  const rules = p.match?.length ?? 0;
-  const parts = [roles === 1 ? "1 role" : `${roles} roles`];
-  if (rules) parts.push(rules === 1 ? "1 rule" : `${rules} rules`);
-  return parts.join(" + ");
-}
-
-export function presetRoleLines(p: Preset): string[] {
-  const roles = (p.roles ?? []).map((r) => `${r.roleName ?? "Role"} · ${r.scopeName ?? r.scope}`);
-  const rules = (p.match ?? []).map(
-    (m) =>
-      `Rule: ${[...(m.roles ?? []).map((r) => `role ${r}`), ...(m.filters ?? []).map((f) => `“${f}”`)].join(", ")}`,
-  );
-  return [...roles, ...rules];
-}
 
 export async function activatePreset(
   preset: Preset,

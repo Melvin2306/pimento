@@ -123,6 +123,10 @@ All notable changes to this project are documented here. The format follows
   could carry thousands of hidden characters to Azure and the history. An emoji's own presentation
   selector (⚠️, ✔️, 1️⃣) is still accepted, every string is also limited to four Unicode scalars per
   allowed character, and the confirmation shows any invisible character as an escape.
+- The Raycast extension's preset detail shows the preset, role, scope and rule names, the
+  justification and the ticket system as plain text, no longer as Markdown, in which a name from
+  Azure or the presets file (`![](https://…)`) could load a remote image as soon as the row was
+  selected, or show a link.
 - The update check sends one HTTPS `GET` to `api.github.com` with only `User-Agent:
   Pimento/<version>` and a fixed `Accept-Language: en` (no cookies, tokens or IDs; the same two
   headers as the logo fetch), with a timeout, through a guard that

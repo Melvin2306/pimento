@@ -386,6 +386,51 @@ export function deactivateArgs(settings: Settings, role: Pick<Role, "id">): stri
   return [...baseArgs(settings), "deactivate", `--id=${role.id}`, "--yes", "--json"];
 }
 
+// MARK: - Presets
+
+export function presetSummary(p: Preset): string {
+  const roles = p.roles?.length ?? 0;
+  const rules = p.match?.length ?? 0;
+  const parts = [roles === 1 ? "1 role" : `${roles} roles`];
+  if (rules) parts.push(rules === 1 ? "1 rule" : `${rules} rules`);
+  return parts.join(" + ");
+}
+
+function presetRoleText(r: PresetRole): string {
+  return `${r.roleName ?? "Role"} · ${r.scopeName ?? r.scope}`;
+}
+
+function presetRuleText(m: PresetRule): string {
+  return [...(m.roles ?? []).map((r) => `role ${r}`), ...(m.filters ?? []).map((f) => `“${f}”`)].join(", ");
+}
+
+export function presetRoleLines(p: Preset): string[] {
+  return [...(p.roles ?? []).map(presetRoleText), ...(p.match ?? []).map((m) => `Rule: ${presetRuleText(m)}`)];
+}
+
+/** One line of a detail pane: a label and its text. */
+export interface DetailField {
+  title: string;
+  text: string;
+}
+
+/**
+ * A preset's detail pane, shown as Raycast metadata labels: plain text,
+ * never markdown. Role and scope names come from Azure and the preset from
+ * a file; as markdown, a name could load a remote image (`![](https://…)`)
+ * as soon as the row is selected, or show a link.
+ */
+export function presetDetail(p: Preset): DetailField[] {
+  return [
+    { title: "Preset", text: p.name },
+    ...(p.roles ?? []).map((r) => ({ title: "Role", text: presetRoleText(r) })),
+    ...(p.match ?? []).map((m) => ({ title: "Rule", text: presetRuleText(m) })),
+    { title: "Justification", text: p.justification ?? "None saved: you are asked for one" },
+    { title: "Duration", text: `${formatDuration(p.duration) ?? "8 h (default)"}, capped at each role's maximum` },
+    ...(p.ticketSystem ? [{ title: "Ticket system", text: p.ticketSystem }] : []),
+  ];
+}
+
 // MARK: - Formatting
 
 /** "PT8H" → "8 h", "PT1H30M" → "1 h 30 min", "max" → "maximum". */

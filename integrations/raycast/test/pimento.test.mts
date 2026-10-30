@@ -5,7 +5,7 @@
 // skipped when neither exists.
 
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { describe as suite, test } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -26,6 +26,7 @@ import {
   formatTimeLeft,
   listArgs,
   PimentoError,
+  presetDetail,
   presetsArgs,
   readJSON,
   run,
@@ -73,6 +74,34 @@ suite("finding pimento", () => {
       "/usr/local/bin/pimento",
       appHelperPath,
     ]);
+  });
+});
+
+suite("presets", () => {
+  test("the detail pane is plain text: names from Azure or the file are never markdown", () => {
+    const image = "![x](https://example.com/pixel.png)";
+    const link = "[Contoso](https://example.com/)";
+    const detail = presetDetail({
+      id: "p1",
+      name: `On-call ${image}`,
+      roles: [{ scope: "/s/x", roleDefinitionId: "r", roleName: `Reader ${image}`, scopeName: `Prod ${link}` }],
+      match: [{ filters: [`<img src="https://example.com/i.png">`] }],
+      justification: "**INC-1** <b>x</b>",
+      ticketSystem: link,
+    });
+    assert.deepEqual(detail, [
+      { title: "Preset", text: `On-call ${image}` },
+      { title: "Role", text: `Reader ${image} · Prod ${link}` },
+      { title: "Rule", text: `“<img src="https://example.com/i.png">”` },
+      { title: "Justification", text: "**INC-1** <b>x</b>" },
+      { title: "Duration", text: "8 h (default), capped at each role's maximum" },
+      { title: "Ticket system", text: link },
+    ]);
+    // No view renders text as markdown: List.Item.Detail and Detail take metadata only.
+    const src = join(here, "../src");
+    for (const file of readdirSync(src).filter((f) => f.endsWith(".tsx"))) {
+      assert.doesNotMatch(readFileSync(join(src, file), "utf8"), /\bmarkdown\s*=/, file);
+    }
   });
 });
 

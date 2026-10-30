@@ -1,10 +1,12 @@
 import { Action, ActionPanel, Keyboard, Color, Icon, List } from "@raycast/api";
 import { usePromise } from "@raycast/utils";
-import { activatePreset, ActivatePresetForm, presetRoleLines, presetSummary } from "./components";
+import { activatePreset, ActivatePresetForm } from "./components";
 import {
-  formatDuration,
   PimentoError,
+  presetDetail,
+  presetRoleLines,
   presetsArgs,
+  presetSummary,
   readJSON,
   type Preset,
   type PresetList,
@@ -54,18 +56,6 @@ export default function Command() {
 
 function PresetItem(props: { preset: Preset }) {
   const { preset } = props;
-  const markdown = [
-    `## ${preset.name}`,
-    "",
-    ...presetRoleLines(preset).map((l) => `- ${l}`),
-    "",
-    preset.justification
-      ? `**Justification:** ${preset.justification}`
-      : "_No justification saved: you are asked for one._",
-    "",
-    `**Duration:** ${formatDuration(preset.duration) ?? "8 h (default)"}, capped at each role's maximum`,
-    ...(preset.ticketSystem ? ["", `**Ticket system:** ${preset.ticketSystem}`] : []),
-  ].join("\n");
   const form = <ActivatePresetForm preset={preset} />;
   return (
     <List.Item
@@ -73,7 +63,17 @@ function PresetItem(props: { preset: Preset }) {
       subtitle={presetSummary(preset)}
       keywords={presetRoleLines(preset)}
       icon={Icon.Star}
-      detail={<List.Item.Detail markdown={markdown} />}
+      detail={
+        <List.Item.Detail
+          metadata={
+            <List.Item.Detail.Metadata>
+              {presetDetail(preset).map((f, i) => (
+                <List.Item.Detail.Metadata.Label key={i} title={f.title} text={f.text} />
+              ))}
+            </List.Item.Detail.Metadata>
+          }
+        />
+      }
       actions={
         <ActionPanel>
           {preset.justification ? (
