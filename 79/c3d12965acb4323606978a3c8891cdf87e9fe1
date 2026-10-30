@@ -1,0 +1,25 @@
+Sources/PimentoApp/main.swift
+  s_4884204a812fec::t_dc5f0d5d9b3be4 12
+Sources/PimentoCore/LaunchArguments.swift
+  s_4884204a812fec::t_dc5f0d5d9b3be4 28-36
+Tests/PimentoCoreTests/CLIParserTests.swift
+  s_4884204a812fec::t_dc5f0d5d9b3be4 182-197
+CHANGELOG.md
+  s_4884204a812fec::t_290c12efdbcdfe 511-514
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "79c3d12965acb4323606978a3c8891cdf87e9fe1",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
