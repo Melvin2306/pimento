@@ -591,10 +591,10 @@ final class AppModel {
             for r in targets { cancelResults[r.name] = .failed(code: "Auth", message: error.localizedDescription) }
         }
         for r in targets { cancelling.remove(r.name) }
-        let done = targets.filter { cancelResults[$0.name] == .canceled }.count
-        let failed = targets.count - done
+        let done = targets.filter { cancelResults[$0.name] == .canceled }
+        let failed = targets.count - done.count
         banner = Banner(kind: failed > 0 ? .error : .success,
-                        text: "\(done) scheduled activation\(done == 1 ? "" : "s") cancelled" + (failed > 0 ? ", \(failed) failed." : "."))
+                        text: "\(ScheduledRequest.countLabel(done)) cancelled" + (failed > 0 ? ", \(failed) failed." : "."))
         await loadScheduled()
     }
 

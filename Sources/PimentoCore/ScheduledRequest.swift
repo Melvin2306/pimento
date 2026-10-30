@@ -413,3 +413,16 @@ public struct ScheduledStartNotice: Equatable, Sendable {
         }
     }
 }
+
+public extension ScheduledRequest {
+    /// "3 scheduled activations", "1 request awaiting approval", or both
+    /// joined with "and": what the Scheduled view lists, by kind.
+    static func countLabel(_ requests: [ScheduledRequest]) -> String {
+        let awaiting = requests.filter { $0.kind == .awaitingApproval }.count
+        let scheduled = requests.count - awaiting
+        var parts: [String] = []
+        if scheduled > 0 || awaiting == 0 { parts.append("\(scheduled) scheduled activation\(scheduled == 1 ? "" : "s")") }
+        if awaiting > 0 { parts.append("\(awaiting) request\(awaiting == 1 ? "" : "s") awaiting approval") }
+        return parts.joined(separator: " and ")
+    }
+}

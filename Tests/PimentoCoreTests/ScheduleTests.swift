@@ -289,6 +289,18 @@ struct ScheduledStartNoticeTests {
         #expect(ScheduledStartNotice.notices(for: pending, tenantId: nil, now: utc("2026-10-31T00:00:00Z")).count == 1)
     }
 
+    @Test func cancelLabelsCountBothKinds() {
+        func request(_ kind: ScheduledRequest.Kind) -> ScheduledRequest {
+            ScheduledRequest(id: "x", name: "x", scope: "/subscriptions/s", roleDefinitionId: "r", roleName: "Reader",
+                             scopeName: "Sub", scopeType: "subscription", status: "Granted", start: Fixture.now, end: nil, kind: kind)
+        }
+        #expect(ScheduledRequest.countLabel([request(.scheduled), request(.scheduled)]) == "2 scheduled activations")
+        #expect(ScheduledRequest.countLabel([request(.awaitingApproval)]) == "1 request awaiting approval")
+        #expect(ScheduledRequest.countLabel([request(.scheduled), request(.awaitingApproval), request(.awaitingApproval)])
+            == "1 scheduled activation and 2 requests awaiting approval")
+        #expect(ScheduledRequest.countLabel([]) == "0 scheduled activations")
+    }
+
     @Test func severalRolesAtOneMinuteShareANotice() {
         let start = utc("2026-10-30T07:00:20Z")
         let requests = (1...5).map { i in

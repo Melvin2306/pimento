@@ -200,14 +200,14 @@ struct ScheduledSheet: View {
         }
         .themedPageBackground()
         .frame(minWidth: 760, idealWidth: 860, minHeight: 360, idealHeight: 460)
-        .alert("Cancel all \(model.scheduledRequests.count) scheduled activations?", isPresented: $model.showCancelAllConfirmation) {
+        .alert("Cancel \(ScheduledRequest.countLabel(model.scheduledRequests))?", isPresented: $model.showCancelAllConfirmation) {
             Button("Cancel All", role: .destructive) {
                 let all = model.scheduledRequests
                 Task { await model.cancelScheduled(all) }
             }
             Button("Keep", role: .cancel) {}
         } message: {
-            Text("The roles will not be activated at their start times. You can schedule them again.")
+            Text("Scheduled roles will not be activated at their start times, and requests awaiting approval are withdrawn. You can request them again.")
         }
     }
 
