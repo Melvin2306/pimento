@@ -760,7 +760,10 @@ Exit codes: 0 all approved, 1 any denied, expired, cancelled, failed or not foun
 no approver permissions). `pimento approve ID… -j TEXT` and `pimento deny ID… -j TEXT` follow the
 safety rules below: the requests first (Owner roles highlighted for approve), a `[y/N]` prompt on a
 terminal, `--yes` otherwise, `--dry-run` prints the `PATCH` and its body and sends nothing. A
-request decided by someone else meanwhile is reported as not pending (exit 1).
+request decided by someone else meanwhile is reported as not pending (exit 1). The ID column shows
+the whole request id: on a terminal its first 4+ characters are enough (the prompt shows the
+request it matched), but `--yes` takes only whole ids, matched exactly, so a request submitted
+later under the same prefix is never decided unseen.
 
 **Ending and renewing.** `deactivate`, `renew` and `extend` follow the same safety rules as
 `activate`: an explicit selection, the plan first, a `[y/N]` prompt on a terminal, `--yes` required

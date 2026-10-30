@@ -183,9 +183,16 @@ extension CLIJSON {
     }
 }
 
-/// Picks items by request id: each target is the start of exactly one name.
+/// Picks items by request id: each target is the start of exactly one name
+/// (`exact`: each target is a whole name).
 public enum RequestIdSelection {
-    public static func pick<T>(_ items: [T], name: (T) -> String, targets: [String]) throws -> (picked: [T], notFound: [String]) {
+    /// A whole request id: a GUID (36 characters).
+    public static func isFullId(_ s: String) -> Bool {
+        let t = s.trimmingCharacters(in: .whitespaces)
+        return t.count == 36 && UUID(uuidString: t) != nil
+    }
+
+    public static func pick<T>(_ items: [T], name: (T) -> String, targets: [String], exact: Bool = false) throws -> (picked: [T], notFound: [String]) {
         var picked: [T] = []
         var seen = Set<String>()
         var notFound: [String] = []
@@ -193,7 +200,8 @@ public enum RequestIdSelection {
             let t = target.trimmingCharacters(in: .whitespaces).lowercased()
             var hits: [T] = []
             var hitNames = Set<String>()
-            for item in items where name(item).lowercased().hasPrefix(t) && hitNames.insert(name(item).lowercased()).inserted {
+            for item in items where (exact ? name(item).lowercased() == t : name(item).lowercased().hasPrefix(t))
+                && hitNames.insert(name(item).lowercased()).inserted {
                 hits.append(item)
             }
             if hits.count > 1 { throw CLIParseError.ambiguousRequestId(target, matches: hits.count) }
@@ -409,7 +417,8 @@ extension CLIRunner {
         for r in requests {
             let expires = expiry(r.expiresAt, now: now)
             table.append([
-                .init(r.shortId, .dim),
+                // The whole id: `approve ID --yes` takes only that.
+                .init(r.name, .dim),
                 .init(r.requesterName ?? r.requesterEmail ?? r.requesterId),
                 .init(r.isOwner ? "\(r.roleName) (!)" : r.roleName, r.isOwner ? .strong : .plain),
                 .init(r.scopeName),
@@ -443,7 +452,7 @@ extension CLIRunner {
         approvalTable(inbox.requests, now: env.now(), style: outStyle, json: false).forEach { out($0) }
         if env.stdoutIsTTY {
             out(outStyle.dim("\(CLIFormat.plural(inbox.requests.count, "request")) to review · "
-                + "`pimento approve ID -j TEXT` or `pimento deny ID -j TEXT`"))
+                + "`pimento approve ID -j TEXT` or `pimento deny ID -j TEXT` (--yes takes the whole ID)"))
         }
         return .success
     }
@@ -464,7 +473,9 @@ extension CLIRunner {
         let style = o.json ? errStyle : outStyle
         let now = env.now()
 
-        let (picked, notFound) = try RequestIdSelection.pick(inbox.requests, name: \.name, targets: o.targets)
+        // Without a prompt (--yes), only the exact request named is decided.
+        let (picked, notFound) = try RequestIdSelection.pick(
+            inbox.requests, name: \.name, targets: o.targets, exact: o.assumeYes && !o.dryRun)
         let plans = try PlannedDecision.plan(await service.resolvingStages(picked), decision: o.decision, justification: o.justification)
         let sendable = plans.filter { $0.url != nil }
         let unsendable = plans.filter { $0.url == nil }
@@ -493,7 +504,7 @@ extension CLIRunner {
             : "The requesters do not get the roles; they see your justification.")
         human("Justification: \(o.justification)")
         for p in unsendable {
-            human(style.yellow("skip") + "  \(p.request.roleName) · \(p.request.scopeName) (\(p.request.shortId)): \(DecisionOutcome.noOpenStageMessage)")
+            human(style.yellow("skip") + "  \(p.request.roleName) · \(p.request.scopeName) (\(p.request.name)): \(DecisionOutcome.noOpenStageMessage)")
         }
         guard !sendable.isEmpty else {
             if o.json { out(CLIJSON.encode(json([:]))) }

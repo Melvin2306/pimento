@@ -87,6 +87,15 @@ struct CLIApprovalParserTests {
         #expect(throws: CLIParseError.noDecisionSelection("deny")) { try command("deny", "-j", "x") }
         #expect(throws: CLIParseError.notARequestId("--all")) { try command("deny", "--", "--all", "-j", "x") }
         #expect(throws: CLIParseError.unknownOption("--all", command: "approve")) { try command("approve", "--all", "-j", "x") }
+        // Without a prompt only whole ids: a prefix is re-resolved when the command runs.
+        #expect(throws: CLIParseError.fullRequestIdRequired("a1a1a1a1", command: "approve")) { try command("approve", "a1a1a1a1", "-j", "x", "--yes") }
+        #expect(throws: CLIParseError.fullRequestIdRequired("a1a1a1a1-0000-4000-8000-00000000001", command: "deny")) {
+            try command("deny", "a1a1a1a1-0000-4000-8000-00000000001", "-j", "x", "-y")
+        }
+        guard case .approve(let whole) = try command("approve", "a1a1a1a1-0000-4000-8000-000000000011", "-j", "x", "--yes") else {
+            Issue.record("expected approve"); return
+        }
+        #expect(whole.targets == ["a1a1a1a1-0000-4000-8000-000000000011"] && whole.assumeYes)
     }
 
     @Test func helpAndCompletionsKnowTheNewCommands() throws {
@@ -255,7 +264,8 @@ struct CLIApproverTests {
 
     @Test func approveSendsOnePatchPerRequest() async throws {
         let h = CLIHarness()
-        #expect(await h.run("approve", "a1a1", "b2b2", "-j", "matches the change", "--yes", "--json") == 0)
+        #expect(await h.run("approve", "a1a1a1a1-0000-4000-8000-000000000011", "b2b2b2b2-0000-4000-8000-000000000012",
+                            "-j", "matches the change", "--yes", "--json") == 0)
         let patches = await h.transport.requests.filter { $0.httpMethod == "PATCH" }
         #expect(patches.count == 2)
         let urls = Set(patches.map { $0.url!.absoluteString })
@@ -268,6 +278,83 @@ struct CLIApproverTests {
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(h.out.utf8)) as? [String: Any])
         #expect((doc["summary"] as? [String: Any])?["decided"] as? Int == 2)
         #expect(doc["decision"] as? String == "approve")
+    }
+
+    /// One pending request in the approver's inbox, as ARM lists it.
+    static func inboxItem(name: String, roleGUID: String, roleName: String, scopeName: String) -> [String: Any] {
+        let scope = "/subscriptions/99999999-0000-4000-8000-000000000009"
+        return [
+            "id": "\(scope)/providers/Microsoft.Authorization/roleAssignmentScheduleRequests/\(name)",
+            "name": name,
+            "properties": [
+                "scope": scope,
+                "roleDefinitionId": "\(scope)/providers/Microsoft.Authorization/roleDefinitions/\(roleGUID)",
+                "principalId": "44444444-0000-4000-8000-000000000004",
+                "requestType": "SelfActivate",
+                "status": "PendingApproval",
+                "approvalId": "/providers/Microsoft.Authorization/roleAssignmentApprovals/\(name)",
+                "scheduleInfo": ["startDateTime": "2026-10-29T11:00:00Z", "expiration": ["type": "AfterDuration", "duration": "PT8H"]],
+                "justification": "read-only audit",
+                "createdOn": "2026-10-29T11:00:00Z",
+                "expandedProperties": [
+                    "scope": ["displayName": scopeName, "type": "subscription"],
+                    "roleDefinition": ["displayName": roleName],
+                    "principal": ["displayName": "Dummy Requester", "email": "requester@example.com"],
+                ],
+            ] as [String: Any],
+        ]
+    }
+
+    /// A requester cancels a reviewed request and submits another whose id
+    /// starts the same: `--yes` decides only the exact id that was reviewed.
+    @Test func yesNeverDecidesARequestSwappedInUnderTheSamePrefix() async throws {
+        let decoy = "5e5e5e5e-0000-4000-8000-0000000000c1", swapped = "5e5e5e5e-9999-4000-8000-0000000000d2"
+        let readerItem = Self.inboxItem(name: decoy, roleGUID: "acdd72a7-3385-48ef-bd42-f606fba81ae7", roleName: "Reader", scopeName: "Dummy Sandbox")
+        let ownerItem = Self.inboxItem(name: swapped, roleGUID: EligibleRole.ownerRoleGUID, roleName: "Owner", scopeName: "Dummy Production")
+        let listing = TestBox<[[String: Any]]>([readerItem])
+        func harness(answers: [String] = []) -> CLIHarness {
+            let h = CLIHarness(answers: answers)
+            h.get = { request in
+                guard request.url!.absoluteString.contains("asApprover()") else { return nil }
+                return (try JSONSerialization.data(withJSONObject: ["value": listing.value ?? []]), 200)
+            }
+            return h
+        }
+
+        // The approver reviews the decoy: the whole id is listed.
+        let review = harness()
+        #expect(await review.run("approvals") == 0)
+        #expect(review.out.contains(decoy) && review.out.contains("Reader"))
+
+        // The requester swaps it for an Owner request under the same prefix.
+        listing.value = [ownerItem]
+        for prefix in ["5e5e5e5e", "5e5e"] {
+            for verb in ["approve", "deny"] {
+                let h = harness()
+                #expect(await h.run(verb, prefix, "-j", "ok", "--yes") == 2)
+                #expect(h.err.contains("takes only full request ids"))
+                #expect(await h.transport.requests.filter { $0.httpMethod == "PATCH" }.isEmpty)
+            }
+        }
+        // The whole reviewed id no longer matches anything: nothing is sent.
+        let exact = harness()
+        #expect(await exact.run("approve", decoy, "-j", "ok", "--yes") == 1)
+        #expect(exact.out.contains("not found  \(decoy)"))
+        #expect(await exact.transport.requests.filter { $0.httpMethod == "PATCH" }.isEmpty)
+
+        // On a terminal a prefix still works, and the prompt shows the whole id it matched.
+        let asked = harness(answers: ["n"])
+        asked.stdinIsTTY = true
+        #expect(await asked.run("approve", "5e5e5e5e", "-j", "ok") == 1)
+        #expect(asked.out.contains(swapped) && asked.out.contains("Owner (!)"))
+        #expect(asked.err.contains("Approve 1 request, including 1 Owner? [y/N]"))
+        #expect(await asked.transport.requests.filter { $0.httpMethod == "PATCH" }.isEmpty)
+
+        // Control: the swapped request's own whole id decides it.
+        let control = harness()
+        #expect(await control.run("approve", swapped, "-j", "ok", "--yes") == 0)
+        let patches = await control.transport.requests.filter { $0.httpMethod == "PATCH" }
+        #expect(patches.count == 1 && patches[0].url!.absoluteString.contains("roleAssignmentApprovals/\(swapped)/stages/"))
     }
 
     @Test func dryRunAsksNothingAndSendsNothing() async {
@@ -301,23 +388,23 @@ struct CLIApproverTests {
 
     @Test func unknownDecidedAndRefused() async {
         let unknown = CLIHarness()
-        #expect(await unknown.run("deny", "deadbeef", "-j", "x", "--yes") == 1)
-        #expect(unknown.out.contains("not found  deadbeef"))
+        #expect(await unknown.run("deny", "deadbeef-0000-4000-8000-000000000000", "-j", "x", "--yes") == 1)
+        #expect(unknown.out.contains("not found  deadbeef-0000-4000-8000-000000000000"))
         #expect(unknown.err.contains("No request matches"))
 
         let gone = CLIHarness()
         gone.patch = { _ in (Data(#"{"Message":"Exception of type 'RecordNotFoundException' was thrown."}"#.utf8), 404) }
-        #expect(await gone.run("approve", "a1a1", "-j", "x", "--yes") == 1)
+        #expect(await gone.run("approve", "a1a1a1a1-0000-4000-8000-000000000011", "-j", "x", "--yes") == 1)
         #expect(gone.out.contains("skipped    Contributor · Contoso Staging for Megan Bowen: Not pending any more"))
 
         let refused = CLIHarness()
         refused.patch = { _ in (Data(#"{"error":{"code":"ExpiredAuthenticationToken","message":"expired"}}"#.utf8), 401) }
-        #expect(await refused.run("approve", "a1a1", "-j", "x", "--yes") == 3)
+        #expect(await refused.run("approve", "a1a1a1a1-0000-4000-8000-000000000011", "-j", "x", "--yes") == 3)
         #expect(refused.err.contains("hint: sign in with"))
 
         let empty = CLIHarness()
         empty.get = { request in request.url!.absoluteString.contains("asApprover()") ? (Data(#"{"value":[]}"#.utf8), 200) : nil }
-        #expect(await empty.run("approve", "a1a1", "-j", "x", "--yes") == 1)
+        #expect(await empty.run("approve", "a1a1a1a1-0000-4000-8000-000000000011", "-j", "x", "--yes") == 1)
         #expect(empty.err.contains("You have no approvals to review."))
     }
 }

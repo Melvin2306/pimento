@@ -46,7 +46,8 @@ struct CLIHistoryRecordingTests {
         #expect(cancel.historyStore.load().records[0].requestId == "5f0c1d2e-0000-4000-8000-000000000001")
 
         let approve = CLIHarness()
-        #expect(await approve.run("approve", "a1a1", "b2b2", "-j", "matches the change", "--yes") == 0)
+        #expect(await approve.run("approve", "a1a1a1a1-0000-4000-8000-000000000011", "b2b2b2b2-0000-4000-8000-000000000012",
+                                  "-j", "matches the change", "--yes") == 0)
         let decided = approve.historyStore.load().records
         #expect(decided.map(\.action) == [.approve, .approve])
         #expect(decided.allSatisfy { $0.justification == "matches the change" && $0.requester != nil })

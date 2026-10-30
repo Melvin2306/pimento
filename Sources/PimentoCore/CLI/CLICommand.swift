@@ -407,6 +407,7 @@ public enum CLIParseError: Error, Equatable, LocalizedError {
     case invalidTimeout(String)
     case noDecisionSelection(String)
     case notARequestId(String)
+    case fullRequestIdRequired(String, command: String)
     case invalidDate(flag: String, value: String)
     case unknownAction(String)
     case unknownOutcome(String)
@@ -451,6 +452,9 @@ public enum CLIParseError: Error, Equatable, LocalizedError {
             "--timeout takes a duration up to 24h such as 30m, 2h, 1h30m or 90s (a plain number is minutes), got “\(v)”."
         case .noDecisionSelection(let c): "Say which requests to \(c): request ids from `pimento approvals`."
         case .notARequestId(let v): "“\(v)” is not a request id (at least 4 characters of hex digits and dashes)."
+        case .fullRequestIdRequired(let v, let c):
+            "With --yes, `pimento \(c)` takes only full request ids (36 characters, as `pimento approvals` shows them), "
+                + "got “\(v)”. Without --yes Pimento shows the matching request and asks first."
         case .invalidDate(let flag, let v):
             "\(flag) takes 7d, 24h, 30m, 2w, today, yesterday, a date (2026-10-01), a date and time (2026-10-01 08:00) "
                 + "or ISO 8601, got “\(v)”."
@@ -893,6 +897,12 @@ public enum CLIParser {
         o.justification = (scan.values["justification"]?.last ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !o.targets.isEmpty else { throw CLIParseError.noDecisionSelection(command) }
         for t in o.targets where !CancelSelection.isIdLike(t) { throw CLIParseError.notARequestId(t) }
+        // A decision sent without a prompt must name the exact request: a
+        // prefix is re-resolved against the inbox when the command runs, and
+        // the requester chooses the request name (and so its prefix).
+        if o.assumeYes && !o.dryRun {
+            for t in o.targets where !RequestIdSelection.isFullId(t) { throw CLIParseError.fullRequestIdRequired(t, command: command) }
+        }
         guard !o.justification.isEmpty else { throw CLIParseError.missingJustificationFor(command) }
         return command == "deny" ? .deny(o) : .approve(o)
     }

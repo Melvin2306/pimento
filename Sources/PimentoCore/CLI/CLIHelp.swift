@@ -287,11 +287,14 @@ public enum CLIHelp {
         Arguments:
           REQUEST-ID          A request id from `pimento approvals`, or its first
                               characters (at least 4). Several are decided together.
+                              With --yes only whole ids (36 characters) are taken,
+                              and each must match a request exactly.
 
         Options:
           -j, --justification TEXT
                               Why you \(verb) (required; the requester can see it)
-          -y, --yes           Don't ask. Required when stdin is not a terminal.
+          -y, --yes           Don't ask (whole request ids only). Required when stdin
+                              is not a terminal.
               --dry-run       Print the requests (PATCH URL and body), send nothing
         \(tenantOption)
               --json          JSON: {decision, dryRun, results: [...], notFound, summary}
@@ -302,7 +305,7 @@ public enum CLIHelp {
 
         Examples:
           pimento \(verb) 5f0c1d2e -j "\(d == .approve ? "matches CHG-1001" : "use the staging subscription")"
-          pimento \(verb) 5f0c 7a1b -j "batch" --yes --json
+          pimento \(verb) 5f0c1d2e-0000-4000-8000-000000000001 -j "batch" --yes --json
         """
     }
 

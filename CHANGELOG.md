@@ -374,6 +374,14 @@ All notable changes to this project are documented here. The format follows
 - CI and release workflows pin third-party actions to commit SHAs; tests clean up their temporary
   files.
 
+### Security
+
+- `pimento approve|deny --yes` takes only whole request ids (36 characters) and matches them
+  exactly. Before, a prefix was resolved again when the command ran, so a requester who cancelled a
+  reviewed request and submitted another under the same prefix (for example for Owner) could have it
+  decided without the approver seeing it. On a terminal a prefix still works: the prompt shows the
+  request it matched. `pimento approvals` and the decision table show the whole id.
+
 ## [0.1.0] - 2026-10-29
 
 ### Added
