@@ -15,8 +15,15 @@ extension AppModel {
 
     // MARK: State
 
-    /// The current tenant's key in `keepAliveRolesByTenant`.
-    var keepAliveTenantKey: String { (identity?.tenantId ?? tenant.tenantId ?? "default").lowercased() }
+    /// The key in `keepAliveRolesByTenant` and `keepAliveConfirmedByTenant`:
+    /// the tenant and the signed-in account (`tenant/objectId`), so that
+    /// another account in the same tenant inherits neither the marks nor the
+    /// confirmations.
+    var keepAliveTenantKey: String {
+        let tenantKey = (identity?.tenantId ?? tenant.tenantId ?? "default").lowercased()
+        guard let user = identity?.objectId.lowercased(), !user.isEmpty else { return tenantKey }
+        return "\(tenantKey)/\(user)"
+    }
 
     /// Roles kept alive one by one in this tenant (role keys).
     var keptRoleKeys: Set<String> { keepAliveRolesByTenant[keepAliveTenantKey] ?? [] }
@@ -215,6 +222,8 @@ extension AppModel {
         keepAliveRules = [:]
         keepAliveSeen = [:]
         keepAliveError = nil
+        // A confirmation asked in the previous session is not answered in this one.
+        keepAliveConsent = nil
         Task { await keepAliveSession.reset() }
     }
 
@@ -242,7 +251,11 @@ extension AppModel {
 
     /// One pass: read, send what is due, tell the user, plan the next one.
     func runKeepAlivePass() async {
-        guard !keepAliveRunning else { return }
+        // One at a time; one asked for meanwhile (a change, a pause) runs after it.
+        guard !keepAliveRunning else {
+            scheduleKeepAlivePass(after: 5)
+            return
+        }
         updateKeepAliveRules()
         guard tenantError == nil, identity != nil, !keepAliveRules.isEmpty else {
             keepAliveItems = [:]

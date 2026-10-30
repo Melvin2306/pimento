@@ -246,9 +246,9 @@ final class AppModel {
     var loginItemError: String?
 
     // Keep alive (`AppModel+KeepAlive.swift`).
-    /// Roles kept alive one by one, by tenant (lower-case, or "default"), as role keys.
+    /// Roles kept alive one by one, by tenant and account (`keepAliveTenantKey`), as role keys.
     var keepAliveRolesByTenant: [String: Set<String>] = [:]
-    /// Access-granting roles whose keep-alive you confirmed, by tenant, as role keys.
+    /// Access-granting roles whose keep-alive you confirmed, by tenant and account, as role keys.
     var keepAliveConfirmedByTenant: [String: Set<String>] = [:]
     /// The open confirmation for keeping access-granting roles alive.
     var keepAliveConsent: KeepAliveConsentRequest?
@@ -278,9 +278,9 @@ final class AppModel {
         static let recentTickets = "recentTickets"
         static let lastTicketSystem = "lastTicketSystem"
         static let tableColumns = "tableColumns"
-        /// Roles kept alive one by one: `{tenant: [role key]}`.
+        /// Roles kept alive one by one: `{tenant/account: [role key]}`.
         static let keepAliveRoles = "keepAlive.roles"
-        /// Access-granting roles whose keep-alive was confirmed: `{tenant: [role key]}`.
+        /// Access-granting roles whose keep-alive was confirmed: `{tenant/account: [role key]}`.
         static let keepAliveConfirmed = "keepAlive.confirmed"
     }
 
