@@ -55,3 +55,34 @@ struct PlatformPathTests {
         #expect(PimentoPaths.displayFile("history.jsonl", platform: .windows) == #"%APPDATA%\Pimento\history.jsonl"#)
     }
 }
+
+#if os(Windows)
+import WinSDK
+
+@Suite("Platform: replacing a file Windows holds open")
+struct WindowsReplaceTests {
+    /// A scanner holding the file without FILE_SHARE_DELETE for a moment:
+    /// the write waits for it instead of failing with error 32.
+    @Test func aBrieflyHeldFileIsStillReplaced() throws {
+        let dir = TestTemp.url("replace")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let file = dir.appendingPathComponent("auth.json")
+        try PrivateFile.write(Data("old".utf8), to: file)
+        let path = file.withUnsafeFileSystemRepresentation { String(cString: $0!) }
+        let held = path.withCString(encodedAs: UTF16.self) {
+            CreateFileW($0, DWORD(GENERIC_READ), DWORD(FILE_SHARE_READ) | DWORD(FILE_SHARE_WRITE), nil,
+                        DWORD(OPEN_EXISTING), DWORD(FILE_ATTRIBUTE_NORMAL), nil)
+        }
+        let handle = try #require(held)
+        #expect(handle != INVALID_HANDLE_VALUE)
+        let address = UInt(bitPattern: handle)
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.3) {
+            CloseHandle(HANDLE(bitPattern: address))
+        }
+        try PrivateFile.write(Data("new".utf8), to: file)
+        #expect(try String(contentsOf: file, encoding: .utf8) == "new")
+        let leftovers = try FileManager.default.contentsOfDirectory(atPath: dir.path).filter { $0.hasPrefix(".") }
+        #expect(leftovers.isEmpty)
+    }
+}
+#endif

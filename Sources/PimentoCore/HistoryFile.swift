@@ -151,7 +151,8 @@ extension HistoryStore {
 
     /// Replaces `file` atomically. Called with the lock held.
     func replace(_ file: URL, with data: Data) throws {
-        do { try data.write(to: file, options: .atomic) } catch { throw HistoryError.io(error.localizedDescription) }
+        // Retries while a scanner holds the file (`PrivateFile.replace`).
+        do { try PrivateFile.write(data, to: file) } catch { throw HistoryError.io(error.localizedDescription) }
     }
 }
 

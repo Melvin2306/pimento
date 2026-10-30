@@ -2,6 +2,8 @@
 import Darwin
 #elseif canImport(Glibc)
 import Glibc
+#elseif os(Windows)
+import WinSDK
 #endif
 import Foundation
 #if canImport(Security)
@@ -251,7 +253,12 @@ enum PrivateFile {
         let dir = url.deletingLastPathComponent()
         try createDirectory(dir)
         #if os(Windows)
-        try data.write(to: url, options: .atomic)
+        let temp = dir.appendingPathComponent(".\(url.lastPathComponent).\(UUID().uuidString.prefix(8))")
+        try data.write(to: temp, options: .withoutOverwriting)
+        do { try replace(url, with: temp) } catch {
+            try? FileManager.default.removeItem(at: temp)
+            throw error
+        }
         #else
         let temp = dir.appendingPathComponent(".\(url.lastPathComponent).\(UUID().uuidString.prefix(8))")
         let fd = open(temp.path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0o600)
@@ -275,6 +282,42 @@ enum PrivateFile {
         }
         #endif
     }
+
+    #if os(Windows)
+    /// How often a replace is tried while another program holds the file.
+    static let replaceAttempts = 40
+
+    /// Renames `temp` over `target` (`MoveFileExW`, replacing it, written
+    /// through). Antivirus scanners and indexers open a file just written
+    /// without letting it be renamed or deleted for a moment, so a sharing
+    /// or access violation is retried for about two seconds before it counts.
+    /// Foundation's `.atomic` gave up at once ("You don't have permission",
+    /// Windows error 32), losing the write.
+    static func replace(_ target: URL, with temp: URL) throws {
+        func path(_ url: URL) -> String { url.withUnsafeFileSystemRepresentation { String(cString: $0!) } }
+        let from = path(temp), to = path(target)
+        var attempt = 0
+        while true {
+            let moved = from.withCString(encodedAs: UTF16.self) { source in
+                to.withCString(encodedAs: UTF16.self) { destination in
+                    MoveFileExW(source, destination, DWORD(MOVEFILE_REPLACE_EXISTING) | DWORD(MOVEFILE_WRITE_THROUGH))
+                }
+            }
+            if moved { return }
+            let code = GetLastError()
+            let transient = code == DWORD(ERROR_SHARING_VIOLATION) || code == DWORD(ERROR_ACCESS_DENIED)
+                || code == DWORD(ERROR_LOCK_VIOLATION)
+            attempt += 1
+            guard transient, attempt < replaceAttempts else {
+                throw CocoaError(.fileWriteNoPermission, userInfo: [
+                    NSFilePathErrorKey: target.path,
+                    NSLocalizedFailureReasonErrorKey: "Windows error \(code) replacing the file",
+                ])
+            }
+            Sleep(DWORD(min(10 * attempt, 100)))
+        }
+    }
+    #endif
 }
 
 #if canImport(Security)
