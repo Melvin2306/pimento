@@ -1,0 +1,40 @@
+integrations/alfred/info.plist
+  s_4884204a812fec::t_9f3c8646baab03 1-306
+integrations/alfred/alfred.js
+  s_4884204a812fec::t_d5a827c86f2493 1-406
+integrations/alfred/scriptfilter.sh
+  s_4884204a812fec::t_260fc505d62817 1-37
+  s_4884204a812fec::t_2ef0ff87769533 38
+integrations/alfred/action.sh
+  s_4884204a812fec::t_7d6ef49c6a7eec 1-57
+integrations/alfred/build.sh
+  s_4884204a812fec::t_f711bd0658212e 1-32
+integrations/alfred/README.md
+  s_4884204a812fec::t_85d1934ac8fdd4 1-69
+integrations/alfred/lib.sh
+  s_4884204a812fec::t_f42fbf92a37a97 1-102
+  s_4884204a812fec::t_fb2221a716e47b 103
+integrations/alfred/test.sh
+  s_4884204a812fec::t_c9f6b92c5bc8cf 1-124
+  s_4884204a812fec::t_1f94e6fc6fe4d5 125
+.github/workflows/ci.yml
+  s_4884204a812fec::t_c71c588ce5a952 31-32,54-58
+.gitignore
+  s_4884204a812fec::t_167f75cd8b959b 15-19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f8da90c524f4948c1433c026c925e22d67ba7919",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
