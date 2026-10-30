@@ -72,6 +72,38 @@ check "a typed justification overrides the preset's" \
 out=$("$here/scriptfilter.sh" "zzz-nothing")
 check "no match says so" 'd["items"][0]["title"] == "No matching role or preset"' "$out"
 
+out=$("$here/scriptfilter.sh" "owner staging > Rotate keys")
+check "an Owner role says so before ↩" \
+  '[i["subtitle"] for i in d["items"] if i.get("uid","").startswith("role:")][0].startswith("Owner: full control")' "$out"
+
+# Names containing > or @ must not move the split or the handle (alfred.js on fixtures).
+cat >"$cache/fx-roles.json" <<'EOF'
+{"roles":[
+{"id":"/s/x/i/11111111-0000-0000-0000-000000000000","eligibilityScheduleId":"/s/x/e/bbbbbbbb-0000-0000-0000-000000000000","roleName":"Contributor","scope":"/s/x","scopeName":"Prod","scopeType":"subscription","isOwner":false,"isActive":false},
+{"id":"/s/y/i/22222222-0000-0000-0000-000000000000","eligibilityScheduleId":"/s/y/e/aaaaaaaa-0000-0000-0000-000000000000","roleName":"Contributor","scope":"/s/y","scopeName":"Prod > EU @beef","scopeType":"subscription","isOwner":false,"isActive":false}
+]}
+EOF
+cat >"$cache/fx-presets.json" <<'EOF'
+{"presets":[
+{"id":"p1","name":"Prod","roles":[{"scope":"/s/x","roleDefinitionId":"r"}]},
+{"id":"p2","name":"Prod > Admin","roles":[{"scope":"/s/y","roleDefinitionId":"r"}]},
+{"id":"p3","name":"Shared","roles":[{"scope":"/s/x","roleDefinitionId":"r"}],"justification":"j"},
+{"id":"p4","name":"shared","tenantId":"00000000-0000-0000-0000-00000000000a","roles":[{"scope":"/s/y","roleDefinitionId":"r"}],"justification":"j"}
+]}
+EOF
+fx() { osascript -l JavaScript "$here/alfred.js" items "$cache/fx-roles.json" "$cache/fx-presets.json" "$1" 8; }
+ac=$(fx "eu" | python3 -c 'import json,sys; print([i for i in json.load(sys.stdin)["items"] if i.get("uid","").startswith("role:")][0]["autocomplete"])')
+out=$(fx "${ac}Release")
+check "a scope name with > and @: the picked role stays the only one" \
+  '[(i["variables"]["pim_id"][-36:], i["variables"]["pim_justification"]) for i in d["items"] if i.get("valid")] == [("22222222-0000-0000-0000-000000000000", "Release")]' "$out"
+ac=$(fx "admin" | python3 -c 'import json,sys; print([i for i in json.load(sys.stdin)["items"] if i["title"].startswith("Preset")][0]["autocomplete"])')
+out=$(fx "${ac}Release")
+check "a preset name with >: that preset, not the shorter one" \
+  '[i["variables"]["pim_preset"] for i in d["items"] if i.get("valid")] == ["Prod > Admin"]' "$out"
+out=$(fx "shared")
+check "a preset without a tenant that shares its name is not actionable" \
+  '{i["variables"]["pim_preset_tenant"]: i["valid"] for i in d["items"] if i["title"].startswith("Preset")} == {"": False, "00000000-0000-0000-0000-00000000000a": True}' "$out"
+
 # Run Script
 out=$(pim_action=activate pim_id="$role_id" pim_justification="-Release; rm -rf ~" pim_hours=2 pim_label="x" "$here/action.sh")
 check "activate by id, justification passed verbatim" \
@@ -110,6 +142,12 @@ else
   out=$(pimento_path='' PATH=/usr/bin:/bin HOME="$cache" "$here/scriptfilter.sh" "")
   check "nothing installed: pimento not found" 'd["items"][0]["title"] == "Pimento: pimento not found"' "$out"
 fi
+# A relative PATH entry is never searched: it would depend on the working directory.
+mkdir -p "$cache/cwd/relbin" "$cache/home"
+printf '#!/bin/sh\n: >"%s/ran"\n' "$cache" >"$cache/cwd/relbin/pimento"
+chmod 755 "$cache/cwd/relbin/pimento"
+(cd "$cache/cwd" && pimento_path='' PATH=relbin:/usr/bin:/bin HOME="$cache/home" "$here/scriptfilter.sh" "" >/dev/null)
+if [ -e "$cache/ran" ]; then fail "a relative PATH entry is not searched"; else pass "a relative PATH entry is not searched"; fi
 out=$(pim_action=bogus "$here/action.sh")
 check "an unknown action does nothing" '"Unknown action" in d["alfredworkflow"]["arg"]' "$out"
 

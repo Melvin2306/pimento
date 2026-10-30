@@ -83,6 +83,17 @@ function label(role) {
   return role.roleName + (role.isOwner ? " (!)" : "") + " · " + role.scopeName;
 }
 
+/**
+ * A name as it may appear in the query: ">" starts the justification and "@"
+ * a handle, so a name containing them (a preset "Prod > Admin", a scope
+ * "Prod > EU") would otherwise move the split and select another row.
+ */
+function queryText(s) {
+  return String(s || "")
+    .replace(/>/g, "\u203a")
+    .replace(/@/g, "\uff20");
+}
+
 /** A short, stable handle for one row: the start of its eligibility schedule GUID. */
 function token(role) {
   const id = role.eligibilityScheduleId || role.id || "";
@@ -114,11 +125,26 @@ function matches(haystack, words) {
 
 // MARK: - Items
 
-function presetItem(p, q, defaultHours) {
+/** Same rule as the CLI's preset lookup: trimmed, case-insensitive. */
+function sameName(a, b) {
+  return String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
+}
+
+/**
+ * `--preset NAME` picks the preset of the signed-in tenant before a preset
+ * without a tenant, so one without a tenant that shares its name with
+ * another cannot be targeted from here.
+ */
+function presetAmbiguous(p, all) {
+  return !p.tenantId && all.some((o) => o !== p && sameName(o.name, p.name));
+}
+
+function presetItem(p, q, defaultHours, all) {
   const roles = (p.roles || []).length;
   const rules = (p.match || []).length;
   const what = [roles === 1 ? "1 role" : roles + " roles"].concat(rules ? [rules === 1 ? "1 rule" : rules + " rules"] : []).join(" + ");
   const justification = q.justification || p.justification || "";
+  const ambiguous = presetAmbiguous(p, all || []);
   const duration = formatDuration(p.duration) || hoursLabel(defaultHours);
   const vars = {
     pim_action: "preset",
@@ -134,17 +160,19 @@ function presetItem(p, q, defaultHours) {
   return {
     uid: "preset:" + p.id,
     title: "Preset: " + p.name,
-    subtitle: justification
-      ? "↩ Activate " + what + " for " + duration + ": " + justification
-      : "Type > and a justification to activate its " + what,
-    valid: Boolean(justification),
-    autocomplete: p.name + " > ",
+    subtitle: ambiguous
+      ? "Another preset is also named " + p.name + ": rename one in Pimento to activate this one here"
+      : justification
+        ? "↩ Activate " + what + " for " + duration + ": " + justification
+        : "Type > and a justification to activate its " + what,
+    valid: Boolean(justification) && !ambiguous,
+    autocomplete: queryText(p.name) + " > ",
     icon: { path: "icon.png" },
     variables: vars,
     mods: {
       cmd: {
-        valid: Boolean(justification),
-        subtitle: justification ? "⌘↩ Activate " + what + " for the maximum each role allows" : "Type > and a justification first",
+        valid: Boolean(justification) && !ambiguous,
+        subtitle: ambiguous ? "Another preset has the same name" : justification ? "⌘↩ Activate " + what + " for the maximum each role allows" : "Type > and a justification first",
         variables: Object.assign({}, vars, { pim_hours: "max" }),
       },
     },
@@ -172,7 +200,7 @@ function eligibleItem(r, q, defaultHours) {
   if (needsTicket) {
     subtitle = facts.join(" · ") + " · needs a ticket: use the Pimento app or pimento activate --ticket";
   } else if (q.justification) {
-    subtitle = "↩ Activate for " + hoursLabel(defaultHours) + (max ? " (at most " + max + ")" : "") + ": " + q.justification;
+    subtitle = (r.isOwner ? "Owner: full control, including access. " : "") + "↩ Activate for " + hoursLabel(defaultHours) + (max ? " (at most " + max + ")" : "") + ": " + q.justification;
     valid = true;
   } else if (q.arrow) {
     subtitle = "Type the justification, then ↩ to activate for " + hoursLabel(defaultHours) + " (⌘↩ for the maximum)";
@@ -184,7 +212,7 @@ function eligibleItem(r, q, defaultHours) {
     title: label(r),
     subtitle,
     valid,
-    autocomplete: label(r) + " @" + token(r) + " > ",
+    autocomplete: queryText(label(r)) + " @" + token(r) + " > ",
     icon: { path: "icon.png" },
     variables: vars,
     mods: {
@@ -213,7 +241,7 @@ function activeItem(r, now) {
       scopeTypeLabel(r.scopeType) +
       " · ⌥↩ deactivate",
     valid: false,
-    autocomplete: label(r) + " @" + token(r) + " ",
+    autocomplete: queryText(label(r)) + " @" + token(r) + " ",
     icon: { path: "icon.png" },
     mods: {
       alt: {
@@ -236,22 +264,25 @@ function items(rolesPath, presetsPath, query, defaultHours, demo) {
   const out = [];
 
   // A preset named exactly (after ↩ autocompleted it) is the only result.
-  const exact = (presetList.presets || []).filter((p) => p.name.toLowerCase() === q.filter.toLowerCase());
+  const presets = presetList.presets || [];
+  const exact = presets.filter((p) => sameName(queryText(p.name), q.filter));
   if (exact.length === 1 && q.tokens.length === 0) {
-    out.push(presetItem(exact[0], q, hours));
+    out.push(presetItem(exact[0], q, hours, presets));
   } else {
     const roles = (list.roles || []).filter((r) =>
       q.tokens.length > 0
         ? q.tokens.some((t) => token(r).startsWith(t))
         : matches(
-            [r.roleName, r.scopeName, scopeTypeLabel(r.scopeType), r.group || "", r.isActive ? "active" : "eligible"].join(" "),
+            queryText(
+              [r.roleName, r.scopeName, scopeTypeLabel(r.scopeType), r.group || "", r.isActive ? "active" : "eligible"].join(" "),
+            ),
             q.words,
           ),
     );
     if (q.tokens.length === 0) {
-      for (const p of presetList.presets || []) {
+      for (const p of presets) {
         const hay = ["preset", p.name].concat((p.roles || []).map((r) => (r.roleName || "") + " " + (r.scopeName || ""))).join(" ");
-        if (matches(hay, q.words)) out.push(presetItem(p, q, hours));
+        if (matches(queryText(hay), q.words)) out.push(presetItem(p, q, hours, presets));
       }
     }
     const active = roles

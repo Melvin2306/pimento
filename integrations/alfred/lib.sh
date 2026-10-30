@@ -8,7 +8,10 @@
 # and alfred_workflow_cache, a folder for the workflow's cache.
 
 pim_here=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
-pim_cache=${alfred_workflow_cache:-${TMPDIR:-/tmp}/pimento-alfred}
+# Alfred always sets alfred_workflow_cache; the fallback is never a shared /tmp folder.
+pim_cache=${alfred_workflow_cache:-$HOME/Library/Caches/pimento-alfred}
+# The role list and results are only for you.
+umask 077
 pim_app_helper=/Applications/Pimento.app/Contents/Helpers/pimento
 # How long the role list is reused while you type (seconds). Any action clears it.
 pim_ttl=60
@@ -32,7 +35,7 @@ pim_find() {
     esac
     return 0
   fi
-  if [ -x "$HOME/.local/bin/pimento" ]; then
+  if [ -f "$HOME/.local/bin/pimento" ] && [ -x "$HOME/.local/bin/pimento" ]; then
     printf '%s\n' "$HOME/.local/bin/pimento"
     return 0
   fi
@@ -40,7 +43,9 @@ pim_find() {
   old_ifs=$IFS
   IFS=:
   for dir in $PATH /opt/homebrew/bin /usr/local/bin; do
-    if [ -n "$dir" ] && [ -x "$dir/pimento" ]; then
+    # Absolute folders only: a relative PATH entry would depend on the working directory.
+    case $dir in /*) ;; *) continue ;; esac
+    if [ -f "$dir/pimento" ] && [ -x "$dir/pimento" ]; then
       IFS=$old_ifs
       set +f
       printf '%s\n' "$dir/pimento"
@@ -49,7 +54,7 @@ pim_find() {
   done
   IFS=$old_ifs
   set +f
-  if [ -x "$pim_app_helper" ]; then
+  if [ -f "$pim_app_helper" ] && [ -x "$pim_app_helper" ]; then
     printf '%s\n' "$pim_app_helper"
     return 0
   fi
