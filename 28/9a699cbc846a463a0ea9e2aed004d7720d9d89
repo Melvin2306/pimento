@@ -1,0 +1,14 @@
+Tests/PimentoCoreTests/OutcomeAndServiceTests.swift
+  h_464ee3ce4ea982 136,141-153
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "289a699cbc846a463a0ea9e2aed004d7720d9d89",
+  "prompts": {},
+  "humans": {
+    "h_464ee3ce4ea982": {
+      "author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
