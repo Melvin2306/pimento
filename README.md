@@ -131,6 +131,12 @@ ultra dark or by time of day.
 
 <img src="docs/screenshots/08-scheduled.png" alt="Scheduled Activations sheet with a Contributor role on Contoso Staging starting Saturday 08:00 and a Cancel button">
 
+**The command line.** The same features in `pimento`, on macOS, Linux and Windows: here an Owner
+activation, capped at the policy maximum, confirmed and waiting for approval. More in
+[The command line](#the-command-line).
+
+<img src="docs/screenshots/10-cli-activate.png" alt="Terminal: pimento activate for Owner on Contoso Production, capped at 1 hour, with an Owner warning, a y/N confirmation and the result awaiting approval">
+
 The Azure-style and Windows XP-style themes are inspired by those designs; Pimento is not
 affiliated with or endorsed by Microsoft.
 
@@ -737,6 +743,14 @@ pimento --demo activate "Contoso Production" --role Owner -j "Rotate the TLS cer
 ```
 
 ### The command line
+
+<img src="docs/screenshots/09-cli-status.png" alt="Terminal: pimento status lists three active roles with time left; pimento list --role owner shows the two Owner eligibilities">
+
+<img src="docs/screenshots/10-cli-activate.png" alt="Terminal: pimento activate for Owner on Contoso Production with 8 hours asked, capped at the 1 hour policy maximum, an Owner warning, a y/N confirmation and the result awaiting approval">
+
+<img src="docs/screenshots/11-cli-renew-history.png" alt="Terminal: pimento renew for kv-contoso-prod with the gap warning, two retries while PIM still holds the old activation and renewed until 11:30, then pimento history --limit 8">
+
+<sub>Demo mode (`pimento --demo`), synthetic data.</sub>
 
 <!-- cli-readme:start -->
 `pimento` lists and activates your PIM roles from a terminal or a script. It runs the same
