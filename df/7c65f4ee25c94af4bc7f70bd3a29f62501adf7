@@ -1,0 +1,21 @@
+Sources/PimentoCore/UpdateCheck.swift
+  s_4884204a812fec::t_86318fc57e3f6b 81-82,91-99
+Tests/PimentoCoreTests/UpdateCheckTests.swift
+  s_4884204a812fec::t_80956f5258be81 65-77
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "df7c65f4ee25c94af4bc7f70bd3a29f62501adf7",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
