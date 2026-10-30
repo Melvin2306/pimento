@@ -1,0 +1,48 @@
+Sources/PimentoApp/DemoSupport.swift
+  s_4884204a812fec::t_b74bff5cfd5e16 1-327,329,332,334,336-338
+  s_4884204a812fec::t_a8c1b1c445fda5 328,330-331,333,335,339-345
+Sources/PimentoApp/AccountModel.swift
+  s_4884204a812fec::t_bf7d2f318b0858 24,82-94
+Sources/PimentoApp/AppModel.swift
+  s_4884204a812fec::t_16d919c82226df 68,113,132,142-143,251,280-296,310,334,340,345,348-353,355,358-360,364,473,476,481,487,492,499,504,528,577,799,825,861-863,874,880,899,902,911,988,1186,1194,1222,1322,1639,1676,1697,1799,1824,1871-1872,1878,1883,1896
+Sources/PimentoApp/ApprovalViews.swift
+  s_4884204a812fec::t_0cd39f2f3321aa 140,152,263
+Sources/PimentoApp/ContentView.swift
+  s_4884204a812fec::t_b2c34ccb6c8ccb 124-128,397
+Sources/PimentoApp/HistoryViews.swift
+  s_4884204a812fec::t_5776cc3e6be700 357,362-369
+Sources/PimentoApp/MenuBarModel.swift
+  s_4884204a812fec::t_603b1a93751ef5 117-121
+Sources/PimentoApp/MenuBarViews.swift
+  s_4884204a812fec::t_cc0fe54e66b4a2 40,54,64,74-76,237-240,270
+Sources/PimentoApp/Notifier.swift
+  s_4884204a812fec::t_729dcbc298dbe1 40,42-43,100-102,119,124,126,138,154,157,171,174-175,184-185,228,239-241,245,332-336
+Sources/PimentoApp/ScheduleViews.swift
+  s_4884204a812fec::t_692951e18d7339 22,65,260,264
+Sources/PimentoApp/SettingsView.swift
+  s_4884204a812fec::t_df85e08dd69da4 39
+Sources/PimentoApp/main.swift
+  s_4884204a812fec::t_03e0ca553cdcf1 14-17,25-30,60,75,77,121
+Sources/PimentoCore/HistoryImport.swift
+  s_4884204a812fec::t_71f2cb493546d3 82
+Sources/PimentoCore/PIMService.swift
+  s_4884204a812fec::t_4677eab891d8a5 149-151
+Sources/PimentoCore/ScheduledRequest.swift
+  s_4884204a812fec::t_794c2143ddeedb 319,325-327
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c09a41b5bad007839090a159cd0285d3f774ca3b",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
