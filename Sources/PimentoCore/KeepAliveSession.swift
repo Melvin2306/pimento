@@ -20,6 +20,10 @@ public struct KeepAlivePassResult: Sendable {
 public actor KeepAliveSession {
     public private(set) var book = KeepAliveBook()
     private var policies: [RoleMatcher.Key: PolicyLookup] = [:]
+    /// When each policy was read: read again after `policyMaxAge` (an
+    /// administrator may have turned on approval meanwhile).
+    private var policiesRead: [RoleMatcher.Key: Date] = [:]
+    static let policyMaxAge: TimeInterval = 60 * 60
 
     public init() {}
 
@@ -33,6 +37,7 @@ public actor KeepAliveSession {
     public func reset() {
         book = KeepAliveBook()
         policies = [:]
+        policiesRead = [:]
     }
 
     /// Forgets that `keys` were active, so they are not brought back (you
@@ -60,25 +65,49 @@ public actor KeepAliveSession {
         let missing = kept.filter { role in
             switch policies[role.policyKey] {
             case nil, .failed?: true
-            default: false
+            default: policiesRead[role.policyKey].map { now.timeIntervalSince($0) > Self.policyMaxAge || $0 > now } ?? true
             }
         }
-        if !missing.isEmpty, let loaded = try? await reader.loadPolicies(for: missing) {
-            policies.merge(loaded) { _, new in new }
+        if !missing.isEmpty {
+            if let loaded = try? await reader.loadPolicies(for: missing) {
+                policies.merge(loaded) { _, new in new }
+                for role in missing { policiesRead[role.policyKey] = now }
+            } else {
+                // Not read again: an old answer is not used (reading its policy…).
+                for role in missing { policies[role.policyKey] = nil }
+            }
+        }
+        // Roles no longer kept alive (turned off while a pass ran, or no
+        // longer listed): what Pimento scheduled for them is withdrawn.
+        var dropped: [KeepAliveTrack.HandOver] = []
+        for key in book.tracks.keys where rules[key] == nil {
+            if let h = book.remove(key, now: now) { dropped.append(h) }
         }
         let infos = history.activationInfo
+        let deactivations = history.deactivations
         var items = KeepAlivePlanner.plan(
             roles: snapshot.roles, rules: rules, policies: policies, infos: infos, pending: history.pending, book: &book,
-            hours: hours, paused: paused, now: now, calendar: calendar, confirmedAccess: confirmedAccess)
+            hours: hours, paused: paused, now: now, calendar: calendar, confirmedAccess: confirmedAccess, deactivations: deactivations)
         let due = items.filter { $0.status.action != nil }
         var events: [KeepAliveEvent] = []
+        if !dryRun, !dropped.isEmpty { _ = await Self.withdraw(dropped, writer: writer) }
         if !dryRun, !due.isEmpty {
             events = await send(due, writer: writer, principalId: snapshot.identity.objectId, now: now, maxConcurrent: maxConcurrent)
             // Where each stands now: acted roles show their continuation or retry.
             let after = clock()
+            // Withdrawn now (still in the listing read before): not pending any more.
+            let withdrawnKeys = Set(events.compactMap { event -> String? in
+                if case .withdrawn(let role) = event { return ReminderRole.key(role.policyKey) }
+                return nil
+            })
+            let withdrawn = Set(due.compactMap { item -> String? in
+                if case .act(.cancel(let h)) = item.status, withdrawnKeys.contains(item.key) { return h.requestName.lowercased() }
+                return nil
+            })
             items = KeepAlivePlanner.plan(
-                roles: snapshot.roles, rules: rules, policies: policies, infos: infos, pending: history.pending, book: &book,
-                hours: hours, paused: paused, now: after, calendar: calendar, confirmedAccess: confirmedAccess
+                roles: snapshot.roles, rules: rules, policies: policies, infos: infos,
+                pending: history.pending.filter { !withdrawn.contains($0.name.lowercased()) }, book: &book,
+                hours: hours, paused: paused, now: after, calendar: calendar, confirmedAccess: confirmedAccess, deactivations: deactivations
             ).map { item in
                 // Do not report a second action that was not sent.
                 guard item.status.action != nil else { return item }

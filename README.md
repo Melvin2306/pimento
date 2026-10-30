@@ -399,9 +399,9 @@ Pimento activates the role again once it has ended, and then there **is** a gap 
 | How long | Each renewal asks for the preset's duration, or the longest the role's policy allows, capped at the policy maximum like any activation. |
 | End of the day | Never past the end of working hours: the last renewal is shortened to end by then, in whole hours (or the policy maximum when that is shorter, e.g. 90 minutes). When not even that fits (say 40 minutes are left), the role is left to end. |
 | Justification and ticket | The new activation carries the justification and ticket of the one it continues (read from your requests); a preset's justification is used when that is unknown. When the policy requires a ticket (or a justification) that is not known, the renewal is skipped and you get a notification. |
-| Approval | Roles whose policy requires approval are never renewed (the role would wait for an approver); neither are roles whose policy cannot be read. The context menu and the tooltip say so. |
+| Approval | Roles whose policy requires approval are never renewed (the role would wait for an approver); neither are roles whose policy cannot be read. Policies are read again every hour, and a request of yours that waits for an approver stops further renewals of that role. The context menu and the tooltip say so. |
 | Roles that grant access | With *Confirm before activating Owner roles* on (the default), marking an Owner, User Access Administrator or RBAC Administrator role as Keep Alive, directly or by turning on a preset's keep-alive, asks once, when it is marked. A role a preset picks up later without that confirmation is not renewed (*not confirmed*) until you mark it. `pimento keep-alive` asks at its prompt (only the roles listed there count), or takes `--yes` as consent, as `activate` does. |
-| Ended early | A role you end (*End Now*, the CLI, the portal) is not brought back, and a continuation Pimento had scheduled for it is withdrawn. Turning keep-alive off for a role, or pausing, withdraws continuations that have not started. |
+| Ended early | A role you end (*End Now*, the CLI, the portal) is not brought back, and a continuation scheduled for it is withdrawn. Pimento notices from the role listing and from your requests (a `SelfDeactivate` after the activation started), so also after sleep, a restart, or when another Pimento scheduled the continuation; it looks again two minutes before each continuation starts. A role ended in those last two minutes while Pimento is not looking may still be continued: end it again. Turning keep-alive off for a role, or pausing, withdraws continuations that have not started. |
 | Sleep, closed app | A role that lapsed while the Mac slept (or Pimento was not running) is activated again when Pimento looks next, if it is still inside working hours and the role ended inside them: on wake, after a clock or time-zone change, and at least every 30 minutes. Keep-alive never starts a role that was not active. |
 | Failures | Retried after 1, 5 and 15 minutes; after 4 failures for a role it waits for the next working hours. Each failure is a notification. |
 
@@ -1273,7 +1273,7 @@ See [SECURITY.md](SECURITY.md) for how to report a vulnerability.
   scheduled still starts without it, but nothing further is renewed, and a role that lapsed meanwhile
   is activated again only when Pimento looks next (inside working hours). Roles whose policy requires
   approval, MFA or an authentication context the token lacks are not kept alive (the first are
-  skipped, the others fail and back off). The marks are per tenant on this Mac; the CLI does not read
+  skipped, the others fail and back off). The marks are per tenant and account on this Mac; the CLI does not read
   them (it takes a selection or a preset).
 - **Reminder actions** need Pimento to be able to run: *End Now* works in the background, *Renew*
   brings the app forward. They act on the tenant the app is showing.

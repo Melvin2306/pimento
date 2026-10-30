@@ -63,20 +63,72 @@ public enum KeepAlive {
         return hours * 60
     }
 
+    /// Whether `request` looks like a continuation keep-alive scheduled: made
+    /// at most `handOverLead` (plus slack) before its start. A request you
+    /// scheduled further ahead is never withdrawn by keep-alive.
+    static func looksLikeContinuation(_ request: ScheduledRequest) -> Bool {
+        guard let created = request.createdOn else { return false }
+        return request.start.timeIntervalSince(created) <= handOverLead + continuationSlack
+    }
+
+    /// A continuation that must be withdrawn before it starts: paused; the
+    /// activation it continues was ended (`deactivatedAt`: your latest
+    /// `SelfDeactivate` of the role, from anywhere) or replaced. Also finds
+    /// one that is not in `track` (sent before a restart, or by another
+    /// Pimento) among the pending requests.
+    static func withdrawal(
+        role: EligibleRole, scheduled: [ScheduledRequest], track: KeepAliveTrack, paused: Bool, now: Date, deactivatedAt: Date?
+    ) -> KeepAliveTrack.HandOver? {
+        let end = role.isActive ? role.activeUntil.flatMap { $0 > now ? $0 : nil } : nil
+        let continuesEnd = { (h: KeepAliveTrack.HandOver) in end.map { abs(h.start.timeIntervalSince($0)) <= continuationSlack } ?? false }
+        // Pimento's own (tracked), then pending ones that look like a continuation (not tracked).
+        var candidates: [(handOver: KeepAliveTrack.HandOver, created: Date?, tracked: Bool)] = []
+        if let h = track.handOver, h.start > now { candidates.append((h, h.created, true)) }
+        for r in scheduled where r.start > now && looksLikeContinuation(r)
+            && r.name.caseInsensitiveCompare(track.handOver?.requestName ?? "") != .orderedSame {
+            candidates.append((KeepAliveTrack.HandOver(r), r.createdOn, false))
+        }
+        for (h, created, tracked) in candidates {
+            if paused && (tracked || continuesEnd(h)) { return h }
+            // Ended (by you, anywhere) after it was scheduled.
+            if let d = deactivatedAt, d <= now, let created, d > created { return h }
+            if end != nil {
+                // Active, but not the activation Pimento continued (ended and activated again).
+                if tracked && !continuesEnd(h) { return h }
+            } else if let lastEnd = track.lastEnd, now < lastEnd.addingTimeInterval(-endedEarlySlack),
+                      tracked || abs(h.start.timeIntervalSince(lastEnd)) <= continuationSlack {
+                // Not active before its end: ended early.
+                return h
+            }
+        }
+        return nil
+    }
+
     /// What `role` (kept alive by `rule`) needs at `now`. `track` is what
     /// keep-alive remembers about it (see `KeepAliveTrack.observe`), `pending`
-    /// its scheduled or waiting requests.
+    /// its scheduled or waiting requests, `deactivatedAt` when you last ended
+    /// it (`SelfDeactivate`, from anywhere; `RequestHistory.deactivations`).
     public static func decide(
         role: EligibleRole, rule: KeepAliveRule, policy: PolicyLookup?, pending: [ScheduledRequest], track: KeepAliveTrack,
-        hours: WorkingHours, paused: Bool, now: Date, calendar: Calendar
+        hours: WorkingHours, paused: Bool, now: Date, calendar: Calendar, deactivatedAt: Date? = nil
     ) -> KeepAliveStatus {
+        let scheduled = pending.filter { $0.kind == .scheduled }
+        // Withdrawals come first (also paused, whatever the policy): they never grant anything. They back off like
+        // renewals, but are tried once more shortly before the start whatever the backoff says.
+        if let h = withdrawal(role: role, scheduled: scheduled, track: track, paused: paused, now: now, deactivatedAt: deactivatedAt) {
+            if let at = track.retryAt.map({ min($0, h.start.addingTimeInterval(-minimumLead)) }), now < at {
+                return .retryLater(at: at, failures: track.failures)
+            }
+            return .act(.cancel(h))
+        }
         if paused { return .paused }
         guard let lookup = policy else { return .excluded(.policyLoading) }
         guard let p = lookup.policy else { return .excluded(.policyUnknown) }
         if p.requiresApproval { return .excluded(.needsApproval) }
+        // A request of yours waits for an approver (the policy changed since it was read): never another one.
+        if pending.contains(where: { $0.kind == .awaitingApproval }) { return .excluded(.needsApproval) }
         let window = hours.window(containing: now, calendar: calendar)
         let cap = EffectiveDuration.resolve(rule.requested, policyMaxMinutes: p.maxMinutes, fallbackHours: ActivationRequestBuilder.defaultHours).minutes
-        let scheduled = pending.filter { $0.kind == .scheduled }
 
         // Checked only when keep-alive would send something.
         func ready(_ make: (String, TicketInfo?) -> KeepAliveAction) -> KeepAliveStatus {
@@ -114,10 +166,12 @@ public enum KeepAlive {
         if let h = track.handOver, h.start <= now, now < h.start.addingTimeInterval(startGrace) {
             return .continued(start: h.start, until: h.until)
         }
-        if let lastEnd = track.lastEnd, now < lastEnd.addingTimeInterval(-endedEarlySlack) {
-            // Ended before its time: not brought back; a continuation Pimento
-            // scheduled for it is withdrawn.
-            if let h = track.handOver, h.start > now { return .act(.cancel(h)) }
+        // Ended by you after it started (seen in your requests: also when
+        // Pimento was asleep or not running at the time).
+        let endedByYou = deactivatedAt.map { d in d <= now && track.lastStart.map { d > $0 } == true } ?? false
+        if let lastEnd = track.lastEnd, endedByYou || now < lastEnd.addingTimeInterval(-endedEarlySlack) {
+            // Ended before its time: not brought back (a continuation Pimento
+            // scheduled for it was withdrawn above).
             return .endedEarly
         }
         if let h = track.handOver, now < h.start.addingTimeInterval(startGrace) {
@@ -229,7 +283,7 @@ public enum KeepAliveAction: Equatable, Sendable {
     case handOver(start: Date, minutes: Int, clipped: Bool, justification: String, ticket: TicketInfo?)
     /// The activation lapsed inside working hours: a `SelfActivate` now.
     case activateNow(minutes: Int, clipped: Bool, justification: String, ticket: TicketInfo?)
-    /// Withdraw a continuation Pimento scheduled (the role was ended early).
+    /// Withdraw a continuation (the role was ended early or activated again, or keep-alive is paused).
     case cancel(KeepAliveTrack.HandOver)
 
     public var minutes: Int? {
@@ -273,6 +327,12 @@ public enum KeepAliveStatus: Equatable, Sendable {
         return nil
     }
 
+    /// A continuation is to be withdrawn.
+    public var isWithdrawal: Bool {
+        if case .act(.cancel) = self { return true }
+        return false
+    }
+
     /// Whether the role can be kept alive at all (approval, unreadable policy: no).
     public var isExcluded: Bool {
         if case .excluded(let why) = self { return why != .policyLoading }
@@ -293,7 +353,10 @@ public enum KeepAliveStatus: Equatable, Sendable {
         switch self {
         case .act: now
         case .waiting(let until): until
-        case .continued(let start, _): max(now, start).addingTimeInterval(KeepAlive.startGrace)
+        case .continued(let start, _):
+            // Shortly before it starts (a role ended meanwhile gets it withdrawn), then once it should have started.
+            start.addingTimeInterval(-KeepAlive.minimumLead) > now
+                ? start.addingTimeInterval(-KeepAlive.minimumLead) : max(now, start).addingTimeInterval(KeepAlive.startGrace)
         case .outsideHours(let next): next
         case .retryLater(let at, _): at
         case .excluded(.policyUnknown), .excluded(.policyLoading): now.addingTimeInterval(10 * 60)
@@ -307,7 +370,7 @@ public enum KeepAliveStatus: Equatable, Sendable {
         switch self {
         case .act(.handOver(let start, _, _, _, _)): return "continuing it at \(t(start))"
         case .act(.activateNow): return "it lapsed: activating it again"
-        case .act(.cancel): return "ended early: withdrawing its continuation"
+        case .act(.cancel): return "withdrawing its scheduled continuation"
         case .waiting(let until): return "renews at \(t(until))"
         case .continued(let start, let until):
             return "continues at \(t(start))" + (until.map { " until \(t($0))" } ?? "")
@@ -341,18 +404,29 @@ public struct KeepAliveTrack: Equatable, Sendable {
         public var requestName: String
         public var scope: String
         public var roleDefinitionId: String
+        /// When it was sent (nil: unknown).
+        public var created: Date?
 
-        public init(start: Date, until: Date, requestName: String, scope: String, roleDefinitionId: String) {
+        public init(start: Date, until: Date, requestName: String, scope: String, roleDefinitionId: String, created: Date? = nil) {
             self.start = start
             self.until = until
             self.requestName = requestName
             self.scope = scope
             self.roleDefinitionId = roleDefinitionId
+            self.created = created
+        }
+
+        /// A pending scheduled request (one Pimento did not track).
+        init(_ r: ScheduledRequest) {
+            self.init(start: r.start, until: r.end ?? r.start, requestName: r.name, scope: r.scope, roleDefinitionId: r.roleDefinitionId,
+                      created: r.createdOn)
         }
     }
 
     /// The end of the activation last seen active.
     public var lastEnd: Date?
+    /// Its start: a `SelfDeactivate` after it means you ended it.
+    public var lastStart: Date?
     /// Of the activation being kept alive: sent again with the next one.
     public var justification: String?
     public var ticket: TicketInfo?
@@ -373,6 +447,7 @@ public struct KeepAliveTrack: Equatable, Sendable {
         guard role.isActive else { return }
         if let end = role.activeUntil, end > now {
             lastEnd = end
+            if let since = role.activeSince { lastStart = since }
             // The continuation is the activation now listed.
             if let h = handOver, h.start <= now.addingTimeInterval(KeepAlive.endedEarlySlack),
                abs(end.timeIntervalSince(h.until)) <= KeepAlive.continuationSlack || (role.activeSince.map { $0 >= h.start.addingTimeInterval(-60) } ?? false) {
@@ -434,6 +509,21 @@ extension RequestHistory {
         return result
     }
 
+    /// When you last ended each role (`SelfDeactivate`, from anywhere, any
+    /// status), by role key (`ReminderRole.key`).
+    public var deactivations: [String: Date] {
+        var result: [String: Date] = [:]
+        for item in items {
+            guard let p = item.properties,
+                  p.requestType?.caseInsensitiveCompare(RequestAction.deactivate.requestType) == .orderedSame,
+                  let scope = p.scope, let roleDefinitionId = p.roleDefinitionId, let created = AzureDate.parse(p.createdOn)
+            else { continue }
+            let key = ReminderRole.key(RoleMatcher.key(scope: scope, roleDefinitionId: roleDefinitionId))
+            result[key] = max(result[key] ?? created, created)
+        }
+        return result
+    }
+
     /// What the current activation of `role` was requested with, if known.
     public static func info(for role: EligibleRole, in infos: [String: ActivationRequestInfo]) -> ActivationRequestInfo? {
         guard role.isActive, let schedule = role.activeScheduleId else { return nil }
@@ -460,12 +550,17 @@ public struct KeepAliveBook: Equatable, Sendable {
     }
 
     /// Pausing: what lapses meanwhile is not brought back on resume, and the
-    /// continuations not started yet are returned (to withdraw).
+    /// continuations not started yet are returned (to withdraw) and
+    /// forgotten: after a resume, a role is continued again. (One whose
+    /// withdrawal failed is still pending, and is seen there.)
     public mutating func pause(now: Date) -> [String: KeepAliveTrack.HandOver] {
         var withdraw: [String: KeepAliveTrack.HandOver] = [:]
         for key in tracks.keys {
             tracks[key]?.lastEnd = nil
-            if let h = tracks[key]?.handOver, h.start > now { withdraw[key] = h }
+            if let h = tracks[key]?.handOver, h.start > now {
+                withdraw[key] = h
+                tracks[key]?.handOver = nil
+            }
         }
         return withdraw
     }
@@ -482,12 +577,14 @@ public struct KeepAliveBook: Equatable, Sendable {
             case .scheduled(_, let s, let until):
                 track.succeeded()
                 let end = until ?? s.addingTimeInterval(TimeInterval(minutes) * 60)
-                track.handOver = .init(start: s, until: end, requestName: requestId, scope: role.scope, roleDefinitionId: role.roleDefinitionId)
+                track.handOver = .init(start: s, until: end, requestName: requestId, scope: role.scope, roleDefinitionId: role.roleDefinitionId,
+                                       created: now)
                 return .renewed(role: role, start: s, until: end, clipped: clipped, lapsedAt: nil)
             case .activated(let status, let until) where ActivationOutcome.isGranted(status: status) && !o.isAwaitingApproval:
                 track.succeeded()
                 let end = until ?? start.addingTimeInterval(TimeInterval(minutes) * 60)
-                track.handOver = .init(start: start, until: end, requestName: requestId, scope: role.scope, roleDefinitionId: role.roleDefinitionId)
+                track.handOver = .init(start: start, until: end, requestName: requestId, scope: role.scope, roleDefinitionId: role.roleDefinitionId,
+                                       created: now)
                 return .renewed(role: role, start: start, until: end, clipped: clipped, lapsedAt: nil)
             default:
                 track.failed(o.summary, now: now)
@@ -499,7 +596,9 @@ public struct KeepAliveBook: Equatable, Sendable {
                 let end = until ?? now.addingTimeInterval(TimeInterval(minutes) * 60)
                 let lapsed = track.lastEnd
                 track.lastEnd = end
-                track.handOver = .init(start: now, until: end, requestName: requestId, scope: role.scope, roleDefinitionId: role.roleDefinitionId)
+                track.lastStart = now
+                track.handOver = .init(start: now, until: end, requestName: requestId, scope: role.scope, roleDefinitionId: role.roleDefinitionId,
+                                       created: now)
                 return .renewed(role: role, start: now, until: end, clipped: clipped, lapsedAt: lapsed)
             }
             track.failed(o.summary, now: now)
@@ -544,7 +643,7 @@ public enum KeepAliveEvent: Equatable, Sendable {
     case renewed(role: EligibleRole, start: Date, until: Date, clipped: Bool, lapsedAt: Date?)
     /// `retryAt` nil: gave up for this window.
     case failed(role: EligibleRole, message: String, retryAt: Date?, failures: Int)
-    /// A continuation was withdrawn (the role was ended early).
+    /// A continuation was withdrawn (the role was ended or replaced, or keep-alive is paused).
     case withdrawn(role: EligibleRole)
     /// A due renewal could not be sent (once per window).
     case blocked(role: EligibleRole, KeepAliveBlock)
@@ -583,7 +682,8 @@ public enum KeepAliveEvent: Equatable, Sendable {
                 ?? "Gave up after \(failures) attempts until your next working hours: renew it yourself."
             return ("Could not renew \(r.roleName)", "\(r.scopeName): \(message). \(next)")
         case .withdrawn:
-            return ("Stopped keeping \(r.roleName) alive", "\(r.scopeName) was ended early: its scheduled continuation was withdrawn.")
+            return ("Withdrew the continuation of \(r.roleName)",
+                    "\(r.scopeName): it was ended, replaced or keep-alive is paused, so its scheduled continuation was withdrawn.")
         case .blocked(_, .needsJustification):
             return ("Not renewing \(r.roleName)", "\(r.scopeName): the justification of its activation is unknown. Renew it yourself.")
         case .blocked(_, .needsTicket):
@@ -611,7 +711,8 @@ public enum KeepAlivePlanner {
     public static func plan(
         roles: [EligibleRole], rules: [String: KeepAliveRule], policies: [RoleMatcher.Key: PolicyLookup],
         infos: [String: ActivationRequestInfo], pending: [ScheduledRequest], book: inout KeepAliveBook,
-        hours: WorkingHours, paused: Bool, now: Date, calendar: Calendar, confirmedAccess: Set<String>? = nil
+        hours: WorkingHours, paused: Bool, now: Date, calendar: Calendar, confirmedAccess: Set<String>? = nil,
+        deactivations: [String: Date] = [:]
     ) -> [Item] {
         var byKey: [String: EligibleRole] = [:]
         var order: [String] = []
@@ -635,11 +736,15 @@ public enum KeepAlivePlanner {
             var track = book[key]
             track.enter(window: window?.start)
             track.observe(role, info: RequestHistory.info(for: role, in: infos), now: now)
-            // An access-granting role nobody confirmed: never sent.
-            let unconfirmed = role.grantsAccess && confirmedAccess.map { !$0.contains(key) } == true
-            let status = unconfirmed ? (paused ? .paused : .excluded(.notConfirmed)) : KeepAlive.decide(
+            // Paused: what lapses meanwhile is not brought back on resume (`KeepAliveBook.pause`).
+            if paused { track.lastEnd = nil }
+            var status = KeepAlive.decide(
                 role: role, rule: rule, policy: policies[role.policyKey], pending: pendingByKey[key] ?? [], track: track,
-                hours: hours, paused: paused, now: now, calendar: calendar)
+                hours: hours, paused: paused, now: now, calendar: calendar, deactivatedAt: deactivations[key])
+            // An access-granting role nobody confirmed: never sent (a withdrawal is).
+            if role.grantsAccess, confirmedAccess.map({ !$0.contains(key) }) == true, !status.isWithdrawal {
+                status = paused ? .paused : .excluded(.notConfirmed)
+            }
             if status == .endedEarly { track.lastEnd = nil }
             book[key] = track
             return Item(key: key, role: role, rule: rule, status: status)

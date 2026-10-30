@@ -155,7 +155,7 @@ extension CLIRunner {
             let next = retryAt.map { "trying again at \(t($0))" } ?? "gave up after \(failures) failures until the next working hours"
             return style.red("failed") + "   \(name): \(message); \(next)"
         case .withdrawn:
-            return style.yellow("stopped") + "  \(name): ended early, its continuation was withdrawn"
+            return style.yellow("stopped") + "  \(name): ended or replaced, its scheduled continuation was withdrawn"
         case .blocked(_, let why):
             return style.yellow("skipped") + "  \(name): " + (why == .needsTicket
                 ? "its policy requires a ticket and the activation's ticket is unknown"

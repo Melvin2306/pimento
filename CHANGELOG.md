@@ -16,8 +16,9 @@ All notable changes to this project are documented here. The format follows
   administrator). The rules: the policy maximum and working hours apply (the last renewal of the day
   is shortened to whole hours ending by then, or skipped); the justification and ticket of the
   activation are reused, and a renewal whose policy needs one that is unknown is skipped with a
-  notification; roles needing approval are never renewed (the UI says why); a role ended early is
-  not brought back and its continuation is withdrawn; one that lapsed while the Mac slept is
+  notification; roles needing approval are never renewed (the UI says why); a role ended early
+  (noticed from the listing and from your requests, also after sleep or a restart) is not brought
+  back and its continuation is withdrawn, as on pause; one that lapsed while the Mac slept is
   activated again on wake if still inside working hours; failures back off (1, 5, 15 minutes) and
   stop after 4 per role per window. Status icon and tooltip in the table and the menu bar, a *Keep
   Alive* toolbar menu, and a global *Pause* (toolbar, menu bar, Settings). Notifications follow the
