@@ -68,3 +68,8 @@ anything that requires an attacker to already control your user account or `az` 
   Owner role asks in the app first), and from the CLI after its `[y/N]` prompt or `--yes`. Previews
   and `--dry-run`, and every read of the app and the CLI, go through a transport that refuses
   anything but `GET`.
+- Builds: CI and releases run with read-only tokens (only the publish job can write the release),
+  check out without keeping credentials, pin actions to commit SHAs and the Linux container to a
+  digest. Release downloads carry GitHub build provenance attestations. The Mac app and CLI are
+  ad-hoc signed and not notarized (no Developer ID): that is a known gap, outside this policy's
+  fixes until a signing identity exists.

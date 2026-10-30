@@ -110,7 +110,9 @@ Pick one download from the [releases page](https://github.com/melvin2306/pimento
 | `pimento-cli-<version>-windows-x86_64.zip` | `pimento.exe` with the Swift runtime DLLs | Windows 10/11 |
 
 Each release also has `SHA256SUMS.txt` (`shasum -a 256 -c SHA256SUMS.txt --ignore-missing` on
-macOS, `sha256sum -c SHA256SUMS.txt --ignore-missing` on Linux, `Get-FileHash` on Windows).
+macOS, `sha256sum -c SHA256SUMS.txt --ignore-missing` on Linux, `Get-FileHash` on Windows), and each
+download a build provenance attestation from the release workflow (`gh attestation verify FILE
+--repo melvin2306/pimento`).
 Neither macOS download is notarized yet, so macOS asks before the first launch (see below).
 
 ### Option 1: the app, with the CLI

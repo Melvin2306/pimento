@@ -22,6 +22,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0 # bundle.sh derives the build number from the commit count
+          persist-credentials: false
       - name: Toolchain
         run: |
           sw_vers
@@ -69,9 +70,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     # Jammy: the packaged binary then runs on glibc 2.35 and later.
-    container: swift:6.4.1-jammy
+    # Pinned by digest (the multi-arch index of swift:6.4.1-jammy): a re-pushed tag cannot change it.
+    container: swift:6.4.1-jammy@sha256:64945e64b1e9d16eaf23414f8bcb9b880d12705bb34ad5d23180b04ad6d28e10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - name: Toolchain
         run: swift --version
       - name: Build the CLI
@@ -102,6 +106,8 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - uses: compnerd/gha-setup-swift@9ff1ee4c44888c5817fc14d1b257ac8cabb4935f # v0.5.1
         with:
           swift-version: swift-6.4.1-release

@@ -428,6 +428,10 @@ All notable changes to this project are documented here. The format follows
 - The app loads roles, policies, requests, approvals and Azure history, and builds previews, through
   a GET-only transport (`PIMService.readOnly`), as the CLI does and as SECURITY.md says; only
   activate, deactivate, renew, cancel and approve/deny use the writable one.
+- CI checks out without keeping credentials (`persist-credentials: false`), CI and release pin the
+  Linux container `swift:6.4.1-jammy` by digest, and releases attach build provenance attestations
+  (`actions/attest-build-provenance`, SHA-pinned; `id-token`/`attestations: write` only in the
+  publish job). Developer ID signing and notarization remain out of scope.
 
 ## [0.1.0] - 2026-10-29
 
