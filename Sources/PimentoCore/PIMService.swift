@@ -7,12 +7,55 @@ public protocol HTTPTransport: Sendable {
     func send(_ request: URLRequest) async throws -> (Data, Int)
 }
 
+/// Sends requests with URLSession and never follows a redirect: a 3xx answer
+/// throws `RedirectRefused`, so a token or sign-in data only ever goes to the
+/// URL the request was built for (the host guards check that URL alone).
 public struct URLSessionTransport: HTTPTransport {
+    public struct RedirectRefused: Error, LocalizedError, Equatable {
+        public let status: Int
+        public let location: String?
+        public var errorDescription: String? {
+            "Refused to follow an HTTP \(status) redirect\(location.map { " to \($0)" } ?? ""): requests go only to the URL they were sent to."
+        }
+    }
+
+    /// One session for every transport, with the redirect refusal as its delegate.
+    static let session = URLSession(configuration: .default, delegate: RedirectRefusal.shared, delegateQueue: nil)
+
     public init() {}
 
     public func send(_ request: URLRequest) async throws -> (Data, Int) {
-        let (data, response) = try await URLSession.shared.data(for: request)
-        return (data, (response as? HTTPURLResponse)?.statusCode ?? 0)
+        // The delegate goes to the task as well: swift-corelibs-foundation asks
+        // only the task's delegate about redirects of an async request.
+        let (data, response) = try await Self.session.data(for: request, delegate: RedirectRefusal.shared)
+        let http = response as? HTTPURLResponse
+        let status = http?.statusCode ?? 0
+        try Self.check(status: status, location: http?.value(forHTTPHeaderField: "Location"), requested: request.url, answered: response.url)
+        return (data, status)
+    }
+
+    /// Throws for a 3xx answer, or for an answer from another origin than the
+    /// one requested (a redirect a platform followed despite the delegate).
+    static func check(status: Int, location: String?, requested: URL?, answered: URL?) throws {
+        if (300..<400).contains(status) { throw RedirectRefused(status: status, location: location) }
+        if let requested, let answered, !sameOrigin(requested, answered) {
+            throw RedirectRefused(status: status, location: answered.absoluteString)
+        }
+    }
+
+    static func sameOrigin(_ a: URL, _ b: URL) -> Bool {
+        a.scheme?.lowercased() == b.scheme?.lowercased() && a.host?.lowercased() == b.host?.lowercased() && a.port == b.port
+    }
+}
+
+/// Answers every redirect with "do not follow": the 3xx response becomes the
+/// final one, and `URLSessionTransport` turns it into an error.
+final class RedirectRefusal: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    static let shared = RedirectRefusal()
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest, completionHandler: @escaping @Sendable (URLRequest?) -> Void) {
+        completionHandler(nil)
     }
 }
 
