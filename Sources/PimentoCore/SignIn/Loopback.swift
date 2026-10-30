@@ -81,6 +81,9 @@ public final class LoopbackListener: @unchecked Sendable {
     public static let isSupported = true
 
     public let port: UInt16
+    /// How long one connection may take to send its request head, in all:
+    /// a client trickling bytes cannot hold the listener longer.
+    let connectionTimeout: TimeInterval
     private var sockets: [Int32]
     private let lock = NSLock()
     private var stopped = false
@@ -89,7 +92,10 @@ public final class LoopbackListener: @unchecked Sendable {
     /// `http://localhost:<port>`: Entra ignores the port of a localhost redirect URI.
     public var redirectURI: String { "\(MicrosoftIdentity.redirectBase):\(port)" }
 
-    public init() throws {
+    public convenience init() throws { try self.init(connectionTimeout: 5) }
+
+    init(connectionTimeout: TimeInterval) throws {
+        self.connectionTimeout = connectionTimeout
         let v4 = socket(AF_INET, Self.streamType, 0)
         guard v4 >= 0 else { throw SignInError.loopback(String(cString: strerror(errno))) }
         var addr = sockaddr_in()
@@ -229,11 +235,15 @@ public final class LoopbackListener: @unchecked Sendable {
         throw SignInError.timedOut
     }
 
-    /// Reads one request head (up to 16 KB, 5 s), answers it, closes the connection.
+    /// Reads one request head (up to 16 KB, within `connectionTimeout` in
+    /// all), answers it, closes the connection.
     private func handle(_ client: Int32, state: String) -> LoopbackCallback {
         defer { _ = Self.closeSocket(client) }
+        let deadline = Date().addingTimeInterval(connectionTimeout)
+        // A backstop for each call; the deadline bounds the whole exchange.
         var timeout = timeval(tv_sec: 5, tv_usec: 0)
         setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
+        setsockopt(client, SOL_SOCKET, SO_SNDTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
         #if canImport(Darwin)
         var on: Int32 = 1
         setsockopt(client, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size))
@@ -241,6 +251,12 @@ public final class LoopbackListener: @unchecked Sendable {
         var head = [UInt8]()
         var buffer = [UInt8](repeating: 0, count: 4096)
         while head.count < 16384 {
+            let left = deadline.timeIntervalSinceNow
+            guard left > 0 else { break }
+            var p = pollfd(fd: client, events: Int16(POLLIN), revents: 0)
+            let ready = poll(&p, 1, Int32((left * 1000).rounded(.up)))
+            if ready < 0, errno == EINTR { continue }
+            guard ready > 0 else { break }
             let n = recv(client, &buffer, buffer.count, 0)
             guard n > 0 else { break }
             head += buffer[0..<n]

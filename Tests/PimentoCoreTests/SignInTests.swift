@@ -426,6 +426,45 @@ struct LoopbackTests {
         }
     }
 
+    #if !os(Windows)
+    /// A local client sending its request a byte at a time gets an answer and
+    /// is cut off at the connection deadline, and the real redirect still
+    /// gets through afterwards.
+    @Test func aTricklingClientCannotHoldTheListener() async throws {
+        let listener = try LoopbackListener(connectionTimeout: 0.5)
+        async let code = listener.waitForCallback(state: "s1", timeout: 20)
+        try await Task.sleep(nanoseconds: 50_000_000)
+        let port = listener.port
+        let answered: (String, TimeInterval) = await withCheckedContinuation { continuation in
+            Thread {
+                guard let fd = TestSocket.connect(port: port) else { return continuation.resume(returning: ("", 0)) }
+                defer { _ = TestSocket.close(fd) }
+                let started = Date()
+                let request = Array("GET /?code=slow&state=s1 HTTP/1.1\r\nHost: localhost\r\n\r\n".utf8)
+                var response = [UInt8]()
+                var buffer = [UInt8](repeating: 0, count: 4096)
+                // One byte every 150 ms (the whole request would take about 8 s).
+                for byte in request {
+                    TestSocket.sendAll(fd, [byte])
+                    var p = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
+                    if poll(&p, 1, 150) > 0 { break }
+                }
+                while Date().timeIntervalSince(started) < 10 {
+                    let n = recv(fd, &buffer, buffer.count, 0)
+                    guard n > 0 else { break }
+                    response += buffer[0..<n]
+                }
+                continuation.resume(returning: (String(decoding: response, as: UTF8.self), Date().timeIntervalSince(started)))
+            }.start()
+        }
+        #expect(answered.0.hasPrefix("HTTP/1.1 404"))
+        #expect(answered.1 < 3)
+        let page = browse(port: listener.port, "/?code=the-code&state=s1")
+        #expect(page.hasPrefix("HTTP/1.1 200"))
+        #expect(try await code == "the-code")
+    }
+    #endif
+
     @Test(.enabled(if: LoopbackListener.isSupported, "no loopback listener on Windows"))
     func listenerTimesOutAndCancels() async throws {
         let listener = try LoopbackListener()
