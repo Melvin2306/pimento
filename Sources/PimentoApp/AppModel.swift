@@ -492,7 +492,7 @@ final class AppModel {
         guard tenantError == nil, scheduledLoadState != .loading else { return }
         scheduledLoadState = .loading
         let generation = tenantGeneration
-        let service = service
+        let service = service.readOnly
         do {
             let history = try await service.loadRequestHistory()
             guard generation == tenantGeneration else { return }
@@ -540,7 +540,7 @@ final class AppModel {
     /// a notification each (Settings), a banner, and fresh rows for approved ones.
     private func announce(_ transitions: [ApprovalTransition]) async {
         let generation = tenantGeneration
-        let service = service
+        let service = service.readOnly
         if transitions.contains(where: \.resolution.isApproved) { await refreshAfterRunningLoad() }
         guard generation == tenantGeneration else { return }
         var approvedRoles: [EligibleRole] = []
@@ -613,7 +613,7 @@ final class AppModel {
         guard tenantError == nil, approvalsLoadState != .loading else { return }
         approvalsLoadState = .loading
         let generation = tenantGeneration
-        let service = service
+        let service = service.readOnly
         do {
             let (_, inbox) = try await service.loadApprovalInbox()
             guard generation == tenantGeneration else { return }
@@ -729,7 +729,7 @@ final class AppModel {
         }
         guard !missing.isEmpty else { return }
         let generation = tenantGeneration
-        let service = service
+        let service = service.readOnly
         let previous = policyTask
         policyTask = Task { [weak self] in
             await previous?.value
@@ -762,7 +762,7 @@ final class AppModel {
         awaitingManualRefresh = false
         loadState = .loading
         let generation = tenantGeneration
-        let service = service
+        let service = service.readOnly
         do {
             let snapshot = try await service.loadRoles()
             // A tenant switch while loading makes this result stale.
@@ -1241,7 +1241,7 @@ final class AppModel {
         await ensurePolicies(for: targets)
         // The tickets the activations were requested with, read fresh: Renew sends them again.
         var historyError: String?
-        do { activationTickets = try await service.loadRequestHistory().activationTickets } catch {
+        do { activationTickets = try await service.readOnly.loadRequestHistory().activationTickets } catch {
             historyError = error.localizedDescription
         }
         let selection = renewalSelection(targets)
@@ -1660,7 +1660,7 @@ final class AppModel {
         guard historyImportState != .loading, tenantError == nil else { return }
         historyImportState = .loading
         historyMessage = nil
-        let service = service
+        let service = service.readOnly
         let store = historyStore
         let label = effectiveTenantId.flatMap(knownTenant)?.name
         let cutoff = historySettings.retention.cutoff(now: Date())

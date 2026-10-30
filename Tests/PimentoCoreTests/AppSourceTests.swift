@@ -144,4 +144,25 @@ import Testing
         let send = try #require(endBody.range(of: "await deactivate(targets)"))
         #expect(owners.lowerBound < ask.lowerBound && ask.lowerBound < send.lowerBound)
     }
+
+    /// The app's reads and previews (roles, policies, requests, approvals,
+    /// Azure history) go through `service.readOnly`, a GET-only transport;
+    /// only the functions that write use the writable service.
+    @Test func appReadsAndPreviewsAreReadOnly() throws {
+        let model = try String(contentsOf: Self.appSources.appendingPathComponent("AppModel.swift"), encoding: .utf8)
+        for read in ["loadRequestHistory()", "loadApprovalInbox()", "loadPolicies(", "loadRoles()", "loadHistoryFromAzure(", "review(approvalId:"] {
+            var search = model.startIndex..<model.endIndex
+            while let hit = model.range(of: "service." + read, range: search) {
+                // The `service` in scope: a local `let service = service.readOnly`, or `service.readOnly.` itself.
+                let before = model[..<hit.lowerBound]
+                let direct = before.hasSuffix("readOnly.") || model[hit.lowerBound...].hasPrefix("service.readOnly")
+                let local = before.range(of: "let service = service", options: .backwards).map {
+                    model[$0.upperBound...].hasPrefix(".readOnly")
+                } ?? false
+                #expect(direct || local, "\(read) through a writable service")
+                search = hit.upperBound..<model.endIndex
+            }
+        }
+        #expect(model.components(separatedBy: "let service = service.readOnly").count - 1 == 6)
+    }
 }

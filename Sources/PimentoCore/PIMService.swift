@@ -59,8 +59,9 @@ final class RedirectRefusal: NSObject, URLSessionTaskDelegate, @unchecked Sendab
     }
 }
 
-/// Wraps a transport and refuses anything but GET. Used by the CLI mode so that
-/// listing and dry runs are read-only by construction.
+/// Wraps a transport and refuses anything but GET. Used for the CLI's
+/// read-only commands and dry runs, and for the app's reads and previews, so
+/// that they are read-only by construction.
 public struct ReadOnlyTransport: HTTPTransport {
     public struct WriteRefused: Error, LocalizedError {
         public let method: String
@@ -131,6 +132,14 @@ public final class PIMService: Sendable {
         self.sleep = sleep
         self.clock = clock
         self.history = history
+    }
+
+    /// The same service for reads only: its transport refuses anything but
+    /// GET (`ReadOnlyTransport`). The app loads roles, policies, requests,
+    /// approvals and previews through it, as the CLI does.
+    public var readOnly: PIMService {
+        PIMService(transport: transport is ReadOnlyTransport ? transport : ReadOnlyTransport(transport),
+                   tokens: tokens, sleep: sleep, clock: clock, history: nil)
     }
 
     /// The same service, recording its writes to `recorder`.

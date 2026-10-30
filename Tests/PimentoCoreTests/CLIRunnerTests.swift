@@ -650,6 +650,25 @@ struct CLILiveWiringTests {
         #expect(await base.requests.map { $0.httpMethod ?? "GET" } == ["GET"])
     }
 
+    /// The app reads and previews through `readOnly` (SECURITY.md: previews
+    /// go through a transport that refuses anything but GET).
+    @Test func aReadOnlyCopyOfAWritingServiceRefusesWrites() async throws {
+        let base = RecordingTransport { _ in (Data(), 201) }
+        let writing = PIMService(transport: base, tokens: StaticTokenProvider())
+        let reading = writing.readOnly
+        await #expect(throws: ReadOnlyTransport.WriteRefused.self) { _ = try await reading.transport.send(put()) }
+        let role = try Fixture.role("Contoso Staging", "Contributor")
+        let plans = try ActivationRequestBuilder.plan([role], principalId: Fixture.userOID, justification: "x", hours: 1, now: Fixture.now)
+        let outcome = TestBox<ActivationOutcome>()
+        try await reading.execute(plans) { _, o in outcome.value = o }
+        #expect(outcome.value?.isFailure == true)
+        #expect(await base.requests.isEmpty)
+        // Wrapped once, and the copy records nothing.
+        #expect((reading.readOnly.transport as? ReadOnlyTransport)?.base is RecordingTransport)
+        #expect(reading.history == nil)
+        #expect(try await writing.transport.send(put()).1 == 201)
+    }
+
     @Test func writingServicesSendWrites() async throws {
         let base = RecordingTransport { _ in (Data(), 201) }
         let service = CLIEnvironment.liveService(tokens: StaticTokenProvider(), readOnly: false, base: base)

@@ -425,6 +425,9 @@ All notable changes to this project are documented here. The format follows
   (`O_NOFOLLOW`; reparse points are refused on Windows), a lock file must be a regular file, the
   history's identity check uses `lstat`, and the mode of a private file is set on its descriptor
   before the rename instead of by path afterwards.
+- The app loads roles, policies, requests, approvals and Azure history, and builds previews, through
+  a GET-only transport (`PIMService.readOnly`), as the CLI does and as SECURITY.md says; only
+  activate, deactivate, renew, cancel and approve/deny use the writable one.
 
 ## [0.1.0] - 2026-10-29
 
