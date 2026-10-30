@@ -128,7 +128,8 @@ jobs:
           # and fail on the missing login, not with "not found".
           out="$("$bin" status 2>&1)" && exit 1 || true
           echo "$out"
-          ! echo "$out" | grep -q "not found"
+          # `! pipeline` does not trip errexit unless it is the last command: test explicitly.
+          if echo "$out" | grep -q "not found"; then exit 1; fi
           echo "$out" | grep -q "az login"
       - uses: actions/upload-artifact@v4
         with:
