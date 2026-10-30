@@ -1,0 +1,26 @@
+Sources/PimentoCore/PIMService.swift
+  s_4884204a812fec::t_ea13bbd28df7f6 273,281-283,290,293-299
+  s_4884204a812fec::t_96ce3fed9d5742 236-239
+Tests/PimentoCoreTests/LifecycleTests.swift
+  s_4884204a812fec::t_05db1efbdc9319 260-270,288,389-391,396-402
+  s_4884204a812fec::t_358970858a9fec 249-251,255-256,271-274,285-287,289-296,375-388,392-395,403-440
+  s_4884204a812fec::t_1cfe680585b7b0 441
+Sources/PimentoCore/RoleLifecycle.swift
+  s_4884204a812fec::t_ea13bbd28df7f6 155-183
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5a34060556885a269251ad3db1e74563c6934eac",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
