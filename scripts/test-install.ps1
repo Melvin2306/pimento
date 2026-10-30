@@ -94,3 +94,5 @@ try {
     }
     Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
 }
+# The last program run here (the refused tampered install) exited 1; this script succeeded.
+exit 0

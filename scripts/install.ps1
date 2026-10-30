@@ -78,7 +78,7 @@ function Install-Pimento {
         } else {
             Write-Host "No pimento installed by this script in $InstallDir"
         }
-        $userPath = Get-UserPath
+        $userPath = @(Get-UserPath)
         $kept = @($userPath | Where-Object { -not (Test-SamePath $_ $InstallDir) })
         if ($kept.Count -ne $userPath.Count) {
             [Environment]::SetEnvironmentVariable('Path', ($kept -join ';'), 'User')
@@ -182,7 +182,7 @@ function Install-Pimento {
         }
         Write-Host "Installed $installed ($out)"
 
-        $userPath = Get-UserPath
+        $userPath = @(Get-UserPath)
         if (-not ($userPath | Where-Object { Test-SamePath $_ $InstallDir })) {
             [Environment]::SetEnvironmentVariable('Path', (@($userPath) + $InstallDir) -join ';', 'User')
             Write-Host "Added $InstallDir to your user PATH (new terminals will find pimento)."

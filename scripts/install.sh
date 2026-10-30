@@ -137,7 +137,7 @@ else
 fi
 
 tmp="$(mktemp -d 2>/dev/null || mktemp -d -t pimento-install)"
-[ -n "$tmp" ] && [ -d "$tmp" ] || die "could not create a temporary folder"
+if [ -z "$tmp" ] || [ ! -d "$tmp" ]; then die "could not create a temporary folder"; fi
 trap 'rm -rf "$tmp"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
