@@ -18,7 +18,7 @@ bin=${1:-$root/.build/debug/pimento}
 cache=$(mktemp -d "${TMPDIR:-/tmp}/pimento-alfred-test.XXXXXX")
 trap 'rm -rf "$cache"' EXIT INT TERM
 export pimento_path="$bin" demo_mode=1 alfred_workflow_cache="$cache" default_hours=2
-unset tenant pim_action pim_id pim_preset pim_preset_tenant pim_justification pim_hours pim_label 2>/dev/null || :
+unset tenant pim_action pim_id pim_preset pim_preset_id pim_preset_tenant pim_justification pim_hours pim_label 2>/dev/null || :
 
 failures=0
 pass() { printf 'ok    %s\n' "$1"; }
@@ -101,8 +101,8 @@ out=$(fx "${ac}Release")
 check "a preset name with >: that preset, not the shorter one" \
   '[i["variables"]["pim_preset"] for i in d["items"] if i.get("valid")] == ["Prod > Admin"]' "$out"
 out=$(fx "shared")
-check "a preset without a tenant that shares its name is not actionable" \
-  '{i["variables"]["pim_preset_tenant"]: i["valid"] for i in d["items"] if i["title"].startswith("Preset")} == {"": False, "00000000-0000-0000-0000-00000000000a": True}' "$out"
+check "presets that share a name are each activated by their own id" \
+  '{i["variables"]["pim_preset_tenant"]: (i["valid"], i["variables"]["pim_preset_id"]) for i in d["items"] if i["title"].startswith("Preset")} == {"": (True, "p3"), "00000000-0000-0000-0000-00000000000a": (True, "p4")}' "$out"
 
 # Run Script
 out=$(pim_action=activate pim_id="$role_id" pim_justification="-Release; rm -rf ~" pim_hours=2 pim_label="x" "$here/action.sh")
@@ -120,12 +120,13 @@ out=$(pim_action=activate pim_id="$ticket" pim_justification="x" "$here/action.s
 check "a CLI error (exit 2) becomes a readable notification" \
   'd["alfredworkflow"]["variables"]["pim_title"] == "Pimento: Not possible as asked" and "needs a ticket" in d["alfredworkflow"]["arg"]' "$out"
 
-out=$(pim_action=preset pim_preset="On-call" pim_preset_tenant="" pim_justification="" pim_hours="" pim_label="preset On-call" "$here/action.sh")
+oncall=$("$here/scriptfilter.sh" "On-call > " | python3 -c 'import json,sys; print(json.load(sys.stdin)["items"][0]["variables"]["pim_preset_id"])')
+out=$(pim_action=preset pim_preset_id="$oncall" pim_preset_tenant="" pim_justification="" pim_hours="" pim_label="preset On-call" "$here/action.sh")
 check "preset: summary of what happened" \
   'd["alfredworkflow"]["arg"] == "2 activated, 1 already done"' "$out"
-out=$(pim_action=preset pim_preset="Nope" "$here/action.sh")
+out=$(pim_action=preset pim_preset_id="00000000-0000-0000-0000-00000000dead" "$here/action.sh")
 check "unknown preset: the CLI's message" \
-  '"No preset named" in d["alfredworkflow"]["arg"]' "$out"
+  '"No preset has the id" in d["alfredworkflow"]["arg"]' "$out"
 
 active=$("$here/scriptfilter.sh" "development" | python3 -c 'import json,sys; print([i for i in json.load(sys.stdin)["items"] if i.get("uid","").startswith("role:")][0]["mods"]["alt"]["variables"]["pim_id"])')
 out=$(pim_action=deactivate pim_id="$active" "$here/action.sh")

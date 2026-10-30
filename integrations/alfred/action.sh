@@ -2,7 +2,7 @@
 # Alfred Run Script: does what the selected item says, from the item's variables:
 #   pim_action   activate | preset | deactivate
 #   pim_id       the role's id from `pimento list --json` (activate, deactivate)
-#   pim_preset, pim_preset_tenant   the preset's name and tenant (preset)
+#   pim_preset_id, pim_preset_tenant   the preset's id and tenant (preset)
 #   pim_justification, pim_hours    for activate and preset (empty: the preset's)
 #   pim_label    what to call it in the notification
 # Prints Alfred's {"alfredworkflow": …} JSON: the notification text as arg, its
@@ -22,7 +22,8 @@ case ${pim_action:-} in
     set -- activate "--id=${pim_id:?}" "--justification=${pim_justification:?}" "--hours=${pim_hours:-8}"
     ;;
   preset)
-    set -- activate "--preset=${pim_preset:?}"
+    # By id: a name can fit presets of two tenants.
+    set -- activate "--preset-id=${pim_preset_id:?}"
     if [ -n "${pim_preset_tenant:-}" ]; then
       # A preset belongs to its tenant: that one, not the configured default.
       set -- "$@" "--tenant=$pim_preset_tenant"

@@ -455,7 +455,16 @@ public struct CLIRunner: Sendable {
         let store = PresetStore(environment: env.variables)
         var library: PresetLibrary?
         var tenant = try resolveTenant(o.tenant)
-        if let name = o.preset {
+        var chosen: Preset?
+        if let id = o.presetId {
+            // By id: exactly that preset, in its own tenant (a different --tenant is an error).
+            let p = try store.load().preset(id: id)
+            chosen = p
+            if let own = try p.checkedTenantId() {
+                if let given = o.tenant, given.caseInsensitiveCompare(own) != .orderedSame { throw PresetError.otherTenant(p.name, tenantId: own) }
+                tenant = TenantSelection(tenantId: own, source: .commandLine)
+            }
+        } else if let name = o.preset {
             library = try store.load()
             if tenant.tenantId == nil, let only = library?.named(name), only.count == 1, let tid = try only[0].checkedTenantId() {
                 tenant = TenantSelection(tenantId: tid, source: .commandLine)
@@ -470,8 +479,12 @@ public struct CLIRunner: Sendable {
         var matched: [EligibleRole]
         var missing: [PresetRole] = []
         var preset: Preset?
-        if let name = o.preset, let library {
-            let p = try library.find(name, tenantId: tenantId)
+        if let name = o.preset, let library { chosen = try library.find(name, tenantId: tenantId, alias: tenant.tenantId) }
+        if let p = chosen {
+            // A preset of a tenant GUID runs only in that tenant.
+            if let own = p.tenantId, UUID(uuidString: own) != nil, let tenantId, own.caseInsensitiveCompare(tenantId) != .orderedSame {
+                throw PresetError.otherTenant(p.name, tenantId: own)
+            }
             let resolution = p.resolve(in: snapshot.roles)
             preset = p
             matched = resolution.roles

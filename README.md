@@ -954,7 +954,7 @@ pimento version --check
 | Command | What it does |
 | --- | --- |
 | `pimento list [FILTER…] [--role NAME] [--id ID] [--active \| --eligible]` | Table of your eligible roles, with status and expiry |
-| `pimento activate (FILTER… \| --role NAME \| --id ID \| --all \| --preset NAME) -j TEXT [--hours N\|max] [--at WHEN] [--ticket NUMBER [--ticket-system NAME]] [--yes] [--dry-run] [--max-parallel N]` | Activates the matching roles that are not active yet, in parallel (8 at a time by default), or schedules them with `--at` |
+| `pimento activate (FILTER… \| --role NAME \| --id ID \| --all \| --preset NAME \| --preset-id ID) -j TEXT [--hours N\|max] [--at WHEN] [--ticket NUMBER [--ticket-system NAME]] [--yes] [--dry-run] [--max-parallel N]` | Activates the matching roles that are not active yet, in parallel (8 at a time by default), or schedules them with `--at` |
 | `pimento deactivate (FILTER… \| --role NAME \| --id ID \| --all \| --preset NAME) [-j TEXT] [--yes] [--dry-run]` | Ends the matching activations now (`SelfDeactivate`) |
 | `pimento renew (FILTER… \| --role NAME \| --id ID \| --all \| --preset NAME) -j TEXT [--hours N\|max] [--ticket NUMBER [--ticket-system NAME]] [--yes] [--dry-run]` | Ends and activates the matching roles again, for a fresh duration (the role is off for a few minutes in between), with the original activation's ticket or `--ticket` |
 | `pimento extend (FILTER… \| --role NAME \| --all) -j TEXT [--days N] [--yes] [--dry-run]` | Asks an administrator to extend admin-assigned, time-bound assignments (`SelfExtend`) |
@@ -1079,7 +1079,11 @@ See [Ending and renewing](#ending-and-renewing-activations).
 with `pimento presets save`. The preset's justification and duration apply unless you pass `-j` or
 `--hours`. Roles you are no longer eligible for are listed as *missing* and left out; the rest is
 activated (exit code 1 only when none is left). A preset belongs to a tenant: without `--tenant`,
-a preset name that exists in one tenant only uses that tenant.
+a preset name that exists in one tenant only uses that tenant. With a tenant, the preset of that
+tenant (by GUID, or by the domain you passed) wins over a preset for any tenant of the same name.
+`--preset-id ID` (`activate`) picks exactly the preset whose `id` in `presets list --json` is ID and
+runs it in its own tenant (another `--tenant` is an error): for scripts and launchers, which cannot
+tell which of two same-named presets a name would pick.
 
 `pimento presets save NAME FILTER… [--role NAME]` stores the filters as a *rule*, resolved each
 time you activate, so new eligibilities that match are included; with `--exact` it stores the roles
@@ -1378,7 +1382,8 @@ integrations/alfred/build.sh       # build/Pimento.alfredworkflow; open it to im
 ```
 
 Both pick a single role with `pimento activate --id` / `deactivate --id`, the `id` from
-`pimento list --json`, which scripts can use as well.
+`pimento list --json`, and a preset with `pimento activate --preset-id`, the `id` from
+`pimento presets list --json`, which scripts can use as well.
 
 ## How it works
 

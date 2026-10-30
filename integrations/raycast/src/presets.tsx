@@ -4,7 +4,6 @@ import { activatePreset, ActivatePresetForm, presetRoleLines, presetSummary } fr
 import {
   formatDuration,
   PimentoError,
-  presetIsAmbiguous,
   presetsArgs,
   readJSON,
   type Preset,
@@ -46,23 +45,16 @@ export default function Command() {
       )}
       <List.Section title="Presets" subtitle={s.demo ? demoNote : undefined}>
         {presets.map((preset) => (
-          <PresetItem key={preset.id} preset={preset} ambiguous={presetIsAmbiguous(preset, presets)} />
+          <PresetItem key={preset.id} preset={preset} />
         ))}
       </List.Section>
     </List>
   );
 }
 
-function PresetItem(props: { preset: Preset; ambiguous: boolean }) {
-  const { preset, ambiguous } = props;
+function PresetItem(props: { preset: Preset }) {
+  const { preset } = props;
   const markdown = [
-    ...(ambiguous
-      ? [
-          "> Another preset is also named “" + preset.name + "”. This one has no tenant, so `--preset` would pick",
-          "> the other one in its tenant. Rename one in Pimento to activate it here.",
-          "",
-        ]
-      : []),
     `## ${preset.name}`,
     "",
     ...presetRoleLines(preset).map((l) => `- ${l}`),
@@ -84,7 +76,7 @@ function PresetItem(props: { preset: Preset; ambiguous: boolean }) {
       detail={<List.Item.Detail markdown={markdown} />}
       actions={
         <ActionPanel>
-          {ambiguous ? null : preset.justification ? (
+          {preset.justification ? (
             <>
               <Action title="Activate Preset" icon={Icon.Bolt} onAction={() => activatePreset(preset)} />
               <Action.Push

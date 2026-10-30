@@ -58,7 +58,8 @@ justification or a preset name is interpreted. Values are passed as `--option=va
 starts with `-` stays text. Commands that change roles pass `--yes`: the form or the confirmation
 in Raycast is the confirmation the CLI would otherwise ask for on a terminal. A single role is
 selected with `--id` (the `id` from `pimento list --json`), never with a name filter that could
-also match its neighbours.
+also match its neighbours, and a preset with `--preset-id` (the `id` from `pimento presets list
+--json`), never by its name, which could also fit a preset of another tenant.
 
 ## Development
 

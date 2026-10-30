@@ -213,6 +213,7 @@ public enum PresetError: Error, Equatable, LocalizedError {
     case emptyName
     case duplicateName(String)
     case notFound(String)
+    case idNotFound(String)
     case ambiguous(String, tenants: [String])
     case otherTenant(String, tenantId: String)
     case noRoles
@@ -225,6 +226,7 @@ public enum PresetError: Error, Equatable, LocalizedError {
         case .emptyName: "A preset needs a name."
         case .duplicateName(let n): "A preset named “\(n)” already exists in this tenant."
         case .notFound(let n): "No preset named “\(n)”. `pimento presets list` shows the saved ones."
+        case .idNotFound(let id): "No preset has the id “\(id)”. `pimento presets list --json` shows the saved ones."
         case .ambiguous(let n, let tenants):
             "There are presets named “\(n)” in \(tenants.count) tenants (\(tenants.joined(separator: ", "))). Pick one with --tenant."
         case .otherTenant(let n, let t): "The preset “\(n)” belongs to tenant \(t). Use --tenant \(t)."
@@ -260,18 +262,28 @@ public struct PresetLibrary: Equatable, Sendable {
     /// Presets with this name (case-insensitive) in any tenant.
     public func named(_ name: String) -> [Preset] { presets.filter { Self.sameName($0.name, name) } }
 
-    /// The preset called `name` for `tenantId`. Without a tenant, the name must
+    /// The preset called `name` for `tenantId` (or `alias`, the tenant as it
+    /// was asked for, which may be a domain). Without a tenant, the name must
     /// be unique. Errors say whether it exists elsewhere.
-    public func find(_ name: String, tenantId: String?) throws -> Preset {
+    public func find(_ name: String, tenantId: String?, alias: String? = nil) throws -> Preset {
         let all = named(name)
         guard !all.isEmpty else { throw PresetError.notFound(name) }
         if let tenantId {
-            if let exact = all.first(where: { $0.tenantId?.caseInsensitiveCompare(tenantId) == .orderedSame }) { return exact }
+            let tenants = [tenantId] + (alias.map { [$0] } ?? [])
+            if let exact = all.first(where: { p in tenants.contains { p.tenantId?.caseInsensitiveCompare($0) == .orderedSame } }) { return exact }
             if let any = all.first(where: { $0.tenantId == nil }) { return any }
             throw PresetError.otherTenant(all[0].name, tenantId: all[0].tenantId ?? "")
         }
         guard all.count == 1 else { throw PresetError.ambiguous(all[0].name, tenants: all.map { $0.tenantId ?? "any" }) }
         return all[0]
+    }
+
+    /// The preset with this id (`presets list --json`), whatever its name: for
+    /// launchers, which cannot tell which of two same-named presets a name picks.
+    public func preset(id: String) throws -> Preset {
+        let raw = id.trimmingCharacters(in: .whitespaces)
+        guard let uuid = UUID(uuidString: raw), let p = presets.first(where: { $0.id == uuid }) else { throw PresetError.idNotFound(raw) }
+        return p
     }
 
     /// Adds or updates `preset` (by id). Names are unique per tenant; with

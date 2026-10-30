@@ -360,9 +360,13 @@ export function activateRoleArgs(settings: Settings, role: Pick<Role, "id">, inp
   return [...baseArgs(settings), "activate", `--id=${role.id}`, ...activationOptions(input), "--yes", "--json"];
 }
 
+/**
+ * By id (`--preset-id`), not by name: a name can fit presets of two tenants,
+ * and which one `--preset NAME` picks is the CLI's call. The id is exact.
+ */
 export function activatePresetArgs(
   settings: Settings,
-  preset: Pick<Preset, "name" | "tenantId">,
+  preset: Pick<Preset, "id" | "tenantId">,
   input: Partial<ActivateInput> = {},
 ): string[] {
   // The preset's own tenant wins over the preference: that is where its roles are.
@@ -370,29 +374,12 @@ export function activatePresetArgs(
   return [
     ...baseArgs(settings, { tenant: !preset.tenantId }),
     "activate",
-    `--preset=${preset.name}`,
+    `--preset-id=${preset.id}`,
     ...tenant,
     ...activationOptions(input),
     "--yes",
     "--json",
   ];
-}
-
-/** Same rule as the CLI's preset lookup: trimmed, case-insensitive. */
-function sameName(a: string, b: string): boolean {
-  return a.trim().toLowerCase() === b.trim().toLowerCase();
-}
-
-/**
- * `--preset NAME` picks the preset of the signed-in tenant before one without
- * a tenant, so a preset without a tenant that shares its name with another
- * cannot be activated by name: it could run the other one.
- */
-export function presetIsAmbiguous(
-  preset: Pick<Preset, "id" | "name" | "tenantId">,
-  all: Pick<Preset, "id" | "name">[],
-): boolean {
-  return !preset.tenantId && all.some((p) => p.id !== preset.id && sameName(p.name, preset.name));
 }
 
 export function deactivateArgs(settings: Settings, role: Pick<Role, "id">): string[] {

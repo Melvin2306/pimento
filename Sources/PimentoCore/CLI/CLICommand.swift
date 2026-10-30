@@ -105,6 +105,8 @@ public struct ActivateOptions: Equatable, Sendable {
     public var all = false
     /// A saved preset instead of filters / `--role` / `--all`.
     public var preset: String?
+    /// `--preset-id`: a saved preset by its id, in its own tenant.
+    public var presetId: String?
     /// Empty: the preset's justification, if it has one.
     public var justification = ""
     /// nil: the preset's duration, else the default (8 hours).
@@ -645,6 +647,7 @@ public enum CLIParser {
         "--dry-run": Flag(key: "dry-run", takesValue: false),
         "--max-parallel": Flag(key: "max-parallel", takesValue: true),
         "--preset": Flag(key: "preset", takesValue: true),
+        "--preset-id": Flag(key: "preset-id", takesValue: true),
         "--at": Flag(key: "at", takesValue: true),
         "--ticket": Flag(key: "ticket", takesValue: true),
         "--ticket-system": Flag(key: "ticket-system", takesValue: true),
@@ -953,6 +956,7 @@ public enum CLIParser {
         o.assumeYes = scan.values["yes"] != nil
         o.dryRun = scan.values["dry-run"] != nil
         o.preset = scan.values["preset"]?.last?.trimmingCharacters(in: .whitespaces)
+        o.presetId = scan.values["preset-id"]?.last?.trimmingCharacters(in: .whitespaces)
         o.justification = (scan.values["justification"]?.last ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         if let raw = scan.values["hours"]?.last { o.duration = try hours(raw) }
         if let raw = scan.values["max-parallel"]?.last {
@@ -963,6 +967,11 @@ public enum CLIParser {
         o.ticketSystem = scan.values["ticket-system"]?.last?.trimmingCharacters(in: .whitespaces)
         // A system alone is no ticket; for renew it would also replace the original ticket.
         if o.ticketSystem != nil, o.ticketNumber == nil { throw CLIParseError.ticketSystemWithoutTicket }
+        if o.presetId != nil {
+            if o.preset != nil { throw CLIParseError.conflicting("--preset-id", "--preset") }
+            if o.criteria.hasSelection || o.all { throw CLIParseError.conflicting("--preset-id", "filters, --role, --id or --all") }
+            return .activate(o)
+        }
         if o.preset != nil {
             if o.criteria.hasSelection || o.all { throw CLIParseError.conflicting("--preset", "filters, --role, --id or --all") }
             // The justification may come from the preset: checked once it is loaded.

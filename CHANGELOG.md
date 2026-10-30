@@ -57,6 +57,8 @@ All notable changes to this project are documented here. The format follows
 - **`--id ID`** for `pimento list`, `activate`, `deactivate` and `renew`: exactly the role whose
   `id` or `eligibilityScheduleId` in `list --json` is ID (repeatable). For scripts and launchers
   that picked one row, where a scope filter would also match the roles below that scope.
+- **`pimento activate --preset-id ID`**: exactly the preset whose `id` in `presets list --json` is
+  ID, in its own tenant. The Raycast extension and the Alfred workflow activate presets with it.
 - **Raycast extension** (`integrations/raycast`): *Search PIM Roles* (status, activate with a
   justification, duration and, when the policy asks, a ticket; deactivate), *Activate PIM Preset*
   and *Active PIM Roles* with the time left. It runs the installed `pimento` with an argument list
@@ -102,6 +104,15 @@ All notable changes to this project are documented here. The format follows
   then closed), so a connection reset cannot discard the answer page before the browser shows it.
 - The loopback listener tests run on Windows too, and CI tries the PowerShell completions with
   `TabExpansion2` in both PowerShells.
+
+### Fixed
+
+- The Raycast extension and the Alfred workflow activate a preset by its id, so the preset you
+  picked is the one that runs. They used to pass its name and guess which preset the CLI would
+  choose; that guess could differ from the CLI's (a preset whose tenant is a domain, or names that
+  only Unicode case folding makes equal), so `--yes` could run a same-named preset of another
+  tenant. `pimento activate --preset NAME --tenant DOMAIN` (and `deactivate`, `renew`, `keep-alive`,
+  MCP) now also prefers a preset saved for that domain over one for any tenant.
 
 ### Security
 

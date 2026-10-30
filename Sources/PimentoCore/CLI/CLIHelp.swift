@@ -113,7 +113,7 @@ public enum CLIHelp {
     """
 
     static let activate = """
-    Usage: pimento activate (FILTER… | --role NAME | --all | --preset NAME) -j TEXT [options]
+    Usage: pimento activate (FILTER… | --role NAME | --all | --preset NAME | --preset-id ID) -j TEXT [options]
 
     Activates the matching eligible roles that are not active yet, in parallel.
 
@@ -129,6 +129,9 @@ public enum CLIHelp {
                           Its justification and duration apply unless -j / --hours
                           are given. Roles that are no longer eligible are reported
                           as missing; the rest is activated.
+          --preset-id ID  Exactly the preset with this id (from `pimento presets
+                          list --json`), in its own tenant, for scripts and
+                          launchers: a name can fit presets of two tenants.
 
     Options:
       -j, --justification TEXT
@@ -746,6 +749,7 @@ public enum CLIHelp {
                 '(-j --justification)'{-j,--justification}'[Justification]:justification: ' \
                 '--hours[Duration in hours, or max]:hours:(max 1 2 4 8 12 24)' \
                 '--preset[Saved preset]:preset: ' \
+                '--preset-id[Exactly the preset with this id]:id: ' \
                 '--at[Start later]:when:(now +1h tomorrow08:00 workday08:00)' \
                 '--ticket[Ticket number]:ticket: ' \
                 '--ticket-system[Ticket system]:system: ' \
@@ -865,7 +869,7 @@ public enum CLIHelp {
         return
       fi
       case "$prev" in
-        -t|--tenant|-j|--justification|--role|--id|--max-parallel|--preset|--days|--window|--ticket|--ticket-system|--client-id) return ;;
+        -t|--tenant|-j|--justification|--role|--id|--max-parallel|--preset|--preset-id|--days|--window|--ticket|--ticket-system|--client-id) return ;;
         --auth) COMPREPLY=($(compgen -W "az pimento" -- "$cur")); return ;;
         --at) COMPREPLY=($(compgen -W "now +1h +2h tomorrow08:00 workday08:00" -- "$cur")); return ;;
         --hours) COMPREPLY=($(compgen -W "max 1 2 4 8 12 24" -- "$cur")); return ;;
@@ -877,7 +881,7 @@ public enum CLIHelp {
       esac
       case "$cmd" in
         list) opts="--tenant --json --role --id --active --eligible --help" ;;
-        activate) opts="--tenant --json --role --id --all --preset --justification --hours --at --ticket --ticket-system --yes --dry-run --max-parallel --help" ;;
+        activate) opts="--tenant --json --role --id --all --preset --preset-id --justification --hours --at --ticket --ticket-system --yes --dry-run --max-parallel --help" ;;
         cancel) opts="--tenant --json --role --all --yes --dry-run --help" ;;
         deactivate) opts="--tenant --json --role --id --all --preset --justification --yes --dry-run --max-parallel --help" ;;
         renew) opts="--tenant --json --role --id --all --preset --justification --hours --ticket --ticket-system --yes --dry-run --max-parallel --help" ;;
@@ -954,6 +958,7 @@ public enum CLIHelp {
     complete -c pimento -n '__fish_seen_subcommand_from activate deactivate renew extend keep-alive approve deny presets' -s j -l justification -r -d 'Justification'
     complete -c pimento -n '__fish_seen_subcommand_from activate renew keep-alive presets' -l hours -x -a 'max 1 2 4 8 12 24' -d 'Duration in hours, or max'
     complete -c pimento -n '__fish_seen_subcommand_from activate deactivate renew keep-alive' -l preset -r -d 'Saved preset'
+    complete -c pimento -n '__fish_seen_subcommand_from activate' -l preset-id -r -d 'Exactly the preset with this id'
     complete -c pimento -n '__fish_seen_subcommand_from presets; and not __fish_seen_subcommand_from list show save delete' -a 'list show save delete'
     complete -c pimento -n '__fish_seen_subcommand_from presets' -l exact -d 'Store the matching roles, not the filters'
     complete -c pimento -n '__fish_seen_subcommand_from presets' -s f -l force -d 'Replace a preset with the same name'

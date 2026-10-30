@@ -43,8 +43,8 @@ public enum CompletionSpec {
         var flags: [String] = switch command {
         case "list": tenantJSON + ["--role", "--id", "--active", "--eligible"]
         case "activate":
-            tenantJSON + ["--role", "--id", "--all", "--preset", "--justification", "--hours", "--at", "--ticket", "--ticket-system",
-                          "--yes", "--dry-run", "--max-parallel"]
+            tenantJSON + ["--role", "--id", "--all", "--preset", "--preset-id", "--justification", "--hours", "--at", "--ticket",
+                          "--ticket-system", "--yes", "--dry-run", "--max-parallel"]
         case "deactivate": tenantJSON + ["--role", "--id", "--all", "--preset", "--justification", "--yes", "--dry-run", "--max-parallel"]
         case "renew":
             tenantJSON + ["--role", "--id", "--all", "--preset", "--justification", "--hours", "--ticket", "--ticket-system", "--yes",
@@ -75,7 +75,7 @@ public enum CompletionSpec {
 
     /// Flags whose next word is their value (short forms too, to skip it).
     public static let valueFlags = [
-        "--tenant", "-t", "--auth", "--role", "--preset", "--justification", "-j", "--hours", "--at", "--ticket",
+        "--tenant", "-t", "--auth", "--role", "--preset", "--preset-id", "--justification", "-j", "--hours", "--at", "--ticket",
         "--ticket-system", "--max-parallel", "--days", "--timeout", "--since", "--until", "--action", "--outcome",
         "--limit", "-n", "--client-id", "--id", "--window",
     ]
@@ -122,6 +122,7 @@ public enum CompletionSpec {
         ("--eligible", "Only roles that are not active"),
         ("--all", "Every matching role or request"),
         ("--preset", "Saved preset"),
+        ("--preset-id", "Exactly the preset with this id (from presets list --json)"),
         ("--justification", "Justification"),
         ("--hours", "Duration in hours, or max"),
         ("--at", "Start later"),

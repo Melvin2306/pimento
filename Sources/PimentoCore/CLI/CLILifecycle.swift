@@ -40,7 +40,7 @@ extension CLIRunner {
         do { (service, snapshot) = try await load(tenant, readOnly: readOnly) } catch { return .exit(report(error, tenant: tenant.tenantId)) }
         let tenantId = snapshot.identity.tenantId ?? tenant.tenantId
         if let name, let library {
-            let p = try library.find(name, tenantId: tenantId)
+            let p = try library.find(name, tenantId: tenantId, alias: tenant.tenantId)
             let resolution = p.resolve(in: snapshot.roles)
             for rule in resolution.unmatchedRules {
                 err(errStyle.yellow("note:") + " the preset's rule `\(rule.label)` matches no role")

@@ -125,30 +125,22 @@ function matches(haystack, words) {
 
 // MARK: - Items
 
-/** Same rule as the CLI's preset lookup: trimmed, case-insensitive. */
+/** A typed name against a preset's: trimmed, case-insensitive. */
 function sameName(a, b) {
   return String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
 }
 
-/**
- * `--preset NAME` picks the preset of the signed-in tenant before a preset
- * without a tenant, so one without a tenant that shares its name with
- * another cannot be targeted from here.
- */
-function presetAmbiguous(p, all) {
-  return !p.tenantId && all.some((o) => o !== p && sameName(o.name, p.name));
-}
-
-function presetItem(p, q, defaultHours, all) {
+function presetItem(p, q, defaultHours) {
   const roles = (p.roles || []).length;
   const rules = (p.match || []).length;
   const what = [roles === 1 ? "1 role" : roles + " roles"].concat(rules ? [rules === 1 ? "1 rule" : rules + " rules"] : []).join(" + ");
   const justification = q.justification || p.justification || "";
-  const ambiguous = presetAmbiguous(p, all || []);
   const duration = formatDuration(p.duration) || hoursLabel(defaultHours);
+  // By id (--preset-id): a name can fit presets of two tenants.
   const vars = {
     pim_action: "preset",
     pim_preset: p.name,
+    pim_preset_id: p.id,
     pim_preset_tenant: p.tenantId || "",
     pim_justification: q.justification,
     pim_hours: "",
@@ -160,19 +152,17 @@ function presetItem(p, q, defaultHours, all) {
   return {
     uid: "preset:" + p.id,
     title: "Preset: " + p.name,
-    subtitle: ambiguous
-      ? "Another preset is also named " + p.name + ": rename one in Pimento to activate this one here"
-      : justification
-        ? "↩ Activate " + what + " for " + duration + ": " + justification
-        : "Type > and a justification to activate its " + what,
-    valid: Boolean(justification) && !ambiguous,
+    subtitle: justification
+      ? "↩ Activate " + what + " for " + duration + ": " + justification
+      : "Type > and a justification to activate its " + what,
+    valid: Boolean(justification),
     autocomplete: queryText(p.name) + " > ",
     icon: { path: "icon.png" },
     variables: vars,
     mods: {
       cmd: {
-        valid: Boolean(justification) && !ambiguous,
-        subtitle: ambiguous ? "Another preset has the same name" : justification ? "⌘↩ Activate " + what + " for the maximum each role allows" : "Type > and a justification first",
+        valid: Boolean(justification),
+        subtitle: justification ? "⌘↩ Activate " + what + " for the maximum each role allows" : "Type > and a justification first",
         variables: Object.assign({}, vars, { pim_hours: "max" }),
       },
     },
@@ -267,7 +257,7 @@ function items(rolesPath, presetsPath, query, defaultHours, demo) {
   const presets = presetList.presets || [];
   const exact = presets.filter((p) => sameName(queryText(p.name), q.filter));
   if (exact.length === 1 && q.tokens.length === 0) {
-    out.push(presetItem(exact[0], q, hours, presets));
+    out.push(presetItem(exact[0], q, hours));
   } else {
     const roles = (list.roles || []).filter((r) =>
       q.tokens.length > 0
@@ -282,7 +272,7 @@ function items(rolesPath, presetsPath, query, defaultHours, demo) {
     if (q.tokens.length === 0) {
       for (const p of presets) {
         const hay = ["preset", p.name].concat((p.roles || []).map((r) => (r.roleName || "") + " " + (r.scopeName || ""))).join(" ");
-        if (matches(queryText(hay), q.words)) out.push(presetItem(p, q, hours, presets));
+        if (matches(queryText(hay), q.words)) out.push(presetItem(p, q, hours));
       }
     }
     const active = roles

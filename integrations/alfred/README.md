@@ -47,7 +47,7 @@ Open `build/Pimento.alfredworkflow` to import it into Alfred, then fill in its c
 | --- | --- |
 | `info.plist` | The workflow: the `pim` Script Filter → Run Script → Post Notification, and its configuration |
 | `scriptfilter.sh` | The Script Filter: runs `pimento list --json` and `presets list --json` (cached) |
-| `action.sh` | The Run Script: `activate --id`, `activate --preset` or `deactivate --id`, with `--yes --json` |
+| `action.sh` | The Run Script: `activate --id`, `activate --preset-id` or `deactivate --id`, with `--yes --json` |
 | `lib.sh` | Shared: finding `pimento`, the cache, running it with an argument list |
 | `alfred.js` | JXA: pimento's JSON → Alfred's JSON, and the notification text |
 | `build.sh` | Packs the above with the app icon into `build/Pimento.alfredworkflow` |

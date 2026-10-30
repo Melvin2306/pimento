@@ -475,7 +475,7 @@ extension MCPToolbox {
     /// The roles a write call names, among `rows`: exact role + scope pairs,
     /// or a preset. Every named pair must exist; a resource name that fits
     /// several scopes is refused rather than guessed.
-    func select(_ args: MCPArguments, rows: [EligibleRole], tenantId: String?) throws -> Selection {
+    func select(_ args: MCPArguments, rows: [EligibleRole], tenantId: String?, alias: String? = nil) throws -> Selection {
         let targets = args.objects("roles")
         let presetName = args.string("preset")
         switch (targets, presetName) {
@@ -487,7 +487,7 @@ extension MCPToolbox {
         var selection = Selection(roles: [])
         if let presetName {
             let library = try backend.presets.load()
-            let preset = try library.find(presetName, tenantId: tenantId)
+            let preset = try library.find(presetName, tenantId: tenantId, alias: alias)
             let resolution = preset.resolve(in: rows)
             picked = resolution.roles
             selection.missing = resolution.missing
@@ -554,7 +554,7 @@ extension MCPToolbox {
             let now = backend.now()
             let snapshot = try await service.loadRoles(now: now)
             let tenantId = snapshot.identity.tenantId ?? tenant
-            let selection = try select(args, rows: snapshot.roles, tenantId: tenantId)
+            let selection = try select(args, rows: snapshot.roles, tenantId: tenantId, alias: tenant)
             let principal = snapshot.identity.objectId
             let preset = selection.preset
             let requested: RequestedDuration = args.int("hours").map { .hours($0) } ?? preset?.duration ?? .hours(ActivationRequestBuilder.defaultHours)

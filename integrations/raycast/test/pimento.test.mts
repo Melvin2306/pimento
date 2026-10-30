@@ -26,7 +26,6 @@ import {
   formatTimeLeft,
   listArgs,
   PimentoError,
-  presetIsAmbiguous,
   presetsArgs,
   readJSON,
   run,
@@ -77,18 +76,6 @@ suite("finding pimento", () => {
   });
 });
 
-suite("presets", () => {
-  test("a preset without a tenant that shares its name cannot be targeted by name", () => {
-    const anyTenant = { id: "a", name: "On-call" };
-    const inTenant = { id: "b", name: " on-call ", tenantId: "00000000-0000-0000-0000-00000000000a" };
-    const other = { id: "c", name: "Release day" };
-    assert.equal(presetIsAmbiguous(anyTenant, [anyTenant, inTenant, other]), true);
-    // With its tenant, --tenant picks exactly it.
-    assert.equal(presetIsAmbiguous(inTenant, [anyTenant, inTenant, other]), false);
-    assert.equal(presetIsAmbiguous(anyTenant, [anyTenant, other]), false);
-  });
-});
-
 suite("arguments", () => {
   const role = { id: "/subscriptions/00000000-0000-0000-0000-000000000001/x/i1" };
 
@@ -118,18 +105,18 @@ suite("arguments", () => {
     assert.ok(!activateRoleArgs({}, role, { justification: "x", ticketSystem: "S" }).some((a) => a.startsWith("--ticket")));
   });
 
-  test("a preset uses its own tenant; empty overrides are left out", () => {
-    assert.deepEqual(activatePresetArgs({ tenant: "other" }, { name: "On-call", tenantId: "t1" }), [
+  test("a preset by id, in its own tenant; empty overrides are left out", () => {
+    assert.deepEqual(activatePresetArgs({ tenant: "other" }, { id: "p1", tenantId: "t1" }), [
       "activate",
-      "--preset=On-call",
+      "--preset-id=p1",
       "--tenant=t1",
       "--yes",
       "--json",
     ]);
-    assert.deepEqual(activatePresetArgs({ tenant: "other" }, { name: "-x" }, { justification: "", hours: "2" }), [
+    assert.deepEqual(activatePresetArgs({ tenant: "other" }, { id: "p2" }, { justification: "", hours: "2" }), [
       "--tenant=other",
       "activate",
-      "--preset=-x",
+      "--preset-id=p2",
       "--hours=2",
       "--yes",
       "--json",
@@ -246,8 +233,8 @@ suite("against pimento --demo", { skip: bin ? false : "no pimento build: run `sw
 
   test("errors: an unknown preset, a missing binary", async () => {
     await assert.rejects(
-      change(bin, activatePresetArgs(demo, { name: "Nope" })),
-      (e: unknown) => e instanceof PimentoError && e.code === 1 && /No preset named/.test(e.message),
+      change(bin, activatePresetArgs(demo, { id: "00000000-0000-0000-0000-00000000dead" })),
+      (e: unknown) => e instanceof PimentoError && e.code === 1 && /No preset has the id/.test(e.message),
     );
     await assert.rejects(
       run("/nonexistent/pimento", ["version"]),

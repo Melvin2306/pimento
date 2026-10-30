@@ -176,6 +176,44 @@ struct CLIPresetTests {
         #expect(await h.run("activate", "--preset", "Nope", "--dry-run") == 1)
     }
 
+    /// `--preset NAME` prefers the preset of the signed-in tenant, also when
+    /// that preset names it by domain; `--preset-id` picks exactly one preset
+    /// whatever its name (the launchers use it).
+    @Test func presetsOfTheSameNameAreTellableApart() async throws {
+        let tid = "11111111-2222-4333-8444-555555555555"
+        let anyTenant = Preset(name: "Shared", tenantId: nil, roles: [PresetRole(try Fixture.role("Contoso Production", "Reader"))], justification: "x")
+        func harness(_ tenantOfOther: String) throws -> CLIHarness {
+            let h = CLIHarness()
+            h.tokens = StaticTokenProvider(token: fakeToken(["oid": Fixture.userOID, "tid": tid]))
+            try writePresets(h, [anyTenant, Preset(name: "SHARED", tenantId: tenantOfOther,
+                                                   roles: [PresetRole(try Fixture.role("Contoso Staging", "Contributor"))], justification: "y")])
+            return h
+        }
+        for other in [tid, "contoso.example"] {
+            let byName = try harness(other)
+            #expect(await byName.run("activate", "--preset", "shared", "--tenant", other, "--dry-run") == 0, "\(byName.err)")
+            #expect(byName.out.contains("Contoso Staging") && !byName.out.contains("Contoso Production"), "\(other): \(byName.out)")
+            let byId = try harness(other)
+            #expect(await byId.run("activate", "--preset-id", anyTenant.id.uuidString.lowercased(), "--tenant", other, "--dry-run") == 0, "\(byId.err)")
+            #expect(byId.out.contains("Contoso Production") && !byId.out.contains("Contoso Staging"), "\(other): \(byId.out)")
+        }
+        // By id, a preset runs only in its own tenant.
+        let h = try harness(tid)
+        let library = try PresetStore(url: h.presetsURL).load()
+        let own = try #require(library.presets.first { $0.tenantId == tid })
+        #expect(await h.run("activate", "--preset-id", own.id.uuidString, "--tenant", "99999999-2222-4333-8444-555555555555", "--dry-run") == 2)
+        #expect(h.err.contains("--tenant \(tid)"))
+        #expect(await h.run("activate", "--preset-id", UUID().uuidString, "--dry-run") == 1)
+        #expect(h.err.contains("No preset has the id"))
+        #expect(await h.transport.requests.isEmpty)
+        #expect(throws: CLIParseError.conflicting("--preset-id", "--preset")) {
+            try CLIParser.parse(["activate", "--preset-id", "x", "--preset", "y"])
+        }
+        #expect(throws: CLIParseError.conflicting("--preset-id", "filters, --role, --id or --all")) {
+            try CLIParser.parse(["activate", "--preset-id", "x", "--all"])
+        }
+    }
+
     /// A preset's tenant goes to `az --tenant` like `--tenant`, so it is
     /// checked like `--tenant` (the presets file can be edited by hand).
     @Test func aPresetTenantThatIsNoTenantIsRefused() async throws {
