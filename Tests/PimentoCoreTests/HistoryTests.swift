@@ -4,9 +4,7 @@ import Testing
 
 /// A fresh history file path in the temporary directory.
 func temporaryHistoryURL() -> URL {
-    FileManager.default.temporaryDirectory
-        .appendingPathComponent("pimento-tests-\(UUID().uuidString)", isDirectory: true)
-        .appendingPathComponent("history.jsonl")
+    TestTemp.url().appendingPathComponent("history.jsonl")
 }
 
 extension HistoryRecord {

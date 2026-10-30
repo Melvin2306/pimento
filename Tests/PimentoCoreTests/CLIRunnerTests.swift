@@ -583,7 +583,7 @@ struct CLIInstallTests {
     /// a real file that appeared since the check is never replaced or removed.
     @Test func installAndUninstallCommandsLeaveRealFilesAlone() throws {
         let fm = FileManager.default
-        let dir = fm.temporaryDirectory.appendingPathComponent("pimento-install-\(UUID().uuidString)")
+        let dir = TestTemp.url("install")
         defer { try? fm.removeItem(at: dir) }
         let link = dir.appendingPathComponent("bin/pimento").path
         let source = dir.appendingPathComponent("Pimento.app/Contents/Helpers/pimento").path
@@ -607,7 +607,7 @@ struct CLIInstallTests {
     /// The symlink into Pimento.app is a macOS (app) feature; Windows symlinks need extra rights.
     @Test(.enabled(if: HostPlatform.current != .windows, "macOS app feature; symlinks need privileges on Windows"))
     func readsLinkStateFromDisk() throws {
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("pimento-install-\(UUID().uuidString)")
+        let dir = TestTemp.url("install")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
         let link = dir.appendingPathComponent("pimento").path
@@ -666,7 +666,7 @@ struct CLILiveWiringTests {
     /// Without tokens: az's view (az is a stand-in that fails here), and ARM
     /// through a read-only transport.
     @Test func tenantsWithoutTokensAskAzAndNeverWrite() async throws {
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("pimento-tests-\(UUID().uuidString)", isDirectory: true)
+        let dir = TestTemp.url("az")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
         let az = dir.appendingPathComponent("az")

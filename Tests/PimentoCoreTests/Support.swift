@@ -94,11 +94,37 @@ func filteredRoleGUID(_ request: URLRequest) -> String? {
     return last.trimmingCharacters(in: CharacterSet(charactersIn: "' ")).lowercased()
 }
 
+/// Every temporary file and folder of a test run, in one folder
+/// (`pimento-tests-<UUID>` in the temporary directory) that is removed when
+/// the test process exits.
+enum TestTemp {
+    static let root: URL = {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("pimento-tests-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        atexit { TestTemp.removeRoot() }
+        return root
+    }()
+
+    static func removeRoot() {
+        // Tests may leave read-only folders behind (permission tests restore
+        // theirs, but a failed one might not).
+        if let paths = FileManager.default.enumerator(atPath: root.path) {
+            for case let path as String in paths {
+                _ = try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: root.appendingPathComponent(path).path)
+            }
+        }
+        try? FileManager.default.removeItem(at: root)
+    }
+
+    /// A fresh, not yet created path inside `root`.
+    static func url(_ prefix: String = "case", isDirectory: Bool = true) -> URL {
+        root.appendingPathComponent("\(prefix)-\(UUID().uuidString)", isDirectory: isDirectory)
+    }
+}
+
 /// A fresh path for a presets file in the temporary directory.
 func temporaryPresetsURL() -> URL {
-    FileManager.default.temporaryDirectory
-        .appendingPathComponent("pimento-tests-\(UUID().uuidString)", isDirectory: true)
-        .appendingPathComponent("presets.json")
+    TestTemp.url().appendingPathComponent("presets.json")
 }
 
 /// Unsigned JWT with the given claims (ARM verifies signatures; we only read claims).

@@ -98,7 +98,7 @@ struct AuthTests {
     #if !os(Windows)
     /// A stand-in `az`: a shell script with `body`.
     func fakeAz(_ body: String) throws -> String {
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("pimento-az-\(UUID().uuidString)", isDirectory: true)
+        let dir = TestTemp.url("az")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let az = dir.appendingPathComponent("az")
         try Data("#!/bin/sh\n\(body)\n".utf8).write(to: az)
@@ -120,7 +120,7 @@ struct AuthTests {
 
     /// az's Python child holding the output pipe open: the timeout ends it too.
     @Test func aTimeoutEndsWhatAzStarted() async throws {
-        let pidFile = FileManager.default.temporaryDirectory.appendingPathComponent("pimento-az-child-\(UUID().uuidString)")
+        let pidFile = TestTemp.url("az-child", isDirectory: false)
         defer { try? FileManager.default.removeItem(at: pidFile) }
         let stuck = try fakeAz("sh -c 'echo $$ > \"\(pidFile.path)\"; exec sleep 30' &\nsleep 30")
         let started = Date()
@@ -155,7 +155,7 @@ struct AuthTests {
     /// az.cmd going through cmd.exe, with a child (ping) holding the output
     /// pipe: the timeout ends the whole tree, not only cmd.exe.
     @Test func aTimeoutEndsWhatAzStarted() async throws {
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("pimento-az-\(UUID().uuidString)", isDirectory: true)
+        let dir = TestTemp.url("az")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
         let az = dir.appendingPathComponent("az.cmd")

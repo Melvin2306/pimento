@@ -781,7 +781,7 @@ final class TestBox<T>: @unchecked Sendable {
 @Suite("Sign-in: settings, stores and precedence")
 struct SignInStorageTests {
     func tempDir() -> URL {
-        FileManager.default.temporaryDirectory.appendingPathComponent("pimento-signin-\(UUID().uuidString)", isDirectory: true)
+        TestTemp.url("signin")
     }
 
 
