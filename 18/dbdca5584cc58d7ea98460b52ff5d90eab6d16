@@ -1,0 +1,23 @@
+CHANGELOG.md
+  s_4884204a812fec::t_abeab08887ee45 376-377
+Tests/PimentoCoreTests/OutcomeAndServiceTests.swift
+  s_4884204a812fec::t_7abeb50788d2c6 142-162
+Sources/PimentoCore/Auth.swift
+  s_4884204a812fec::t_7abeb50788d2c6 269-270
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "18dbdca5584cc58d7ea98460b52ff5d90eab6d16",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
