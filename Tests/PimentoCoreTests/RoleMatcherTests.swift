@@ -92,6 +92,14 @@ struct AzureDateTests {
         ("2026-10-29T18:42:17.9130000Z", 1_793_299_337.913),
         ("2026-10-29T12:00:00Z", 1_793_275_200.0),
         ("2026-10-29T14:00:00+02:00", 1_793_275_200.0),
+        ("2026-10-29T12:00:00.1Z", 1_793_275_200.1),
+        ("2026-10-29T12:00:00.12Z", 1_793_275_200.12),
+        ("2026-10-29T12:00:00.1234Z", 1_793_275_200.123),
+        ("2026-10-29T12:00:00.12345Z", 1_793_275_200.123),
+        ("2026-10-29T12:00:00.123456Z", 1_793_275_200.123),
+        ("2026-10-29T12:00:00.1234567Z", 1_793_275_200.123),
+        ("2026-10-29T07:00:00.5-05:00", 1_793_275_200.5),
+        ("2026-10-29T17:30:00+05:30", 1_793_275_200.0),
     ])
     func parsesARMDateShapes(input: String, epoch: Double) throws {
         let date = try #require(AzureDate.parse(input))
@@ -106,5 +114,25 @@ struct AzureDateTests {
 
     @Test func formatsUTCWithMilliseconds() {
         #expect(AzureDate.format(Date(timeIntervalSince1970: 1_793_275_200.25)) == "2026-10-29T12:00:00.250Z")
+        #expect(AzureDate.format(Date(timeIntervalSince1970: 1_793_275_200)) == "2026-10-29T12:00:00.000Z")
+    }
+
+    /// The shared formatters, used from many threads at once (as the
+    /// parallel requests do), give every caller its own answer.
+    @Test func parsesAndFormatsConcurrently() async {
+        let results = await withTaskGroup(of: Bool.self) { group in
+            for i in 0..<8 {
+                group.addTask {
+                    (0..<200).allSatisfy { j in
+                        let epoch = 1_793_275_200 + Double(i * 1000 + j)
+                        let text = AzureDate.format(Date(timeIntervalSince1970: epoch))
+                        return AzureDate.parse(text)?.timeIntervalSince1970 == epoch
+                            && AzureDate.parse(text.replacingOccurrences(of: ".000Z", with: "Z"))?.timeIntervalSince1970 == epoch
+                    }
+                }
+            }
+            return await group.reduce(into: [Bool]()) { $0.append($1) }
+        }
+        #expect(results.count == 8 && results.allSatisfy { $0 })
     }
 }

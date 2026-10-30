@@ -6,20 +6,37 @@ public enum AzureDate {
     public static func parse(_ string: String?) -> Date? {
         guard let string, !string.isEmpty else { return nil }
         let normalized = normalizeFraction(string)
-        let withFraction = ISO8601DateFormatter()
-        withFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = withFraction.date(from: normalized) { return date }
-        let plain = ISO8601DateFormatter()
-        plain.formatOptions = [.withInternetDateTime]
-        return plain.date(from: normalized)
+        return formatters.withLock { f in f.fraction.date(from: normalized) ?? f.plain.date(from: normalized) }
     }
 
     /// UTC, millisecond precision, `Z` suffix — the shape the portal sends.
     public static func format(_ date: Date) -> String {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        formatter.timeZone = TimeZone(identifier: "UTC")
-        return formatter.string(from: date)
+        formatters.withLock { $0.output.string(from: date) }
+    }
+
+    /// Made once (a formatter is expensive to create: rows, history and
+    /// approvals parse thousands of dates), used under a lock: formatters are
+    /// not documented as thread-safe in swift-corelibs-foundation.
+    private static let formatters = Formatters()
+
+    private final class Formatters: @unchecked Sendable {
+        private let lock = NSLock()
+        let fraction = ISO8601DateFormatter()
+        let plain = ISO8601DateFormatter()
+        let output = ISO8601DateFormatter()
+
+        init() {
+            fraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            plain.formatOptions = [.withInternetDateTime]
+            output.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            output.timeZone = TimeZone(identifier: "UTC")
+        }
+
+        func withLock<T>(_ body: (Formatters) -> T) -> T {
+            lock.lock()
+            defer { lock.unlock() }
+            return body(self)
+        }
     }
 
     /// Pads or truncates the fractional-seconds part to exactly 3 digits.
