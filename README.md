@@ -93,9 +93,12 @@ anything if a check fails. They change no shell startup file: when the folder is
 PATH, `install.sh` prints the line to add. You can read them first:
 [`install.sh`](scripts/install.sh), [`install.ps1`](scripts/install.ps1).
 
-- **A specific version:** `curl -fsSL …/install.sh | PIMENTO_VERSION=0.1.0 sh`
-  (`$env:PIMENTO_VERSION = "0.1.0"` before `irm … | iex` on Windows).
-- **Another folder:** `… | sh -s -- --dir /opt/pimento/bin` (`PIMENTO_INSTALL_DIR` on Windows).
+- **A specific version:**
+  `curl -fsSL https://raw.githubusercontent.com/Melvin2306/pimento/main/scripts/install.sh | PIMENTO_VERSION=0.1.0 sh`
+  (on Windows, `$env:PIMENTO_VERSION = "0.1.0"` before `irm … | iex`).
+- **Another folder:**
+  `curl -fsSL https://raw.githubusercontent.com/Melvin2306/pimento/main/scripts/install.sh | sh -s -- --dir ~/bin`
+  (on Windows, `$env:PIMENTO_INSTALL_DIR`). `sh -s -- --help` lists all options.
 - **Linux** needs glibc 2.35 or later (Ubuntu 22.04, Debian 12, RHEL 9) and libcurl; **Windows**
   10/11 (x86_64) needs the Microsoft Visual C++ Redistributable, which most systems have.
 
