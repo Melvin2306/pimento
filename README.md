@@ -400,6 +400,7 @@ Pimento activates the role again once it has ended, and then there **is** a gap 
 | End of the day | Never past the end of working hours: the last renewal is shortened to end by then, in whole hours (or the policy maximum when that is shorter, e.g. 90 minutes). When not even that fits (say 40 minutes are left), the role is left to end. |
 | Justification and ticket | The new activation carries the justification and ticket of the one it continues (read from your requests); a preset's justification is used when that is unknown. When the policy requires a ticket (or a justification) that is not known, the renewal is skipped and you get a notification. |
 | Approval | Roles whose policy requires approval are never renewed (the role would wait for an approver); neither are roles whose policy cannot be read. The context menu and the tooltip say so. |
+| Roles that grant access | With *Confirm before activating Owner roles* on (the default), marking an Owner, User Access Administrator or RBAC Administrator role as Keep Alive, directly or by turning on a preset's keep-alive, asks once, when it is marked. A role a preset picks up later without that confirmation is not renewed (*not confirmed*) until you mark it. `pimento keep-alive` asks at its prompt (only the roles listed there count), or takes `--yes` as consent, as `activate` does. |
 | Ended early | A role you end (*End Now*, the CLI, the portal) is not brought back, and a continuation Pimento had scheduled for it is withdrawn. Turning keep-alive off for a role, or pausing, withdraws continuations that have not started. |
 | Sleep, closed app | A role that lapsed while the Mac slept (or Pimento was not running) is activated again when Pimento looks next, if it is still inside working hours and the role ended inside them: on wake, after a clock or time-zone change, and at least every 30 minutes. Keep-alive never starts a role that was not active. |
 | Failures | Retried after 1, 5 and 15 minutes; after 4 failures for a role it waits for the next working hours. Each failure is a notification. |
@@ -407,8 +408,10 @@ Pimento activates the role again once it has ended, and then there **is** a gap 
 **Notifications** follow Settings › Notifications › *When activations finish*: *Renewed Contributor
 until 18:00* for each renewal (or only failures and skipped renewals with *Only when something
 fails*). Expiry reminders of a continued role are withdrawn; the last renewal of the day gets one.
-Continuations get no *Scheduled activation started* notification. Every request is recorded in the
-[history](#history) like any other (as a scheduled or immediate activation).
+Continuations get no *Scheduled activation started* notification. Every request keep-alive sends
+(continuations, re-activations, withdrawn continuations) is recorded in the [history](#history)
+with the source **Keep alive** (`keepAlive` in the file, the CSV export and `--json`), from the app
+and from `pimento keep-alive` alike.
 
 **From a terminal:** `pimento keep-alive` runs the same rules as a foreground loop (Linux, Windows, a
 server, or without the app), until Ctrl-C. See [The command line](#the-command-line).
@@ -489,7 +492,7 @@ activate, schedule, cancel, deactivate, renew, extend, approve and deny. Each en
 the tenant (ID and name when known), role, resource and scope, the outcome (*Succeeded*, *Pending*,
 *Skipped*, *Failed*, with Azure's status or error code and a short message), the duration asked for
 and the one requested after the policy cap, the start, the justification, the ticket, the request ID,
-where it came from (app or CLI) and the Pimento version. Never tokens, and never request or response
+where it came from (app, CLI, keep-alive or Azure) and the Pimento version. Never tokens, and never request or response
 bodies. A renewal is one entry however many attempts it took. Previews and dry runs are not recorded.
 
 **History…** (<kbd>⇧</kbd><kbd>⌘</kbd><kbd>H</kbd>, the toolbar or the View menu) shows it as a table, newest
@@ -530,8 +533,8 @@ The CSV export is [RFC 4180](https://www.rfc-editor.org/rfc/rfc4180): UTF-8, a h
 ends, every field quoted. Columns: `timestamp_utc` (ISO 8601),
 `local_time`, `action`, `result`, `status`, `message`, `tenant_id`, `tenant`, `role`, `resource`,
 `scope`, `requested_duration`, `duration_minutes`, `start_utc`, `end_utc`, `justification`,
-`ticket_number`, `ticket_system`, `request_id`, `requester` (approve/deny), `source`,
-`pimento_version`. Text that starts with `=`, `+`, `-`, `@`, a tab or a carriage return gets a `'` in
+`ticket_number`, `ticket_system`, `request_id`, `requester` (approve/deny), `source` (`app`, `cli`,
+`keepAlive`, `azure`), `pimento_version`. Text that starts with `=`, `+`, `-`, `@`, a tab or a carriage return gets a `'` in
 front, at the start of a field and after every `;` or tab inside it, so a spreadsheet does not run
 it as a formula, even one that splits cells on `;` (the list separator of many locales). The file is
 written with mode 600.

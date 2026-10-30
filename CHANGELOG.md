@@ -26,6 +26,11 @@ All notable changes to this project are documented here. The format follows
   servers (`--days`, `--window`, `--hours`, `-j`, `--preset`, `--dry-run`; asks once, or `--yes`).
   The scheduler lives in PimentoCore (`KeepAlive`, `KeepAliveSession`), shared by the app and the CLI.
 - Presets have an optional `keepAlive` field.
+- Keeping a role alive that can grant access (Owner, User Access Administrator, RBAC Administrator)
+  asks once when it is marked (per role or through a preset), while *Confirm before activating Owner
+  roles* is on; `pimento keep-alive` asks at its prompt or takes `--yes`, as `activate` does.
+- History: a new source, **Keep alive** (`keepAlive` in the file, CSV and JSON), for everything
+  keep-alive sends.
 
 ## [0.1.0] - 2026-10-30
 
