@@ -110,13 +110,19 @@ public enum CLIInstaller {
         "'" + s.replacingOccurrences(of: "'", with: #"'\''"#) + "'"
     }
 
+    /// Creates or replaces the link, as root after the password prompt. It
+    /// checks again right before `ln`: a real file or folder that appeared
+    /// at the path since `installAction` looked is never overwritten.
     public static func installCommand(source: String, linkPath: String) -> String {
         let dir = URL(fileURLWithPath: linkPath).deletingLastPathComponent().path
-        return "/bin/mkdir -p \(shellQuote(dir)) && /bin/ln -sfn \(shellQuote(source)) \(shellQuote(linkPath))"
+        let link = shellQuote(linkPath)
+        return "/bin/mkdir -p \(shellQuote(dir)) && { [ ! -e \(link) ] || [ -L \(link) ]; } && /bin/ln -sfn \(shellQuote(source)) \(link)"
     }
 
+    /// Removes the link only if it still is one.
     public static func uninstallCommand(linkPath: String) -> String {
-        "/bin/rm -f \(shellQuote(linkPath))"
+        let link = shellQuote(linkPath)
+        return "{ [ ! -L \(link) ] || /bin/rm -f \(link); }"
     }
 
     /// AppleScript that runs `command` as root after macOS's password prompt.

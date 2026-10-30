@@ -562,11 +562,47 @@ struct CLIInstallTests {
         #expect(CLIInstaller.shellQuote("it's") == #"'it'\''s'"#)
         let cmd = CLIInstaller.installCommand(source: "/Applications/My \"Apps\"/Pimento.app/Contents/Helpers/pimento",
                                               linkPath: "/usr/local/bin/pimento")
-        #expect(cmd == #"/bin/mkdir -p '/usr/local/bin' && /bin/ln -sfn '/Applications/My "Apps"/Pimento.app/Contents/Helpers/pimento' '/usr/local/bin/pimento'"#)
-        #expect(CLIInstaller.uninstallCommand(linkPath: "/usr/local/bin/pimento") == "/bin/rm -f '/usr/local/bin/pimento'")
+        #expect(cmd == #"/bin/mkdir -p '/usr/local/bin' && { [ ! -e '/usr/local/bin/pimento' ] || [ -L '/usr/local/bin/pimento' ]; } && /bin/ln -sfn '/Applications/My "Apps"/Pimento.app/Contents/Helpers/pimento' '/usr/local/bin/pimento'"#)
+        #expect(CLIInstaller.uninstallCommand(linkPath: "/usr/local/bin/pimento") == "{ [ ! -L '/usr/local/bin/pimento' ] || /bin/rm -f '/usr/local/bin/pimento'; }")
         let script = CLIInstaller.adminAppleScript(#"echo "a\b""#, prompt: "Pimento")
         #expect(script == #"do shell script "echo \"a\\b\"" with prompt "Pimento" with administrator privileges"#)
     }
+
+    #if !os(Windows)
+    /// Runs `command` with /bin/sh; its exit status.
+    func sh(_ command: String) throws -> Int32 {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/bin/sh")
+        p.arguments = ["-c", command]
+        try p.run()
+        p.waitUntilExit()
+        return p.terminationStatus
+    }
+
+    /// The commands run as root after the password prompt re-check the path:
+    /// a real file that appeared since the check is never replaced or removed.
+    @Test func installAndUninstallCommandsLeaveRealFilesAlone() throws {
+        let fm = FileManager.default
+        let dir = fm.temporaryDirectory.appendingPathComponent("pimento-install-\(UUID().uuidString)")
+        defer { try? fm.removeItem(at: dir) }
+        let link = dir.appendingPathComponent("bin/pimento").path
+        let source = dir.appendingPathComponent("Pimento.app/Contents/Helpers/pimento").path
+        // Missing: created.
+        #expect(try sh(CLIInstaller.installCommand(source: source, linkPath: link)) == 0)
+        #expect(try fm.destinationOfSymbolicLink(atPath: link) == source)
+        // A link: replaced.
+        let other = dir.appendingPathComponent("Old.app/Contents/Helpers/pimento").path
+        #expect(try sh(CLIInstaller.installCommand(source: other, linkPath: link)) == 0)
+        #expect(try fm.destinationOfSymbolicLink(atPath: link) == other)
+        #expect(try sh(CLIInstaller.uninstallCommand(linkPath: link)) == 0)
+        #expect(!fm.fileExists(atPath: link))
+        // A real file: neither replaced nor removed.
+        try Data("mine".utf8).write(to: URL(fileURLWithPath: link))
+        #expect(try sh(CLIInstaller.installCommand(source: source, linkPath: link)) != 0)
+        _ = try sh(CLIInstaller.uninstallCommand(linkPath: link))
+        #expect(try String(contentsOfFile: link, encoding: .utf8) == "mine")
+    }
+    #endif
 
     /// The symlink into Pimento.app is a macOS (app) feature; Windows symlinks need extra rights.
     @Test(.enabled(if: HostPlatform.current != .windows, "macOS app feature; symlinks need privileges on Windows"))
