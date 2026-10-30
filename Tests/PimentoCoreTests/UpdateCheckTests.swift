@@ -150,8 +150,10 @@ struct UpdateCheckRequestTests {
         // Windows normalises their case (X-Github-Api-Version).
         let headers = request.allHTTPHeaderFields ?? [:]
         #expect(request.value(forHTTPHeaderField: "User-Agent") == "Pimento/\(AppInfo.version)")
-        #expect(Set(headers.keys.map { $0.lowercased() }) == ["user-agent", "accept", "x-github-api-version"],
+        #expect(Set(headers.keys.map { $0.lowercased() }) == ["user-agent", "accept", "x-github-api-version", "accept-language"],
                 "no identifiers, tokens or cookies")
+        // Fixed, so Foundation does not send the user's preferred languages.
+        #expect(request.value(forHTTPHeaderField: "Accept-Language") == "en")
         #expect(result.update?.version == SemanticVersion(0, 2, 0))
     }
 

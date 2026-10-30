@@ -1222,8 +1222,8 @@ directly with the PIM APIs (`api-version=2020-10-01`):
   `pimento version --check` (only when you run it) send one HTTPS `GET` to
   `https://api.github.com/repos/Melvin2306/pimento/releases/latest`, with a 10-second timeout and a
   20-second limit for the whole check. The request carries no token, cookie, account, tenant, device
-  or installation ID: only `User-Agent: Pimento/<version>` (GitHub requires one) and the API's
-  `Accept` header. GitHub sees your IP address, as with any request. Redirects are refused, and a
+  or installation ID: only `User-Agent: Pimento/<version>` (GitHub requires one), the API's
+  `Accept` and version headers, and a fixed `Accept-Language: en` (not your system's languages). GitHub sees your IP address, as with any request. Redirects are refused, and a
   guard refuses any other URL or method. The answer is treated as untrusted: the tag must be a strict
   semantic version, drafts and pre-releases are ignored, answers over 1 MB are refused, and the links
   Pimento opens (release page, disk image) are built from that version and must lie under

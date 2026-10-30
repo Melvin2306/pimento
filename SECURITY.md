@@ -66,7 +66,8 @@ anything that requires an attacker to already control your user account or `az` 
 ## Design notes
 
 - The update check (README › Updates) is one `GET` of GitHub's latest release with only a
-  `User-Agent: Pimento/<version>` header, through a guard that refuses any other URL or method and
+  `User-Agent: Pimento/<version>` header (besides fixed `Accept`, API-version and
+  `Accept-Language` headers that are the same for everyone), through a guard that refuses any other URL or method and
   a transport that refuses redirects. The answer is untrusted: the tag must parse as a strict
   semantic version, and the links opened are built from it, never copied from the answer.
 

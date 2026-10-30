@@ -266,7 +266,8 @@ public enum UpdateCheck {
     }
 
     /// The GET the check sends: no cookies, no cache, no credentials; only
-    /// `User-Agent: Pimento/<version>` and the API's media type.
+    /// `User-Agent: Pimento/<version>`, the API's media type and version, and
+    /// a fixed `Accept-Language`.
     public static func request() -> URLRequest {
         var r = URLRequest(url: endpoint, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData, timeoutInterval: timeout)
         r.httpMethod = "GET"
@@ -274,6 +275,9 @@ public enum UpdateCheck {
         r.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         r.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         r.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
+        // Otherwise Foundation adds the user's preferred languages: the same
+        // value for everyone instead.
+        r.setValue("en", forHTTPHeaderField: "Accept-Language")
         return r
     }
 
