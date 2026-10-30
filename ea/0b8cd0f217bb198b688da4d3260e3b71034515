@@ -1,0 +1,24 @@
+Tests/PimentoCoreTests/CLIAuthTests.swift
+  s_4884204a812fec::t_dc5f0d5d9b3be4 188-190,197-215
+  s_4884204a812fec::t_97b870359a39d7 216-217
+Sources/PimentoCore/CLI/CLIAuth.swift
+  s_4884204a812fec::t_dc5f0d5d9b3be4 31-38
+CHANGELOG.md
+  s_4884204a812fec::t_f9eda556800758 515-517
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ea0b8cd0f217bb198b688da4d3260e3b71034515",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
