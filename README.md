@@ -74,7 +74,8 @@ curl -fsSL https://raw.githubusercontent.com/Melvin2306/pimento/main/scripts/ins
 ```
 
 ```powershell
-# Windows (PowerShell): installs to %LOCALAPPDATA%\Programs\Pimento and adds it to your user PATH
+# Windows (PowerShell): installs to %LOCALAPPDATA%\Programs\Pimento, adds it to your user PATH,
+# and sets up tab completion in your PowerShell profile
 irm https://raw.githubusercontent.com/Melvin2306/pimento/main/scripts/install.ps1 | iex
 ```
 
@@ -89,8 +90,11 @@ pimento list             # your eligible PIM roles
 The installers download the archive for your system from the latest release, check its SHA-256
 against the release's `SHA256SUMS.txt` (and its build attestation, when the
 [GitHub CLI](https://cli.github.com/) is installed and signed in), and stop without installing
-anything if a check fails. They change no shell startup file: when the folder is not on your
-PATH, `install.sh` prints the line to add. You can read them first:
+anything if a check fails. `install.sh` changes no shell startup file: when the folder is not on
+your PATH, it prints the line to add. `install.ps1` adds one marked block to your PowerShell profile
+(`$PROFILE.CurrentUserAllHosts` of the PowerShell you run it in) that loads the completions: it
+replaces that block on every install, keeps the rest of the profile as it was, and `-Uninstall`
+removes it again (`$env:PIMENTO_NO_COMPLETIONS = "1"` skips it). You can read them first:
 [`install.sh`](scripts/install.sh), [`install.ps1`](scripts/install.ps1).
 
 - **A specific version:**
@@ -113,7 +117,8 @@ $env:PIMENTO_UNINSTALL = "1"; irm https://raw.githubusercontent.com/Melvin2306/p
 ```
 
 Both leave Pimento's own files (presets, history, sign-in settings) in place; run
-`pimento logout --all` first to remove a Pimento sign-in.
+`pimento logout --all` first to remove a Pimento sign-in. On Windows, uninstalling also removes the
+completion block from your PowerShell profiles.
 
 ### Manual download
 
@@ -127,7 +132,7 @@ Every release has these files under stable names, so the links always point to t
 | [`pimento-cli-macos.tar.gz`](https://github.com/Melvin2306/pimento/releases/latest/download/pimento-cli-macos.tar.gz) | the CLI for macOS (universal), shell completions, LICENSE, README |
 | [`pimento-cli-linux-x86_64.tar.gz`](https://github.com/Melvin2306/pimento/releases/latest/download/pimento-cli-linux-x86_64.tar.gz) | the CLI for Linux x86_64 (Swift runtime linked in), shell completions |
 | [`pimento-cli-linux-aarch64.tar.gz`](https://github.com/Melvin2306/pimento/releases/latest/download/pimento-cli-linux-aarch64.tar.gz) | the same for Linux arm64 (aarch64) |
-| [`pimento-cli-windows-x86_64.zip`](https://github.com/Melvin2306/pimento/releases/latest/download/pimento-cli-windows-x86_64.zip) | `pimento.exe` with the Swift runtime DLLs |
+| [`pimento-cli-windows-x86_64.zip`](https://github.com/Melvin2306/pimento/releases/latest/download/pimento-cli-windows-x86_64.zip) | `pimento.exe` with the Swift runtime DLLs, PowerShell completions |
 | [`SHA256SUMS.txt`](https://github.com/Melvin2306/pimento/releases/latest/download/SHA256SUMS.txt) | SHA-256 of every file |
 
 By hand, for example on macOS (on Linux, use the Linux archive and skip `xattr`):
@@ -141,8 +146,8 @@ pimento version
 ```
 
 The `completions/` folder has scripts for zsh, bash and fish (see [Shell completions](#shell-completions)).
-On Windows, extract the zip and keep the DLLs next to `pimento.exe` in a folder on your PATH.
-`pimento login` signs in with a device code there (see [Linux and Windows](#linux-and-windows)).
+On Windows, extract the zip and keep the DLLs next to `pimento.exe` in a folder on your PATH; the
+zip's `completions\pimento.ps1` is the PowerShell completion (see [Linux and Windows](#linux-and-windows)).
 
 ### Verify a download
 
@@ -866,7 +871,7 @@ pimento history import-azure --since 30d     # add your requests from the portal
 | `pimento login [--device-code] [--client-id ID] [--tenant ID]` | Signs in without the Azure CLI (browser, or a code to enter on another device) and makes Pimento sign-in the auth source |
 | `pimento logout [--all]` | Forgets the signed-in account (or all); with none left, the Azure CLI is the auth source again |
 | `pimento whoami` | The auth source and where it was chosen, who its token is for, and Pimento sign-in's accounts (exit 3 when not signed in) |
-| `pimento completions zsh\|bash\|fish` | Prints a shell completion script |
+| `pimento completions zsh\|bash\|fish\|powershell` | Prints a shell completion script |
 | `pimento version`, `pimento help [COMMAND]` | Version; help for a command (also `COMMAND --help`) |
 
 `list`, `activate`, `deactivate`, `renew`, `extend`, `scheduled`, `cancel`, `pending`, `wait`, `approvals`, `approve`,
@@ -1053,6 +1058,16 @@ pimento completions bash > ~/.local/share/bash-completion/completions/pimento
 pimento completions fish > ~/.config/fish/completions/pimento.fish
 ```
 
+```powershell
+# PowerShell (Windows PowerShell 5.1 and PowerShell 7, on any system): add this line to $PROFILE.
+# On Windows, install.ps1 sets this up for you.
+pimento completions powershell | Out-String | Invoke-Expression
+```
+
+The PowerShell completion also offers the names of your presets (after `--preset`, and after
+`presets show` and `presets delete`): it reads them with `pimento presets list --json`, which
+works offline. cmd.exe has no programmable completion, so there is none for it.
+
 **Deprecated flags.** The flags of Pimento's first builds, `pimento --list`, `--dry-run` and
 `--tenants`, still work in 0.1.x (also on the app binary, which hands them to the bundled CLI).
 They print a note and go away in a later release. `--dry-run` keeps its old meaning: `--role` matches a substring, and
@@ -1067,10 +1082,10 @@ The CLI works the same on Linux and Windows, with these differences:
 | Files (presets, history, `auth.json`) | `~/Library/Application Support/Pimento` | `$XDG_CONFIG_HOME/pimento`, else `~/.config/pimento` | `%APPDATA%\Pimento` |
 | Refresh token (`pimento login`) | Keychain (`PIMENTO_TOKEN_STORE=file`: `~/.config/pimento/tokens.json`) | `tokens.json` in the folder above | `tokens.json` in the folder above |
 | File permissions | mode 600 (folder 700 for the token file) | mode 600 (folder 700) | none of its own: your profile's permissions |
-| Browser sign-in | yes (LaunchServices) | yes (`xdg-open` on a private redirect page in the temporary folder, removed afterwards; a sandboxed browser that cannot read it shows an error: open the URL the CLI prints, or use `--device-code`) | **no**: `pimento login` uses a device code |
+| Browser sign-in | yes (LaunchServices) | yes (`xdg-open` on a private redirect page in the temporary folder, removed afterwards; a sandboxed browser that cannot read it shows an error: open the URL the CLI prints, or use `--device-code`) | yes (the same redirect page in `%TEMP%`, opened with `ShellExecuteW`, so in the browser that opens `.html` files; the listener uses Winsock, with the port held exclusively) |
 | `az` | Homebrew paths, then `PATH` | `PATH` | `az.cmd` from `PATH` (the installer's Python is run directly, never through `cmd.exe` with your arguments) |
 | Colours | terminals | terminals | consoles with ANSI support (Windows Terminal, Windows 10+); `NO_COLOR` turns them off |
-| Completions | zsh, bash, fish | zsh, bash, fish | none |
+| Completions | zsh, bash, fish | zsh, bash, fish | PowerShell (5.1 and 7; `install.ps1` adds it to your profile); none for cmd.exe, which has no programmable completion |
 
 `PIMENTO_PRESETS`, `PIMENTO_HISTORY`, `PIMENTO_TOKEN_FILE` and the other variables work everywhere.
 The history lock on Windows is `LockFileEx` on `history.jsonl.lock`, so several `pimento` processes can
@@ -1155,8 +1170,9 @@ directly with the PIM APIs (`api-version=2020-10-01`):
   `management.azure.com`**. They are never written to disk, logged or displayed.
 - Pimento sign-in sends authorization codes, PKCE verifiers, device codes and refresh tokens **only
   to `login.microsoftonline.com`** (its token and device-code endpoints, over HTTPS; a guard refuses
-  any other host or method). The browser redirect is received on 127.0.0.1/::1 only, checked against
-  a random `state`, and the listener stops after one answer or 5 minutes. The **refresh token** is
+  any other host or method). The browser redirect is received on 127.0.0.1/::1 only (on Windows
+  with the port held exclusively, so no other program can bind it), checked against a random
+  `state`, and the listener stops after one answer or 5 minutes. The **refresh token** is
   kept in the macOS **Keychain** (or, on Linux or with `PIMENTO_TOKEN_STORE=file`, in
   `~/.config/pimento/tokens.json`, mode 600; on Windows in `%APPDATA%\Pimento\tokens.json`: less secure). `pimento logout` / *Sign Out* delete it.
   `auth.json` holds the auth source, client ID, chosen account and a pending claims challenge, no secrets.
@@ -1221,10 +1237,11 @@ See [SECURITY.md](SECURITY.md) for how to report a vulnerability.
 - Not notarized (yet), so macOS blocks the first launch of a downloaded build until you allow it
   (see [Download](#download)).
 - **The CLI on Linux and Windows** is built and tested in CI, but the app is macOS-only, and so are
-  notifications, reminders, the menu bar and the Keychain. On **Windows**: no browser sign-in yet
-  (`pimento login` uses a device code; the loopback listener would need Winsock), no POSIX file
-  modes (files rely on your profile's permissions), no shell completions for PowerShell or cmd, and
-  colours only in consoles that support ANSI escapes (Windows Terminal, Windows 10+ conhost).
+  notifications, reminders, the menu bar and the Keychain. On **Windows**: no POSIX file modes
+  (files rely on your profile's permissions), completions for PowerShell only (cmd.exe has no
+  programmable completion), browser sign-in opens the program registered for `.html` files (if
+  that is not a browser, use `--device-code`), and colours only in consoles
+  that support ANSI escapes (Windows Terminal, Windows 10+ conhost).
 
 ## FAQ and troubleshooting
 

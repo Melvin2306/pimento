@@ -299,7 +299,7 @@ function Install-Pimento {
             Unblock-File -LiteralPath (Join-Path $InstallDir $f.Name)
         }
         Set-Content -LiteralPath $listed -Value ($files | ForEach-Object { $_.Name }) -Encoding ASCII
-        # PowerShell completion, from the zip (releases before 0.2 have none).
+        # PowerShell completion, from the zip (older releases have none).
         $packaged = Join-Path $pkg 'completions\pimento.ps1'
         $hasCompletion = Test-Path -LiteralPath $packaged -PathType Leaf
         if ($hasCompletion) {
