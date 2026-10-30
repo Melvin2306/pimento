@@ -125,7 +125,8 @@ Every release has these files under stable names, so the links always point to t
 | [`Pimento.dmg`](https://github.com/Melvin2306/pimento/releases/latest/download/Pimento.dmg) | Pimento.app (universal) with the `pimento` CLI inside |
 | [`Pimento.zip`](https://github.com/Melvin2306/pimento/releases/latest/download/Pimento.zip) | the same app as a zip |
 | [`pimento-cli-macos.tar.gz`](https://github.com/Melvin2306/pimento/releases/latest/download/pimento-cli-macos.tar.gz) | the CLI for macOS (universal), shell completions, LICENSE, README |
-| [`pimento-cli-linux-x86_64.tar.gz`](https://github.com/Melvin2306/pimento/releases/latest/download/pimento-cli-linux-x86_64.tar.gz) | the CLI for Linux x86_64 (Swift runtime linked in), shell completions; `pimento-cli-linux-aarch64.tar.gz` when the release has it |
+| [`pimento-cli-linux-x86_64.tar.gz`](https://github.com/Melvin2306/pimento/releases/latest/download/pimento-cli-linux-x86_64.tar.gz) | the CLI for Linux x86_64 (Swift runtime linked in), shell completions |
+| [`pimento-cli-linux-aarch64.tar.gz`](https://github.com/Melvin2306/pimento/releases/latest/download/pimento-cli-linux-aarch64.tar.gz) | the same for Linux arm64 (aarch64) |
 | [`pimento-cli-windows-x86_64.zip`](https://github.com/Melvin2306/pimento/releases/latest/download/pimento-cli-windows-x86_64.zip) | `pimento.exe` with the Swift runtime DLLs |
 | [`SHA256SUMS.txt`](https://github.com/Melvin2306/pimento/releases/latest/download/SHA256SUMS.txt) | SHA-256 of every file |
 
