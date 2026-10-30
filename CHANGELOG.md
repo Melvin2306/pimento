@@ -508,6 +508,10 @@ All notable changes to this project are documented here. The format follows
 - Pimento sign-in never takes tokens from another account than the one chosen: when the saved
   account was signed out (by another Pimento process, say), requests fail with "Not signed in"
   instead of silently using the most recently signed-in account.
+- The app binary hands a 0.1.0-style call (`--list`, `--dry-run`, `--tenants`, `--version`, `--help`)
+  to the CLI with those flags first, so the CLI always reads it as that read-only mode: before, the
+  whole command line went through as it was, and `Pimento activate X --yes --list` reached the CLI
+  as an `activate`.
 
 ## [0.1.0] - 2026-10-29
 

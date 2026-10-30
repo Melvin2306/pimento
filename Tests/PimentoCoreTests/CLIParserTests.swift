@@ -179,6 +179,22 @@ struct CLILegacyTests {
         #expect(throws: CLIParseError.self) { try CLIParser.parse(["--list", "--dry-run"]) }
     }
 
+    /// A legacy call reaches the CLI as the legacy read-only mode, whatever
+    /// else is on the app's command line: never as a write command.
+    @Test func legacyCallsReachTheCLIAsTheReadOnlyMode() throws {
+        let forwarded = LaunchArguments.legacyCLIArguments(["activate", "Production", "--yes", "-j", "x", "--dry-run"])
+        #expect(forwarded == ["--dry-run", "activate", "Production", "--yes", "-j", "x"])
+        guard case .activate(let o) = try CLIParser.parse(forwarded).command else { Issue.record("not activate"); return }
+        #expect(o.dryRun)
+        #expect(LaunchArguments.legacyCLIArguments(["deactivate", "--all", "--yes", "--list"]).first == "--list")
+        if case .deactivate = try? CLIParser.parse(LaunchArguments.legacyCLIArguments(["deactivate", "--all", "--yes", "--list"])).command {
+            Issue.record("a legacy call became deactivate")
+        }
+        #expect(LaunchArguments.legacyCLIArguments(["--list", "-t", "contoso.example"]) == ["--list", "-t", "contoso.example"])
+        let source = (try? String(contentsOf: AppSourceTests.appSources.appendingPathComponent("main.swift"), encoding: .utf8)) ?? ""
+        #expect(source.contains("CommandLineTool.forwardLegacyCall(LaunchArguments.legacyCLIArguments(launchArguments))"))
+    }
+
     @Test func appLaunchArgumentsOnlyCarryTheTenant() {
         #expect(LaunchArguments.tenant(in: ["-NSDocumentRevisionsDebugMode", "YES", "--tenant", "contoso.onmicrosoft.com"])
             == "contoso.onmicrosoft.com")

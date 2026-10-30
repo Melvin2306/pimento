@@ -9,7 +9,7 @@ import SwiftUI
 // handed to it; anything else opens the app.
 let launchArguments = Array(CommandLine.arguments.dropFirst())
 if LaunchArguments.isLegacyCLICall(launchArguments) {
-    CommandLineTool.forwardLegacyCall(launchArguments)
+    CommandLineTool.forwardLegacyCall(LaunchArguments.legacyCLIArguments(launchArguments))
 }
 // Demo mode (`--demo`, PIMENTO_DEMO=1): set up before anything reads a setting.
 MainActor.assumeIsolated {
