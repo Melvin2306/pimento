@@ -17,6 +17,13 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT license"></a>
 </p>
 
+<p align="center">
+  <a href="#download"><strong>Download for Mac</strong></a> ·
+  <a href="#install-the-command-line-tool"><strong>Install the CLI</strong></a> ·
+  <a href="#screenshots">Screenshots</a> ·
+  <a href="#demo-mode">Demo mode</a>
+</p>
+
 ---
 
 If you work with [Privileged Identity Management](https://learn.microsoft.com/entra/id-governance/privileged-identity-management/pim-configure)
@@ -29,6 +36,139 @@ does the whole list in one go, as you, using the Azure CLI session you already h
   <img src="docs/screenshots/01-main-window.png" width="900" alt="Pimento main window: eligible Azure roles with membership, duration and status, eight roles selected for activation with one justification and ticket">
   <br><sub>Demo mode, synthetic data. More in <a href="#screenshots">Screenshots</a>.</sub>
 </p>
+
+## Download
+
+<p align="center">
+  <a href="https://github.com/Melvin2306/pimento/releases/latest/download/Pimento.dmg"><img src="https://img.shields.io/badge/Download-Pimento%20for%20Mac-c62828?style=for-the-badge&logo=apple&logoColor=white" alt="Download Pimento for Mac" height="44"></a>
+  <br>
+  <sub><a href="https://github.com/Melvin2306/pimento/releases/latest/download/Pimento.dmg">Pimento.dmg</a> · macOS 14 Sonoma or later · Apple silicon and Intel · free and open source (MIT)</sub>
+</p>
+
+1. **Open `Pimento.dmg`** and drag **Pimento** onto **Applications**.
+2. **Open Pimento** from Applications. The first time, macOS blocks it: Pimento is a free
+   open-source app that is not notarized by Apple (notarization needs a paid Apple developer
+   account), so macOS cannot check it for you. You can check the download yourself
+   ([Verify](#verify-a-download)). To allow it once:
+   - **macOS 15 Sequoia and later**: click **Done**, open **System Settings › Privacy & Security**,
+     scroll down to *"Pimento" was blocked…*, click **Open Anyway** and confirm.
+   - **macOS 14 Sonoma**: right-click (or Control-click) Pimento, choose **Open**, then **Open**.
+3. **Sign in.** Pimento uses your Azure CLI session: install the
+   [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli-macos) and run `az login`
+   in Terminal. No Azure CLI? Use [Pimento sign-in](#pimento-sign-in-without-the-azure-cli) instead.
+
+**Try it without Azure:** choose **Pimento › Demo Mode**. Every feature works against a simulated
+Azure with synthetic data, offline, without touching your own settings ([Demo mode](#demo-mode)).
+
+The app has the `pimento` command-line tool inside: **Pimento › Install Command Line Tool…** puts
+it on your PATH ([details](#the-cli-from-the-app)).
+
+## Install the command-line tool
+
+`pimento` runs on macOS, Linux and Windows. One command installs it for your user (no `sudo`, no
+administrator rights):
+
+```sh
+# macOS and Linux: installs to ~/.local/bin, plus completions for your shell
+curl -fsSL https://raw.githubusercontent.com/Melvin2306/pimento/main/scripts/install.sh | sh
+```
+
+```powershell
+# Windows (PowerShell): installs to %LOCALAPPDATA%\Programs\Pimento and adds it to your user PATH
+irm https://raw.githubusercontent.com/Melvin2306/pimento/main/scripts/install.ps1 | iex
+```
+
+Then:
+
+```sh
+pimento --demo list      # try it with synthetic data, no Azure needed
+az login                 # or: pimento login (Pimento sign-in)
+pimento list             # your eligible PIM roles
+```
+
+The installers download the archive for your system from the latest release, check its SHA-256
+against the release's `SHA256SUMS.txt` (and its build attestation, when the
+[GitHub CLI](https://cli.github.com/) is installed and signed in), and stop without installing
+anything if a check fails. They change no shell startup file: when the folder is not on your
+PATH, `install.sh` prints the line to add. You can read them first:
+[`install.sh`](scripts/install.sh), [`install.ps1`](scripts/install.ps1).
+
+- **A specific version:** `curl -fsSL …/install.sh | PIMENTO_VERSION=0.1.0 sh`
+  (`$env:PIMENTO_VERSION = "0.1.0"` before `irm … | iex` on Windows).
+- **Another folder:** `… | sh -s -- --dir /opt/pimento/bin` (`PIMENTO_INSTALL_DIR` on Windows).
+- **Linux** needs glibc 2.35 or later (Ubuntu 22.04, Debian 12, RHEL 9) and libcurl; **Windows**
+  10/11 (x86_64) needs the Microsoft Visual C++ Redistributable, which most systems have.
+
+**Uninstall:**
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Melvin2306/pimento/main/scripts/install.sh | sh -s -- --uninstall
+```
+
+```powershell
+$env:PIMENTO_UNINSTALL = "1"; irm https://raw.githubusercontent.com/Melvin2306/pimento/main/scripts/install.ps1 | iex; $env:PIMENTO_UNINSTALL = $null
+```
+
+Both leave Pimento's own files (presets, history, sign-in settings) in place; run
+`pimento logout --all` first to remove a Pimento sign-in.
+
+### Manual download
+
+Every release has these files under stable names, so the links always point to the latest version
+(and the same files with the version in their name, e.g. `Pimento-0.1.0.dmg`):
+
+| Download | Contains |
+| --- | --- |
+| [`Pimento.dmg`](https://github.com/Melvin2306/pimento/releases/latest/download/Pimento.dmg) | Pimento.app (universal) with the `pimento` CLI inside |
+| [`Pimento.zip`](https://github.com/Melvin2306/pimento/releases/latest/download/Pimento.zip) | the same app as a zip |
+| [`pimento-cli-macos.tar.gz`](https://github.com/Melvin2306/pimento/releases/latest/download/pimento-cli-macos.tar.gz) | the CLI for macOS (universal), shell completions, LICENSE, README |
+| [`pimento-cli-linux-x86_64.tar.gz`](https://github.com/Melvin2306/pimento/releases/latest/download/pimento-cli-linux-x86_64.tar.gz) | the CLI for Linux x86_64 (Swift runtime linked in), shell completions; `pimento-cli-linux-aarch64.tar.gz` when the release has it |
+| [`pimento-cli-windows-x86_64.zip`](https://github.com/Melvin2306/pimento/releases/latest/download/pimento-cli-windows-x86_64.zip) | `pimento.exe` with the Swift runtime DLLs |
+| [`SHA256SUMS.txt`](https://github.com/Melvin2306/pimento/releases/latest/download/SHA256SUMS.txt) | SHA-256 of every file |
+
+By hand, for example on macOS (on Linux, use the Linux archive and skip `xattr`):
+
+```sh
+tar -xzf pimento-cli-macos.tar.gz
+cd pimento-cli-*-macos
+xattr -d com.apple.quarantine pimento 2>/dev/null || true   # downloaded with a browser: not notarized
+mkdir -p ~/.local/bin && mv pimento ~/.local/bin/
+pimento version
+```
+
+The `completions/` folder has scripts for zsh, bash and fish (see [Shell completions](#shell-completions)).
+On Windows, extract the zip and keep the DLLs next to `pimento.exe` in a folder on your PATH.
+`pimento login` signs in with a device code there (see [Linux and Windows](#linux-and-windows)).
+
+### Verify a download
+
+```sh
+shasum -a 256 -c SHA256SUMS.txt --ignore-missing                    # macOS
+sha256sum -c SHA256SUMS.txt --ignore-missing                        # Linux
+gh attestation verify Pimento.dmg --repo Melvin2306/pimento         # any file: built by this repository's release workflow
+```
+
+On Windows, compare `(Get-FileHash pimento-cli-windows-x86_64.zip).Hash` with `SHA256SUMS.txt`.
+The attestation proves the file was built from this repository by its
+[release workflow](.github/workflows/release.yml) on GitHub's runners.
+
+### The CLI from the app
+
+**Pimento › Install Command Line Tool…** links `Pimento.app/Contents/Helpers/pimento` into
+
+- `/usr/local/bin` (on every PATH; asks for an administrator password), or
+- `~/.local/bin` (no password; that folder must be on your PATH),
+
+and tells you what it did. A link that is already there is followed to the file it really runs
+before Pimento calls it installed or replaces it, and a link another user owns is left alone.
+For `/usr/local/bin`, which every user runs, Pimento.app must sit where only you or root can
+change it (not in a shared or group-writable folder); the password prompt names the link and
+its target. **Pimento › Uninstall Command Line Tool…** removes the link again
+(only your or root's links that point to a Pimento.app). The link points into the app: after moving the app,
+install again. By hand: `ln -s /Applications/Pimento.app/Contents/Helpers/pimento ~/.local/bin/pimento`.
+Use either this link or `install.sh`, not both: `install.sh` leaves a link in its way alone.
+
+**Homebrew** is planned, not available yet.
 
 ## Features
 
@@ -149,111 +289,6 @@ affiliated with or endorsed by Microsoft.
   **or** an app registration for [Pimento sign-in](#pimento-sign-in-without-the-azure-cli) (no Azure CLI needed)
 - To build: Swift 6.0 or later (Xcode 16+, or just the Command Line Tools: `xcode-select --install`;
   on Linux and Windows the [swift.org toolchain](https://www.swift.org/install/), CLI only)
-
-## Install
-
-Pick one download from the [releases page](https://github.com/melvin2306/pimento/releases):
-
-| Download | Contains | Good for |
-| --- | --- | --- |
-| `Pimento-<version>.zip` | Pimento.app, **with** the `pimento` command-line tool inside | the Mac app; turn on the CLI from its menu |
-| `pimento-cli-<version>-macos.tar.gz` | only the `pimento` command-line tool (universal: Apple silicon and Intel), shell completions, LICENSE | terminals, scripts, no app wanted |
-| `pimento-cli-<version>-linux-x86_64.tar.gz` | the command-line tool for Linux (Swift runtime linked in), shell completions | Linux; `-linux-aarch64` too once the repository is public |
-| `pimento-cli-<version>-windows-x86_64.zip` | `pimento.exe` with the Swift runtime DLLs | Windows 10/11 |
-
-Each release also has `SHA256SUMS.txt` (`shasum -a 256 -c SHA256SUMS.txt --ignore-missing` on
-macOS, `sha256sum -c SHA256SUMS.txt --ignore-missing` on Linux, `Get-FileHash` on Windows), and each
-download a build provenance attestation from the release workflow (`gh attestation verify FILE
---repo melvin2306/pimento`).
-Neither macOS download is notarized yet, so macOS asks before the first launch (see below).
-
-### Option 1: the app, with the CLI
-
-1. Unzip `Pimento-<version>.zip` and move **Pimento.app** to Applications. On first launch,
-   right-click the app and choose **Open**, or run `xattr -dr com.apple.quarantine Pimento.app`.
-2. For the CLI, choose **Pimento › Install Command Line Tool…**. It links
-   `Pimento.app/Contents/Helpers/pimento` into
-   - `/usr/local/bin` (on every PATH; asks for an administrator password), or
-   - `~/.local/bin` (no password; that folder must be on your PATH),
-
-   and tells you what it did. A link that is already there is followed to the file it really runs
-   before Pimento calls it installed or replaces it, and a link another user owns is left alone.
-   For `/usr/local/bin`, which every user runs, Pimento.app must sit where only you or root can
-   change it (not in a shared or group-writable folder); the password prompt names the link and
-   its target. **Pimento › Uninstall Command Line Tool…** removes the link again
-   (only your or root's links that point to a Pimento.app). The link points into the app: after moving the app,
-   install again. By hand: `ln -s /Applications/Pimento.app/Contents/Helpers/pimento ~/.local/bin/pimento`.
-
-### Option 2: only the CLI
-
-```sh
-tar -xzf pimento-cli-<version>-macos.tar.gz
-cd pimento-cli-<version>-macos
-xattr -d com.apple.quarantine pimento 2>/dev/null || true   # not notarized
-mkdir -p ~/.local/bin && mv pimento ~/.local/bin/            # or: sudo mv pimento /usr/local/bin/
-pimento version
-```
-
-The `completions/` folder has scripts for zsh, bash and fish (see [Shell completions](#shell-completions)).
-
-### Option 3: the CLI on Linux
-
-```sh
-tar -xzf pimento-cli-<version>-linux-x86_64.tar.gz
-mkdir -p ~/.local/bin && mv pimento-cli-<version>-linux-x86_64/pimento ~/.local/bin/
-pimento version
-```
-
-It needs libcurl (`sudo apt install libcurl4` on a minimal Debian or Ubuntu; most systems have it).
-Completions are in `completions/`, as on macOS.
-
-### Option 4: the CLI on Windows
-
-In PowerShell:
-
-```powershell
-Expand-Archive pimento-cli-<version>-windows-x86_64.zip -DestinationPath $env:LOCALAPPDATA\Programs
-# then add $env:LOCALAPPDATA\Programs\pimento-cli-<version>-windows-x86_64 to your PATH, and:
-pimento version
-```
-
-Keep the DLLs next to `pimento.exe` (they are the Swift runtime). It needs the Microsoft Visual C++
-Redistributable, which most Windows systems have. `pimento login` signs in with a device code on
-Windows (see [Linux and Windows](#linux-and-windows)).
-
-### From source
-
-```sh
-git clone https://github.com/melvin2306/pimento.git
-cd pimento
-scripts/bundle.sh --install      # Pimento.app (CLI inside) in ~/Applications
-scripts/package-cli.sh           # or only the CLI: build/pimento-cli-<version>-macos.tar.gz
-```
-
-On Linux (Swift 6 toolchain) and Windows (Swift 6 toolchain, Git Bash for the script) only the CLI
-builds: `swift build --product pimento`, `swift test`, and `scripts/package-cli.sh` packs
-`build/pimento-cli-<version>-linux-<arch>.tar.gz` or `build/pimento-cli-<version>-windows-x86_64.zip`.
-
-Homebrew is not available yet. A formula (CLI, macOS and Linux) and a cask (app) are ready in
-[`packaging/homebrew/`](packaging/homebrew/), with `scripts/update-homebrew.sh` to fill in a
-release; they will be published in a tap once the repository is public.
-
-## Build and run
-
-```sh
-swift build                    # debug build of the app, the CLI and the core
-swift test                     # unit tests (synthetic fixtures; never touches Azure)
-swift run PimentoApp           # launch the app straight from the build
-swift run pimento list         # run the CLI straight from the build
-
-scripts/bundle.sh              # release build -> build/Pimento.app (ad-hoc signed, CLI inside)
-scripts/bundle.sh --zip        # ...plus build/Pimento-<version>.zip
-scripts/package-cli.sh         # universal CLI -> build/pimento-cli-<version>-macos.tar.gz
-open build/Pimento.app
-```
-
-On Linux and Windows the package has only the CLI: `swift build` and `swift test` build and test
-`pimento` and the core (macOS-only tests are skipped there).
 
 ## Usage
 
@@ -1014,9 +1049,9 @@ pimento completions bash > ~/.local/share/bash-completion/completions/pimento
 pimento completions fish > ~/.config/fish/completions/pimento.fish
 ```
 
-**Deprecated flags.** 0.1.0's `pimento --list`, `--dry-run` and `--tenants` still work in this
-release (also on the app binary, which hands them to the bundled CLI). They print a note and go
-away in the next release. `--dry-run` keeps its old meaning: `--role` matches a substring, and
+**Deprecated flags.** The flags of Pimento's first builds, `pimento --list`, `--dry-run` and
+`--tenants`, still work in 0.1.x (also on the app binary, which hands them to the bundled CLI).
+They print a note and go away in a later release. `--dry-run` keeps its old meaning: `--role` matches a substring, and
 without filters it plans every eligible role.
 
 #### Linux and Windows
@@ -1179,7 +1214,8 @@ See [SECURITY.md](SECURITY.md) for how to report a vulnerability.
   endpoint, not yet against a live tenant (no shared client ID exists; you register your own). The
   Keychain items are tied to the ad-hoc signed binary: after an update, or when the CLI reads what
   the app saved, macOS asks for your password once. Sovereign clouds are not supported.
-- Not notarized (yet), so Gatekeeper asks before the first launch of a downloaded build.
+- Not notarized (yet), so macOS blocks the first launch of a downloaded build until you allow it
+  (see [Download](#download)).
 - **The CLI on Linux and Windows** is built and tested in CI, but the app is macOS-only, and so are
   notifications, reminders, the menu bar and the Keychain. On **Windows**: no browser sign-in yet
   (`pimento login` uses a device code; the loopback listener would need Winsock), no POSIX file
@@ -1240,6 +1276,36 @@ in `~/Applications`.
 
 **Does it work with sovereign clouds?** Not yet: the ARM endpoint is `management.azure.com`.
 
+## Build from source
+
+Swift 6.0 or later: Xcode 16+, or just the Command Line Tools (`xcode-select --install`). On Linux
+and Windows, the [swift.org toolchain](https://www.swift.org/install/) (only the CLI builds there).
+
+```sh
+git clone https://github.com/Melvin2306/pimento.git
+cd pimento
+
+swift build                    # debug build of the app, the CLI and the core
+swift test                     # unit tests (synthetic fixtures; never touches Azure)
+swift run PimentoApp           # launch the app straight from the build
+swift run pimento list         # run the CLI straight from the build
+
+scripts/bundle.sh              # release build -> build/Pimento.app (universal, ad-hoc signed, CLI inside)
+scripts/bundle.sh --install    # ...and move it to ~/Applications
+scripts/bundle.sh --zip        # ...plus build/Pimento-<version>.zip (--host-arch: this Mac's architecture only)
+scripts/make-dmg.sh            # build/Pimento.app -> build/Pimento-<version>.dmg
+scripts/package-cli.sh         # universal CLI -> build/pimento-cli-<version>-macos.tar.gz
+scripts/test-install.sh        # tests install.sh against that archive (temporary HOME)
+```
+
+On Linux (Swift 6 toolchain) and Windows (Swift 6 toolchain, Git Bash for the script) only the CLI
+builds: `swift build --product pimento`, `swift test` (macOS-only tests are skipped there), and
+`scripts/package-cli.sh` packs `build/pimento-cli-<version>-linux-<arch>.tar.gz` or
+`build/pimento-cli-<version>-windows-x86_64.zip`.
+
+A Homebrew formula (CLI) and cask (app) are prepared in [`packaging/homebrew/`](packaging/homebrew/)
+for a later tap.
+
 ## Project layout
 
 ```
@@ -1253,8 +1319,12 @@ Sources/pimento/         the `pimento` executable (Foundation only: terminal + n
 Sources/PimentoApp/      SwiftUI app (product PimentoApp, Pimento.app/Contents/MacOS/Pimento)
 Tests/PimentoCoreTests/  Swift Testing tests with synthetic JSON fixtures and a fake transport
 Assets/                  app icon and menu bar glyph (generated by scripts/make-icon.swift)
-scripts/bundle.sh        builds, signs (ad hoc) and optionally zips Pimento.app, CLI inside
+scripts/bundle.sh        builds, signs (ad hoc) and optionally zips Pimento.app (universal), CLI inside
+scripts/make-dmg.sh      packs Pimento.app into Pimento-<version>.dmg with an Applications link
 scripts/package-cli.sh   builds the CLI and packs it: universal macOS tar.gz, Linux tar.gz, Windows zip
+scripts/install.sh       installs the CLI from a release on macOS and Linux (checks SHA-256)
+scripts/install.ps1      installs the CLI from a release on Windows (checks SHA-256)
+scripts/test-install.*   test the installers against locally built archives (used by CI)
 scripts/update-homebrew.sh fills the Homebrew templates with a release's sums (build/homebrew/)
 scripts/make-icon.swift  draws the icon with CoreGraphics and runs iconutil
 packaging/homebrew/      unpublished Homebrew formula (CLI) and cask (app), and how to publish them

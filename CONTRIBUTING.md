@@ -22,7 +22,10 @@ Requirements: macOS 14+, Swift 6.0+ (Xcode 16+ or the Command Line Tools), Azure
 swift build
 swift test
 swift run pimento list        # read-only, against your own tenant
-scripts/bundle.sh             # build/Pimento.app
+scripts/bundle.sh             # build/Pimento.app (universal; --host-arch is faster)
+scripts/make-dmg.sh           # build/Pimento-<version>.dmg from it
+scripts/package-cli.sh        # the CLI archive for this platform
+scripts/test-install.sh       # tests scripts/install.sh against that archive (temporary HOME)
 ```
 
 Guidelines:
@@ -45,14 +48,21 @@ Guidelines:
 - One topic per pull request; add a line to `CHANGELOG.md` under *Unreleased*.
 - Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/)
   (`feat: ...`, `fix: ...`, `docs: ...`).
-- CI (`swift build`, `swift test`, bundling) must pass.
+- CI (`swift build`, `swift test`, bundling, the disk image, the installers, ShellCheck) must pass.
+  `scripts/install.sh` stays POSIX `sh` (it runs as `curl … | sh`) and `scripts/install.ps1` ASCII
+  and Windows PowerShell 5.1 compatible.
 
 ## Releasing
 
-1. Bump `AppInfo.version` in `Sources/PimentoCore/AppInfo.swift` and move the *Unreleased*
-   changelog entries under the new version.
-2. Tag `vX.Y.Z` and push the tag. The release workflow tests and builds `Pimento-X.Y.Z.zip` (ad-hoc
-   signed, not notarized), the CLI archives for macOS, Linux and Windows and `SHA256SUMS.txt`, and
-   attaches them to a GitHub release.
+1. Bump `AppInfo.version` in `Sources/PimentoCore/AppInfo.swift`, move the *Unreleased*
+   changelog entries under the new version, and optionally write the release notes in
+   `.github/release-notes/vX.Y.Z.md` (without one, the workflow writes a download section and
+   adds GitHub's generated notes).
+2. Tag `vX.Y.Z` on `main` and push the tag. The release workflow tests and builds
+   `Pimento-X.Y.Z.dmg` and `Pimento-X.Y.Z.zip` (universal, ad-hoc signed, not notarized) and the
+   CLI archives for macOS, Linux and Windows, adds copies under stable names (`Pimento.dmg`,
+   `pimento-cli-macos.tar.gz`, …, for `releases/latest/download/` links and the install scripts),
+   writes `SHA256SUMS.txt`, attests every file and publishes the release (a tag with `-`, such as
+   `v1.2.0-rc.1`, as a pre-release, which `latest` skips).
 3. Optionally run `scripts/update-homebrew.sh X.Y.Z --release` and copy the files it writes to
    `build/homebrew/` into the tap (see `packaging/homebrew/README.md`).

@@ -6,8 +6,9 @@ reports are taken seriously.
 ## Reporting a vulnerability
 
 Please **do not open a public issue**. Report it privately through GitHub's
-[private vulnerability reporting](https://github.com/melvin2306/pimento/security/advisories/new)
-(*Security* tab, *Report a vulnerability*).
+[private vulnerability reporting](https://github.com/Melvin2306/pimento/security/advisories/new)
+(*Security* tab, *Report a vulnerability*). Only the maintainer sees the report. If that button
+is ever missing, open an issue that asks for a private contact, without any details.
 
 Include what you found, how to reproduce it, and the impact you see. You should get a first
 answer within a week. Once a fix is released, the advisory is published with credit to you,
@@ -15,7 +16,14 @@ unless you prefer otherwise.
 
 ## Supported versions
 
-Only the latest release receives security fixes.
+| Version | Security fixes |
+| --- | --- |
+| 0.1.x (the latest release) | yes |
+| builds from before 0.1.0, and unreleased `main` | no |
+
+Fixes ship as a new patch release of the latest version (0.1.x for now) and are listed under
+*Security* in the [changelog](CHANGELOG.md). Please check that the problem still exists in the
+[latest release](https://github.com/Melvin2306/pimento/releases/latest) before reporting.
 
 ## Scope
 
@@ -43,7 +51,10 @@ In scope, for example:
 - argument injection into the `az` process, or Pimento starting an `az` (or `xdg-open`) that
   someone else could have placed or changed, such as one in the current directory;
 - the command line tool link pointing somewhere other users can change, or Pimento replacing or
-  removing another user's link.
+  removing another user's link;
+- `scripts/install.sh` or `scripts/install.ps1` installing a file whose SHA-256 does not match the
+  release's `SHA256SUMS.txt` (or whose attestation failed), or changing files outside the install
+  folder, the shell completion folders and (on Windows) the user `Path`.
 
 Out of scope: the security of Azure, Microsoft Entra ID or the Azure CLI themselves, and
 anything that requires an attacker to already control your user account or `az` session.
@@ -116,7 +127,9 @@ anything that requires an attacker to already control your user account or `az` 
   check out without keeping credentials, pin actions to commit SHAs and the Linux container to a
   digest. Only version tags on `main` are released, the Windows package holds exactly the reviewed
   runtime DLLs, and the Homebrew update checks each archive's attestation before using its sum.
-  Release downloads carry GitHub build provenance attestations. Known gaps: the Windows Swift
+  Release downloads carry GitHub build provenance attestations, and the install scripts check
+  each download's SHA-256 (and, with a signed-in GitHub CLI, its attestation) before installing
+  anything, without `sudo` or administrator rights. Known gaps: the Windows Swift
   toolchain is downloaded by its setup action at build time (pinned by version, not by checksum). The Mac app and CLI are
   ad-hoc signed and not notarized (no Developer ID): that is a known gap, outside this policy's
   fixes until a signing identity exists.
