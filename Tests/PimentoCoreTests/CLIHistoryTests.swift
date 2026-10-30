@@ -117,7 +117,10 @@ struct CLIHistoryParserTests {
         }
         for shell in CompletionShell.allCases {
             let script = CLIHelp.completionScript(for: shell)
-            #expect(script.contains("history") && script.contains("import-azure") && script.contains("--outcome") || script.contains("outcome"))
+            // Each word on its own: `a && b || c` passed as soon as "outcome" appeared.
+            for word in ["history", "import-azure", "export", "outcome"] {
+                #expect(script.contains(word), "\(shell) completion: \(word)")
+            }
         }
     }
 }
