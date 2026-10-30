@@ -238,10 +238,16 @@ private struct MenuBarHeader: View {
                     Text(AppInfo.name).font(.headline).foregroundStyle(colors.headerText)
                     DemoBadge(compact: true)
                 }
-                Text(subtitle)
-                    .font(.caption)
-                    .foregroundStyle(colors.headerText.opacity(0.8))
-                    .lineLimit(2)
+                HStack(alignment: .top, spacing: 4) {
+                    if model.tenantError == nil, let current = model.currentTenantInfo {
+                        TenantBadge(model: model, tenant: current, size: 12)
+                            .padding(.top, 1)
+                    }
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(colors.headerText.opacity(0.8))
+                        .lineLimit(2)
+                }
             }
             Spacer(minLength: 4)
             if model.loadState == .loading || model.isActivating {

@@ -193,6 +193,8 @@ final class AppModel {
     var hoveredTenantId: String?
     var showTenantSheet = false
     var tenantDraft = ""
+    /// Fetched tenant logos (Settings › General › Fetch tenant logos, off by default).
+    let tenantLogos = TenantLogoStore()
 
     // Account (Settings › Account): where tokens come from, and Pimento's own sign-in.
     /// `auth.json`, shared with the CLI.
@@ -368,6 +370,7 @@ final class AppModel {
         // Old records go once per launch (the CLI and later writes prune too).
         let store = historyStore, retention = historySettings.retention
         Task.detached(priority: .utility) { _ = try? store.prune(retention: retention) }
+        tenantLogos.setEnabled(prefs.fetchTenantLogos)
     }
 
     // MARK: Derived state
@@ -399,6 +402,22 @@ final class AppModel {
 
     func knownTenant(_ id: String) -> TenantInfo? {
         knownTenants.first { $0.id.caseInsensitiveCompare(id) == .orderedSame }
+    }
+
+    /// The tenant in use, for its badge: from the list, or (not listed yet)
+    /// just its ID or the domain it was chosen by. nil for az's default
+    /// tenant before the first load says which one that is.
+    var currentTenantInfo: TenantInfo? {
+        guard let id = effectiveTenantId else { return nil }
+        if let known = knownTenant(id) { return known }
+        return UUID(uuidString: id) != nil ? TenantInfo(id: id.lowercased()) : TenantInfo(id: id.lowercased(), defaultDomain: id)
+    }
+
+    /// Settings › General › Refresh Logos: the current tenant and the ones the
+    /// picker lists (not the hidden ones), ignoring the cache.
+    func refreshTenantLogos() {
+        let listed = TenantDirectory.visible(knownTenants, hidden: hiddenTenantIds, showHidden: false, current: effectiveTenantId)
+        tenantLogos.refresh((currentTenantInfo.map { [$0] } ?? []) + listed)
     }
 
     /// The picker's rows for the current search and hidden setting.
@@ -1869,6 +1888,7 @@ final class AppModel {
         }
         guard prefs != old else { return }
         prefs.save(to: AppRuntime.defaults)
+        tenantLogos.setEnabled(prefs.fetchTenantLogos)
         updateAppearance()
         if AppPresence.activationPolicy(prefs) != AppPresence.activationPolicy(old) { DockIcon.apply(prefs, reactivate: true) }
         if prefs.defaultHours != old.defaultHours, !isActivating { duration = .hours(prefs.defaultHours) }
