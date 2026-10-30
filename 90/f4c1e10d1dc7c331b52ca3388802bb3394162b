@@ -1,0 +1,41 @@
+Sources/PimentoApp/AppModel+KeepAlive.swift
+  s_4884204a812fec::t_1c8754e1db0f7d 57-58,64-93,117-123,261,265-266,308-324
+Sources/PimentoApp/AppModel.swift
+  s_4884204a812fec::t_f7d0642a1054d0 251-254,283-284,388-389,1695-1708
+Sources/PimentoApp/ContentView.swift
+  s_4884204a812fec::t_9c7e61c29bc503 57-64
+Sources/PimentoApp/HistoryViews.swift
+  s_4884204a812fec::t_a830eb9d0c8048 304
+Sources/PimentoApp/PresetViews.swift
+  s_4884204a812fec::t_e32de66356d80a 234-241
+Sources/PimentoCore/CLI/CLIHelp.swift
+  s_4884204a812fec::t_dba43ea3f0b6d2 407-410
+Sources/PimentoCore/CLI/CLIKeepAlive.swift
+  s_4884204a812fec::t_8641993d0753db 47-50,53-54,73,84-85,87-88,98,103-105
+Sources/PimentoCore/EligibleRole.swift
+  s_4884204a812fec::t_090ee6a0bc5c8d 78-81
+Sources/PimentoCore/History.swift
+  s_4884204a812fec::t_810aad9a9108fa 117-119,126
+Sources/PimentoCore/HistoryStore.swift
+  s_4884204a812fec::t_23f1a756ca402a 301-308
+Sources/PimentoCore/KeepAlive.swift
+  s_4884204a812fec::t_aa7b33f794c21f 180-215,324,614,638-640
+Sources/PimentoCore/KeepAliveSession.swift
+  s_4884204a812fec::t_e99d2ffbfdfb9a 50-51,54-55,72,81,163
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "90f4c1e10d1dc7c331b52ca3388802bb3394162b",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
