@@ -1,0 +1,19 @@
+# The Swift runtime DLLs that ship next to pimento.exe (scripts/package-cli.sh).
+# Packaging fails when the set differs: a new or missing DLL is reviewed here
+# first. One file name per line; lines starting with # are ignored.
+BlocksRuntime.dll
+Foundation.dll
+FoundationEssentials.dll
+FoundationInternationalization.dll
+FoundationNetworking.dll
+_FoundationICU.dll
+dispatch.dll
+swiftCRT.dll
+swiftCore.dll
+swiftDispatch.dll
+swiftObservation.dll
+swiftSynchronization.dll
+swiftWinSDK.dll
+swift_Concurrency.dll
+swift_RegexParser.dll
+swift_StringProcessing.dll

@@ -10,7 +10,8 @@
 #
 #   scripts/update-homebrew.sh 0.2.0                  # sums of the archives in build/
 #   scripts/update-homebrew.sh 0.2.0 --from DIR       # ...in DIR (archives or SHA256SUMS.txt)
-#   scripts/update-homebrew.sh 0.2.0 --release        # SHA256SUMS.txt of the GitHub release v0.2.0 (gh)
+#   scripts/update-homebrew.sh 0.2.0 --release        # the archives of the GitHub release v0.2.0 (gh), each
+#                                                      # checked with `gh attestation verify`, then summed
 #
 # Needs: Pimento-<v>.zip, pimento-cli-<v>-macos.tar.gz and
 # pimento-cli-<v>-linux-x86_64.tar.gz; pimento-cli-<v>-linux-aarch64.tar.gz is
@@ -19,7 +20,7 @@ set -euo pipefail
 
 SCRIPT="$0"
 REPO="Melvin2306/pimento"
-usage() { sed -n '2,17p' "$SCRIPT" | sed 's/^# \{0,1\}//'; exit 64; }
+usage() { sed -n '2,18p' "$SCRIPT" | sed 's/^# \{0,1\}//'; exit 64; }
 
 VERSION="${1:-}"
 [[ -n "$VERSION" && "$VERSION" != -* ]] || usage
@@ -46,17 +47,31 @@ FROM="${FROM:-build}"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 if [[ $RELEASE == 1 ]]; then
+  # Not the release's SHA256SUMS.txt, which sits next to the archives and
+  # proves nothing about them: the archives themselves, each checked against
+  # the build provenance attestation of this repository's release workflow.
   command -v gh >/dev/null || { echo "--release needs the GitHub CLI (gh)" >&2; exit 1; }
-  gh release download "v$VERSION" --repo "$REPO" --pattern SHA256SUMS.txt --dir "$WORK" >/dev/null
+  for name in "Pimento-$VERSION.zip" "pimento-cli-$VERSION-macos.tar.gz" "pimento-cli-$VERSION-linux-x86_64.tar.gz" \
+              "pimento-cli-$VERSION-linux-aarch64.tar.gz"; do
+    if ! gh release download "v$VERSION" --repo "$REPO" --pattern "$name" --dir "$WORK" >/dev/null 2>&1; then
+      [[ "$name" == *linux-aarch64* ]] && continue
+      echo "could not download $name from release v$VERSION" >&2
+      exit 1
+    fi
+    gh attestation verify "$WORK/$name" --repo "$REPO" \
+      --signer-workflow "$REPO/.github/workflows/release.yml" >/dev/null \
+      || { echo "$name has no valid build provenance attestation from $REPO's release workflow" >&2; exit 1; }
+  done
   FROM="$WORK"
 fi
 
 sha256_of() { if command -v sha256sum >/dev/null; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -d' ' -f1; }
 
 # The SHA-256 of a release asset: from SHA256SUMS.txt in $FROM, else of the file itself. Empty if neither.
+# (--release has no SHA256SUMS.txt in $FROM: the verified archives are summed.)
 sum() {
   local name="$1" line
-  if [[ -f "$FROM/SHA256SUMS.txt" ]]; then
+  if [[ $RELEASE == 0 && -f "$FROM/SHA256SUMS.txt" ]]; then
     line="$(awk -v n="$name" '{ f = $2; sub(/^\*/, "", f) } f == n { print $1; exit }' "$FROM/SHA256SUMS.txt")"
     if [[ -n "$line" ]]; then echo "$line"; return; fi
   fi

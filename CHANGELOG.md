@@ -515,6 +515,13 @@ All notable changes to this project are documented here. The format follows
 - `pimento login` prints the sign-in URL (with its `state`, `nonce` and PKCE challenge) only when
   no browser could be opened, instead of always, so it does not end up in scrollback, terminal
   logs or screen shares.
+- Releases: only version tags (`v1.2.3`, `v1.2.3-rc.1`) start the release workflow, and a tag
+  whose commit is not on `main` is not released. The Windows package must hold exactly the
+  reviewed Swift runtime DLLs (`packaging/windows/runtime-dlls.txt`); any other set fails the
+  build. `scripts/update-homebrew.sh --release` downloads the archives and checks each with
+  `gh attestation verify` against this repository's release workflow before summing them, instead
+  of trusting the `SHA256SUMS.txt` published next to them. `.gitignore` covers keys, `.env` files
+  and copies of Pimento's token, settings, preset and history files.
 
 ## [0.1.0] - 2026-10-29
 

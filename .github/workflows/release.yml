@@ -2,7 +2,9 @@ name: Release
 
 on:
   push:
-    tags: ["v*"]
+    # Version tags only (v1.2.3, v1.2.3-rc.1); the macOS job also checks the
+    # tag matches AppInfo.version and is on main.
+    tags: ["v[0-9]+.[0-9]+.[0-9]+", "v[0-9]+.[0-9]+.[0-9]+-*"]
 
 # Read-only by default: only the publish job, which runs no build or test
 # code, gets a token that can write the release and attest the artifacts.
@@ -23,6 +25,10 @@ jobs:
         run: |
           version="$(sed -n 's/.*static let version = "\(.*\)".*/\1/p' Sources/PimentoCore/AppInfo.swift)"
           test "v${version}" = "${GITHUB_REF_NAME}" || { echo "tag ${GITHUB_REF_NAME} != v${version}"; exit 1; }
+      - name: Check the tagged commit is on main
+        run: |
+          git merge-base --is-ancestor "${GITHUB_SHA}" origin/main \
+            || { echo "${GITHUB_REF_NAME} (${GITHUB_SHA}) is not on main: not released"; exit 1; }
       - name: Test
         run: swift test
       - name: Bundle the app, CLI inside (ad-hoc signed, not notarized)

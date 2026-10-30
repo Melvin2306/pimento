@@ -86,6 +86,14 @@ if [[ $OS == windows ]]; then
   [[ -n "$DLLS" ]] || { echo "found no Swift runtime DLLs for $EXE" >&2; exit 1; }
   while IFS= read -r dll; do cp "$dll" "$STAGE/"; done <<< "$DLLS"
   echo "DLLs: $(cd "$STAGE" && ls *.dll | tr '\n' ' ')"
+  # Exactly the reviewed set (packaging/windows/runtime-dlls.txt), compared case-insensitively.
+  expected="$(grep -v '^#' packaging/windows/runtime-dlls.txt | grep -v '^$' | tr 'A-Z' 'a-z' | sort -u)"
+  actual="$(cd "$STAGE" && ls *.dll | tr 'A-Z' 'a-z' | sort -u)"
+  if [[ "$expected" != "$actual" ]]; then
+    echo "The Windows runtime DLLs differ from packaging/windows/runtime-dlls.txt:" >&2
+    diff <(echo "$expected") <(echo "$actual") >&2 || true
+    exit 1
+  fi
   # Must start without the Swift toolchain's DLLs on PATH.
   PATH="/usr/bin:$(cygpath -u "${SYSTEMROOT:-C:\\Windows}")/System32" "$STAGE/$EXE" version >/dev/null \
     || { echo "$EXE does not start on its own (status $?): a DLL is missing" >&2; exit 1; }
