@@ -130,7 +130,7 @@ final class CLIHarness: @unchecked Sendable {
             now: { [self] in now }, timeZone: TimeZone(identifier: "UTC")!,
             makeService: { [self] given, readOnly in
                 givenTokens.value = (givenTokens.value ?? []) + [given]
-                return PIMService(transport: readOnly ? ReadOnlyTransport(transport) : transport, tokens: useAuthTokens ? given : tokens)
+                return CLIEnvironment.liveService(tokens: useAuthTokens ? given : tokens, readOnly: readOnly, base: transport)
             },
             loadTenants: { [self] preferred, given in
                 givenPreferredTenants.value = (givenPreferredTenants.value ?? []) + [preferred]
@@ -618,4 +618,64 @@ struct CLIInstallTests {
         FileManager.default.createFile(atPath: file, contents: Data())
         #expect(CLIInstaller.state(at: file) == .other)
     }
+}
+
+@Suite("CLI live wiring")
+struct CLILiveWiringTests {
+    func put() -> URLRequest {
+        var request = URLRequest(url: URL(string: "https://management.azure.com/x")!)
+        request.httpMethod = "PUT"
+        return request
+    }
+
+    @Test func readOnlyServicesRefuseWritesBeforeTheNetwork() async throws {
+        let base = RecordingTransport { _ in (Data(), 201) }
+        let service = CLIEnvironment.liveService(tokens: StaticTokenProvider(), readOnly: true, base: base)
+        await #expect(throws: ReadOnlyTransport.WriteRefused.self) { _ = try await service.transport.send(put()) }
+        _ = try await service.transport.send(URLRequest(url: URL(string: "https://management.azure.com/y")!))
+        #expect(await base.requests.map { $0.httpMethod ?? "GET" } == ["GET"])
+    }
+
+    @Test func writingServicesSendWrites() async throws {
+        let base = RecordingTransport { _ in (Data(), 201) }
+        let service = CLIEnvironment.liveService(tokens: StaticTokenProvider(), readOnly: false, base: base)
+        #expect(try await service.transport.send(put()).1 == 201)
+        #expect(await base.requests.map(\.httpMethod) == ["PUT"])
+    }
+
+    @Test func byDefaultTheNetworkIsURLSessionWithoutRedirects() throws {
+        let writing = CLIEnvironment.liveService(tokens: StaticTokenProvider(), readOnly: false)
+        #expect(writing.transport is URLSessionTransport)
+        let reading = CLIEnvironment.liveService(tokens: StaticTokenProvider(), readOnly: true)
+        let wrapper = try #require(reading.transport as? ReadOnlyTransport)
+        #expect(wrapper.base is URLSessionTransport)
+    }
+
+    @Test func tenantsWithTokensComeFromARMReadOnlyAndSorted() async throws {
+        let page1 = try Fixture.data("arm-tenants-page1"), page2 = try Fixture.data("arm-tenants-page2")
+        let base = RecordingTransport { request in
+            (request.url?.query?.contains("skiptoken") == true ? page2 : page1, 200)
+        }
+        let tenants = try await CLIEnvironment.liveTenants(preferredTenant: nil, tokens: StaticTokenProvider(), base: base)
+        #expect(tenants == TenantDirectory.sorted(tenants))
+        #expect(tenants.count == 3)
+        #expect(await base.requests.allSatisfy { $0.httpMethod == "GET" && $0.url?.host == "management.azure.com" })
+    }
+
+    #if !os(Windows)
+    /// Without tokens: az's view (az is a stand-in that fails here), and ARM
+    /// through a read-only transport.
+    @Test func tenantsWithoutTokensAskAzAndNeverWrite() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("pimento-tests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let az = dir.appendingPathComponent("az")
+        try Data("#!/bin/sh\nexit 1\n".utf8).write(to: az)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: az.path)
+        let base = RecordingTransport { _ in (Data(), 500) }
+        let tenants = try await CLIEnvironment.liveTenants(preferredTenant: nil, tokens: nil, base: base, azPath: az.path)
+        #expect(tenants.isEmpty)
+        #expect(await base.requests.isEmpty)
+    }
+    #endif
 }

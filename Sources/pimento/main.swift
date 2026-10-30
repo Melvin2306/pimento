@@ -116,17 +116,10 @@ let environment = CLIEnvironment(
     stdinIsTTY: isTerminal(0),
     terminalWidth: stdoutIsTTY ? terminalWidth() : nil,
     variables: variables,
-    makeService: { tokens, readOnly in
-        // Tokens come from `az` or Pimento's sign-in on demand, stay in memory,
-        // and go only to management.azure.com. Read-only commands cannot send a write.
-        let transport: HTTPTransport = readOnly ? ReadOnlyTransport(URLSessionTransport()) : URLSessionTransport()
-        return PIMService(transport: transport, tokens: tokens)
-    },
-    loadTenants: { preferred, tokens in
-        let transport = ReadOnlyTransport(URLSessionTransport())
-        guard let tokens else { return try await TenantDirectory.load(preferredTenant: preferred, transport: transport) }
-        return TenantDirectory.sorted(try await TenantDirectory.fetchARM(tokens: tokens, transport: transport))
-    },
+    // Tokens come from `az` or Pimento's sign-in on demand, stay in memory,
+    // and go only to management.azure.com. Read-only commands cannot send a write.
+    makeService: { tokens, readOnly in CLIEnvironment.liveService(tokens: tokens, readOnly: readOnly) },
+    loadTenants: { preferred, tokens in try await CLIEnvironment.liveTenants(preferredTenant: preferred, tokens: tokens) },
     // Shared with the app; $PIMENTO_HISTORY points elsewhere.
     history: HistoryStore(environment: ProcessInfo.processInfo.environment),
     // Pimento's own sign-in: settings shared with the app, refresh tokens in the

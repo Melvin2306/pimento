@@ -65,6 +65,27 @@ public struct CLIEnvironment: Sendable {
     }
 }
 
+extension CLIEnvironment {
+    /// The CLI's `makeService`: tokens from the chosen auth source, sent only
+    /// to management.azure.com by `base` (URLSession, which refuses
+    /// redirects); a read-only command's service refuses every write.
+    public static func liveService(
+        tokens: TokenProvider, readOnly: Bool, base: HTTPTransport = URLSessionTransport()
+    ) -> PIMService {
+        PIMService(transport: readOnly ? ReadOnlyTransport(base) : base, tokens: tokens)
+    }
+
+    /// The CLI's `loadTenants`, read-only: the Azure CLI's view when `tokens`
+    /// is nil, else ARM's `/tenants` with those tokens, sorted.
+    public static func liveTenants(
+        preferredTenant: String?, tokens: TokenProvider?, base: HTTPTransport = URLSessionTransport(), azPath: String? = nil
+    ) async throws -> [TenantInfo] {
+        let transport = ReadOnlyTransport(base)
+        guard let tokens else { return try await TenantDirectory.load(preferredTenant: preferredTenant, transport: transport, azPath: azPath) }
+        return TenantDirectory.sorted(try await TenantDirectory.fetchARM(tokens: tokens, transport: transport))
+    }
+}
+
 /// What `pimento login` and `--auth pimento` need from outside.
 public struct CLISignIn: Sendable {
     /// `auth.json`, shared with the app. nil: nothing saved, nothing read.
