@@ -106,6 +106,20 @@ struct CLILifecycleRunnerTests {
         #expect(!h.out.contains("scheduleInfo"))
     }
 
+    /// Without a tenant in the token, the plan names the auth source's default.
+    @Test func thePlanNamesTheAuthSourcesDefaultTenant() async {
+        let az = CLIHarness(put: lifecyclePUT)
+        #expect(await az.run("deactivate", "--role", "Owner", "--dry-run") == 0)
+        #expect(az.out.contains("in tenant az's default tenant:"))
+        let pimento = CLIHarness(put: lifecyclePUT)
+        #expect(await pimento.run("deactivate", "--role", "Owner", "--dry-run", "--auth", "pimento") == 0)
+        #expect(pimento.out.contains("in tenant your sign-in tenant:"))
+        #expect(!pimento.out.contains("az's"))
+        #expect(await pimento.run("extend", "--all", "-j", "x", "--days", "7", "--dry-run", "--auth", "pimento") == 0)
+        #expect(pimento.out.contains("in tenant your sign-in tenant:"))
+        #expect(!pimento.out.contains("az's"))
+    }
+
     @Test func deactivateWithYesEndsTheMatchingActiveRoles() async throws {
         let h = CLIHarness(put: lifecyclePUT)
         #expect(await h.run("deactivate", "rg-app-dev", "--yes", "--json") == 0)

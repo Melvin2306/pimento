@@ -13,8 +13,11 @@ extension CLIRunner {
         let preset: Preset?
         let matched: [EligibleRole]
         let missing: [PresetRole]
+        /// What the tenant is called when the token names none: the auth
+        /// source's default (`CLIRunner.defaultTenantLabel`).
+        let defaultTenantLabel: String
 
-        var tenantLabel: String { tenantId ?? "az's default tenant" }
+        var tenantLabel: String { tenantId ?? defaultTenantLabel }
     }
 
     enum Selection {
@@ -43,10 +46,10 @@ extension CLIRunner {
                 err(errStyle.yellow("note:") + " the preset's rule `\(rule.label)` matches no role")
             }
             return .ok(Selected(service: service, snapshot: snapshot, tenant: tenant, tenantId: tenantId, preset: p,
-                                matched: resolution.roles, missing: resolution.missing))
+                                matched: resolution.roles, missing: resolution.missing, defaultTenantLabel: defaultTenantLabel))
         }
         return .ok(Selected(service: service, snapshot: snapshot, tenant: tenant, tenantId: tenantId, preset: nil,
-                            matched: criteria.apply(snapshot.roles), missing: []))
+                            matched: criteria.apply(snapshot.roles), missing: [], defaultTenantLabel: defaultTenantLabel))
     }
 
     /// Prints to stdout, or to stderr when stdout is JSON.
