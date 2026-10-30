@@ -467,6 +467,13 @@ All notable changes to this project are documented here. The format follows
   marks them in the Approvals sheet and asks before approving (with the Owner confirmation on).
   Roles are recognised by their built-in GUID or name; custom roles with
   `Microsoft.Authorization/roleAssignments/write` are not, as Pimento reads no role definitions.
+- **Install Command Line Tool**: an existing `pimento` link is followed to the file it really runs
+  before the app reports "Already installed" or offers to replace it (a link through a folder link
+  to another app was taken for this one), and a link owned by another user (neither you nor root)
+  is never reported, replaced or removed. Installing into `/usr/local/bin`, which every user and
+  root run, is refused when a folder on the way to the tool can be changed by someone other than
+  root or you (another user's, group-writable outside wheel/admin, or world-writable); the
+  administrator prompt names the link and its target.
 
 ## [0.1.0] - 2026-10-29
 

@@ -572,6 +572,49 @@ struct CLIInstallTests {
         #expect(!CLIInstaller.isBundledTool("/x/Pimento/Contents/Helpers/pimento"))
     }
 
+    /// A link another user owns is never reported as installed, replaced or
+    /// removed, wherever it points.
+    @Test func linksOfOtherUsersAreLeftAlone() {
+        let link = "/usr/local/bin/pimento"
+        #expect(CLIInstaller.installAction(source: source, linkPath: link, state: .foreignSymlink(source, owner: 501))
+            == .notOwned(target: source, owner: 501))
+        #expect(CLIInstaller.installAction(source: source, linkPath: link,
+                                           state: .foreignSymlink("/tmp/Pimento.app/Contents/Helpers/pimento", owner: 502))
+            == .notOwned(target: "/tmp/Pimento.app/Contents/Helpers/pimento", owner: 502))
+        #expect(CLIInstaller.uninstallAction(source: source, linkPath: link, state: .foreignSymlink(source, owner: 501))
+            == .notOurs(source))
+    }
+
+    /// /usr/local/bin/pimento must not lead to a file someone else can swap.
+    @Test func aSystemLinkNeedsASourceOnlyRootOrYouCanChange() {
+        let me: UInt32 = 501
+        func info(_ table: [String: PathTrust.Info]) -> (String) -> PathTrust.Info? { { table[$0] } }
+        let root = PathTrust.Info(owner: 0, group: 0, mode: 0o755)
+        let applications = PathTrust.Info(owner: 0, group: 80, mode: 0o775)
+        let mine = PathTrust.Info(owner: me, group: 20, mode: 0o755)
+        let tool = "/Applications/Pimento.app/Contents/Helpers/pimento"
+        var tree: [String: PathTrust.Info] = [
+            "/": root, "/Applications": applications, "/Applications/Pimento.app": mine,
+            "/Applications/Pimento.app/Contents": mine, "/Applications/Pimento.app/Contents/Helpers": mine, tool: mine,
+        ]
+        #expect(PathTrust.firstUntrusted(tool, user: me, info: info(tree)) == nil)
+        // Another user's bundle, a group-writable folder (not wheel/admin), a world-writable one.
+        tree["/Applications/Pimento.app"] = PathTrust.Info(owner: 502, group: 20, mode: 0o755)
+        #expect(PathTrust.firstUntrusted(tool, user: me, info: info(tree)) == "/Applications/Pimento.app")
+        tree["/Applications/Pimento.app"] = PathTrust.Info(owner: me, group: 20, mode: 0o775)
+        #expect(PathTrust.firstUntrusted(tool, user: me, info: info(tree)) == "/Applications/Pimento.app")
+        tree["/Applications/Pimento.app"] = mine
+        tree["/Applications/Pimento.app/Contents/Helpers"] = PathTrust.Info(owner: me, group: 20, mode: 0o757)
+        #expect(PathTrust.firstUntrusted(tool, user: me, info: info(tree)) == "/Applications/Pimento.app/Contents/Helpers")
+        // Missing information is not trust.
+        tree["/Applications/Pimento.app/Contents/Helpers"] = nil
+        #expect(PathTrust.firstUntrusted(tool, user: me, info: info(tree)) == "/Applications/Pimento.app/Contents/Helpers")
+        // A sticky world-writable folder of root's (/tmp) is fine above your own folder.
+        let shared = ["/": root, "/tmp": PathTrust.Info(owner: 0, group: 0, mode: 0o1777), "/tmp/a": mine]
+        #expect(PathTrust.firstUntrusted("/tmp/a", user: me, info: info(shared)) == nil)
+        #expect(PathTrust.firstUntrusted("/tmp/a", user: 777, info: info(shared)) == "/tmp/a")
+    }
+
     @Test func commandsAreQuotedForShellAndAppleScript() {
         #expect(CLIInstaller.shellQuote("it's") == #"'it'\''s'"#)
         let cmd = CLIInstaller.installCommand(source: "/Applications/My \"Apps\"/Pimento.app/Contents/Helpers/pimento",
@@ -631,6 +674,39 @@ struct CLIInstallTests {
         let file = dir.appendingPathComponent("file").path
         FileManager.default.createFile(atPath: file, contents: Data())
         #expect(CLIInstaller.state(at: file) == .other)
+        // Owned by you (the test runs as the link's owner): yours; anyone else's: foreign.
+        #expect(CLIInstaller.state(at: link, user: PathTrust.currentUser) == .symlink(source))
+        if PathTrust.currentUser != 0 {
+            #expect(CLIInstaller.state(at: link, user: PathTrust.currentUser + 1) == .foreignSymlink(source, owner: PathTrust.currentUser))
+        }
+    }
+
+    /// "Already installed" only when the link really ends at this app's tool
+    /// (through folder links too); otherwise the real target is reported.
+    @Test(.enabled(if: HostPlatform.current != .windows, "macOS app feature; symlinks need privileges on Windows"))
+    func upToDateOnlyWhenTheLinkEndsAtThisTool() throws {
+        let fm = FileManager.default
+        let dir = TestTemp.url("install-real")
+        defer { try? fm.removeItem(at: dir) }
+        let app = dir.appendingPathComponent("Pimento.app/Contents/Helpers")
+        let other = dir.appendingPathComponent("Other.app/Contents/Helpers")
+        try fm.createDirectory(at: app, withIntermediateDirectories: true)
+        try fm.createDirectory(at: other, withIntermediateDirectories: true)
+        let source = app.appendingPathComponent("pimento").path
+        fm.createFile(atPath: source, contents: Data())
+        fm.createFile(atPath: other.appendingPathComponent("pimento").path, contents: Data())
+        let link = dir.appendingPathComponent("bin/pimento").path
+        #expect(CLIInstaller.installAction(source: source, linkPath: link, state: .symlink(source)) == .upToDate)
+        // A link through a folder link that leads to another app: that app's tool.
+        let alias = dir.appendingPathComponent("Alias.app").path
+        try fm.createSymbolicLink(atPath: alias, withDestinationPath: dir.appendingPathComponent("Other.app").path)
+        let viaAlias = alias + "/Contents/Helpers/pimento"
+        let real = URL(fileURLWithPath: other.appendingPathComponent("pimento").path).resolvingSymlinksInPath().path
+        #expect(CLIInstaller.installAction(source: source, linkPath: link, state: .symlink(viaAlias)) == .replace(previous: real))
+        // A different path that ends at this tool is this tool.
+        let mine = dir.appendingPathComponent("Mine.app").path
+        try fm.createSymbolicLink(atPath: mine, withDestinationPath: dir.appendingPathComponent("Pimento.app").path)
+        #expect(CLIInstaller.installAction(source: source, linkPath: link, state: .symlink(mine + "/Contents/Helpers/pimento")) == .upToDate)
     }
 }
 

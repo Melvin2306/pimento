@@ -66,6 +66,14 @@ enum CommandLineTool {
         default: return
         }
         let link = location.linkPath(home: home)
+        // Everyone (root too) runs /usr/local/bin/pimento: it must not lead
+        // to a file that another user could replace.
+        if location == .system, let weak = CLIInstaller.untrustedSource(source) {
+            inform("Pimento.app is in a folder others can change",
+                   "\(weak) can be changed by another user, so a pimento in /usr/local/bin would run whatever they put there. "
+                       + "Move Pimento.app to /Applications (or your own Applications folder) and try again, or install in ~/.local/bin.")
+            return
+        }
         switch CLIInstaller.installAction(source: source, linkPath: link, state: CLIInstaller.state(at: link)) {
         case .upToDate:
             inform("Already installed", "\(link) already points to this app's command-line tool.")
@@ -73,6 +81,11 @@ enum CommandLineTool {
         case .blocked:
             inform("A file is in the way",
                    "\(link) exists and is not a symbolic link, so Pimento leaves it alone. Remove it and try again.")
+            return
+        case .notOwned(let target, let owner):
+            inform("Another user's link is in the way",
+                   "\(link) points to \(target) and belongs to another user (uid \(owner)), so Pimento leaves it alone. "
+                       + "Have it removed and try again.")
             return
         case .conflict(let target):
             guard confirm("Replace the existing pimento?",
@@ -115,7 +128,7 @@ enum CommandLineTool {
             }
         }
         return await runAsAdmin(CLIInstaller.installCommand(source: source, linkPath: link),
-                                prompt: "Pimento wants to link its command-line tool into \(dir).")
+                                prompt: "Pimento wants to link \(link) to \(source).")
     }
 
     // MARK: Uninstall

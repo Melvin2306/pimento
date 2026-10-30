@@ -126,8 +126,12 @@ Neither macOS download is notarized yet, so macOS asks before the first launch (
    - `/usr/local/bin` (on every PATH; asks for an administrator password), or
    - `~/.local/bin` (no password; that folder must be on your PATH),
 
-   and tells you what it did. **Pimento › Uninstall Command Line Tool…** removes the link again
-   (only links that point to a Pimento.app). The link points into the app: after moving the app,
+   and tells you what it did. A link that is already there is followed to the file it really runs
+   before Pimento calls it installed or replaces it, and a link another user owns is left alone.
+   For `/usr/local/bin`, which every user runs, Pimento.app must sit where only you or root can
+   change it (not in a shared or group-writable folder); the password prompt names the link and
+   its target. **Pimento › Uninstall Command Line Tool…** removes the link again
+   (only your or root's links that point to a Pimento.app). The link points into the app: after moving the app,
    install again. By hand: `ln -s /Applications/Pimento.app/Contents/Helpers/pimento ~/.local/bin/pimento`.
 
 ### Option 2: only the CLI
