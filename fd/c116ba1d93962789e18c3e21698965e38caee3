@@ -1,0 +1,36 @@
+Sources/PimentoApp/KeepAliveViews.swift
+  s_4884204a812fec::t_25895b3ddfbb8c 1-136
+Sources/PimentoApp/AppModel+KeepAlive.swift
+  s_4884204a812fec::t_de93c31ae8a515 1-265
+  s_4884204a812fec::t_e3662b855b99b2 266-268
+Sources/PimentoApp/AppModel.swift
+  s_4884204a812fec::t_5f6094cb9517b2 117-119,248-262,277-278,321-322,382,548-550,856,1003,1193,1910-1912,1959-1963
+Sources/PimentoApp/ContentView.swift
+  s_4884204a812fec::t_8af5c69962476b 180,225,242-256,351-354,375-383,391-392,412-417
+Sources/PimentoApp/MenuBarViews.swift
+  s_4884204a812fec::t_52adbc3d8c9c7c 188-191,390-396
+Sources/PimentoApp/Notifier.swift
+  s_4884204a812fec::t_bdf256863f9ec0 229-240
+Sources/PimentoApp/PresetViews.swift
+  s_4884204a812fec::t_d63c2cd0066212 371-376
+Sources/PimentoApp/SettingsView.swift
+  s_4884204a812fec::t_2430801778d4a6 228
+Sources/PimentoCore/WorkingHours.swift
+  s_4884204a812fec::t_f60231156a0aa7 66
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fdc116ba1d93962789e18c3e21698965e38caee3",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
