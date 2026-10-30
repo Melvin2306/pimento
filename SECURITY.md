@@ -54,7 +54,7 @@ In scope, for example:
   removing another user's link;
 - `scripts/install.sh` or `scripts/install.ps1` installing a file whose SHA-256 does not match the
   release's `SHA256SUMS.txt` (or whose attestation failed), or changing files outside the install
-  folder, the shell completion folders and (on Windows) the user `Path`.
+  folder, the shell completion folders and (on Windows) the user `Path`;
 - the update check sending more than its documented `GET` (any identifier, token or cookie), going
   to another host than `api.github.com`, running in demo mode or with `PIMENTO_NO_UPDATE_CHECK=1`,
   opening a link outside `https://github.com/Melvin2306/pimento/`, or downloading or installing
