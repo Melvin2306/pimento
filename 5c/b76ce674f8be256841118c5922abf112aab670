@@ -1,0 +1,43 @@
+Sources/PimentoCore/Demo/DemoClock.swift
+  s_4884204a812fec::t_478f1174d8d137 1-70
+Sources/PimentoCore/Demo/DemoData.swift
+  s_4884204a812fec::t_814fb9e91be1f9 1-404
+Sources/PimentoCore/Demo/DemoMode.swift
+  s_4884204a812fec::t_de1ca38525944b 1-124
+Sources/PimentoCore/Demo/NetworkGuard.swift
+  s_4884204a812fec::t_af6709bfdaa47f 1-46
+Sources/PimentoCore/Demo/DemoSession.swift
+  s_4884204a812fec::t_2363c2200a5cb5 1-93
+Sources/PimentoCore/Demo/DemoAzure+JSON.swift
+  s_4884204a812fec::t_049c65fbfd65bc 1-219
+Sources/PimentoCore/Demo/DemoAzure.swift
+  s_4884204a812fec::t_32d6c3d1c8a15c 1-163,166-167,171-616
+  s_4884204a812fec::t_ad772e756a40e8 164-165,168-170
+Sources/PimentoCore/Demo/DemoSeed.swift
+  s_4884204a812fec::t_ef7e90ec1403cd 1-211
+  s_4884204a812fec::t_7e2f94534e4b73 212-213
+Sources/PimentoCore/Auth.swift
+  s_4884204a812fec::t_ce60f36e4a6b8b 171
+Sources/PimentoCore/PIMService.swift
+  s_4884204a812fec::t_ac97b5d7f896ff 28
+Sources/PimentoCore/SignIn/Loopback.swift
+  s_4884204a812fec::t_73f2880e0093ae 98
+Sources/PimentoCore/SignIn/TokenBroker.swift
+  s_4884204a812fec::t_a67fd8690158d5 215-216,218-219,223,233
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5cb76ce674f8be256841118c5922abf112aab670",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
