@@ -61,6 +61,43 @@ Expect 'pimento --demo presets show ' "'Data team'"
 Expect 'pimento logout --a' '--all'
 if (@(Complete 'pimento logout --a') -contains '--auth') { throw 'logout offers --auth' }
 if (@(Complete 'pimento activate --preset Rel --ho') -notcontains '--hours') { throw 'a value was taken for a command' }
+# Preset names with PowerShell's other quote characters (U+2018 to U+201E, which
+# macOS types for ' and "), with ; and with other non-ASCII letters: each
+# completion parses back to one command whose last argument is exactly the name.
+$q = @([char]0x2018, [char]0x2019, [char]0x201C)
+$names = @("Ops$($q[1]) team", "x$($q[0]);exit 3;$($q[1])", "it$($q[1])s", "say $($q[2])hi$($q[2])", "M$([char]0xFC)ller")
+$presetsFile = Join-Path ([IO.Path]::GetTempPath()) ('pimento-presets-' + [Guid]::NewGuid().ToString('N') + '.json')
+$i = 0
+$presets = @(foreach ($name in $names) {
+    $i++
+    @{ id = ('00000000-0000-0000-0000-{0:D12}' -f $i); name = $name; roles = @(); match = @(@{ filters = @('prod'); roles = @('Owner') }) }
+})
+[IO.File]::WriteAllText($presetsFile, (@{ version = 1; presets = $presets } | ConvertTo-Json -Depth 6), (New-Object Text.UTF8Encoding $false))
+$env:PIMENTO_PRESETS = $presetsFile
+try {
+    $got = @(Complete 'pimento activate --preset ')
+    $problems = @()
+    $values = @()
+    foreach ($completion in $got) {
+        $tokens = $null; $errors = $null
+        $ast = [Management.Automation.Language.Parser]::ParseInput("pimento activate --preset $completion", [ref]$tokens, [ref]$errors)
+        $statements = @($ast.EndBlock.Statements)
+        $last = $null
+        if ($statements.Count -eq 1) { $last = @($statements[0].PipelineElements[0].CommandElements)[-1] }
+        if (@($errors).Count -gt 0 -or $statements.Count -ne 1 -or -not ($last -is [Management.Automation.Language.StringConstantExpressionAst])) {
+            $problems += "[$completion] is not one argument"
+        } else {
+            $values += $last.Value
+        }
+    }
+    foreach ($name in $names) {
+        if ($values -cnotcontains $name) { $problems += "nothing completes to [$name]" }
+    }
+    if ($problems.Count -gt 0) { throw ('preset name completions: ' + ($problems -join '; ') + ' (got: ' + ($got -join ' | ') + ')') }
+} finally {
+    $env:PIMENTO_PRESETS = $null
+    Remove-Item -LiteralPath $presetsFile -Force -ErrorAction SilentlyContinue
+}
 Write-Host "ok: completions in PowerShell $($PSVersionTable.PSVersion)"
 '@
 

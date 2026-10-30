@@ -440,6 +440,49 @@ struct LoopbackTests {
         #expect(try await code == "the-code")
     }
 
+    /// What a client sends after its request head is read and dropped once it
+    /// is answered, so the answer is not lost to a reset; and a client that
+    /// never stops sending cannot hold the listener in that drain.
+    @Test func moreThanTheHeadNeitherLosesTheAnswerNorHoldsTheListener() async throws {
+        let listener = try LoopbackListener(connectionTimeout: 2)
+        async let code = listener.waitForCallback(state: "s1", timeout: 20)
+        try await Task.sleep(nanoseconds: 50_000_000)
+        let port = listener.port
+        let head = Array("GET /favicon.ico HTTP/1.1\r\nHost: localhost\r\n\r\n".utf8)
+        // Head and body in one go; the answer is read only after all of it was sent.
+        let answer: String = await withCheckedContinuation { continuation in
+            Thread {
+                guard let fd = TestSocket.connect(port: port) else { return continuation.resume(returning: "") }
+                defer { _ = TestSocket.close(fd) }
+                TestSocket.sendAll(fd, head + [UInt8](repeating: 0x78, count: 32 * 1024))
+                var response = [UInt8]()
+                var buffer = [UInt8](repeating: 0, count: 4096)
+                while TestSocket.waitReadable(fd, milliseconds: 3000) {
+                    let n = TestSocket.receive(fd, into: &buffer)
+                    guard n > 0 else { break }
+                    response += buffer[0..<n]
+                }
+                continuation.resume(returning: String(decoding: response, as: UTF8.self))
+            }.start()
+        }
+        #expect(answer.hasPrefix("HTTP/1.1 404"), "the answer was lost: \(answer.prefix(40))")
+        // A client that sends without end until the listener lets it go.
+        let flooding = Thread {
+            guard let fd = TestSocket.connect(port: port) else { return }
+            defer { _ = TestSocket.close(fd) }
+            let chunk = head + [UInt8](repeating: 0x78, count: 64 * 1024)
+            let started = Date()
+            while Date().timeIntervalSince(started) < 10, LoopbackSocket.send(fd, chunk[...]) > 0 {}
+        }
+        flooding.start()
+        try await Task.sleep(nanoseconds: 200_000_000)
+        let started = Date()
+        let page = browse(port: port, "/?code=the-code&state=s1")
+        #expect(page.hasPrefix("HTTP/1.1 200"))
+        #expect(try await code == "the-code")
+        #expect(Date().timeIntervalSince(started) < 2, "the flooding client held the listener")
+    }
+
     @Test func listenerTimesOutAndCancels() async throws {
         let listener = try LoopbackListener()
         await #expect(throws: SignInError.timedOut) { _ = try await listener.waitForCallback(state: "s", timeout: 0.3) }
