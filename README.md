@@ -101,6 +101,8 @@ PATH, `install.sh` prints the line to add. You can read them first:
   (on Windows, `$env:PIMENTO_INSTALL_DIR`). `sh -s -- --help` lists all options.
 - **Linux** needs glibc 2.35 or later (Ubuntu 22.04, Debian 12, RHEL 9) and libcurl; **Windows**
   10/11 (x86_64) needs the Microsoft Visual C++ Redistributable, which most systems have.
+- **Update:** run the same command again; it replaces the installed version with the latest
+  release. `pimento version --check` tells you whether there is a newer one ([Updates](#updates)).
 
 **Uninstall:**
 
@@ -230,6 +232,10 @@ Use either this link or `install.sh`, not both: `install.sh` leaves a link in it
   output, exit codes and shell completions. Download it on its own, or get it with the app.
 - **Demo mode**: every feature against a simulated Azure with synthetic data, offline and apart from
   your own settings, for trying Pimento out and for screenshots (see [Demo mode](#demo-mode)).
+- **Update check**: once a day Pimento asks GitHub whether a newer release exists and, if so, shows a
+  small notice with *Download* and *Release Notes*. *Pimento › Check for Updates…* asks now,
+  `pimento version --check` from a terminal. It never downloads or installs anything, and you can turn
+  it off (see [Updates](#updates)).
 - **No client secret or service principal, no dependencies, no telemetry.**
 
 ## Screenshots
@@ -676,12 +682,33 @@ options, with an ⓘ button where an option needs more explanation. Changes appl
 
 | Tab | Options |
 | --- | --- |
-| General | tenant to open with (last used, az's current, or a specific one); unhide hidden tenants; load roles on launch; refresh automatically (off, 1, 5 or 15 minutes); menu bar icon (on by default), its remaining time, hide the Dock icon, launch at login (see [Menu bar](#menu-bar)) |
+| General | tenant to open with (last used, az's current, or a specific one); unhide hidden tenants; load roles on launch; refresh automatically (off, 1, 5 or 15 minutes); menu bar icon (on by default), its remaining time, hide the Dock icon, launch at login (see [Menu bar](#menu-bar)); check for updates automatically (on by default), *Check Now* and what the last check found (see [Updates](#updates)) |
 | Appearance | theme, picked from preview cards; mode (see [Themes](#themes)); show or hide the Type, Membership, Condition and Duration columns (also via right-click on a column header) |
 | Account | sign in with the Azure CLI or Pimento sign-in; the client ID of your app registration; signed-in accounts (*Use*, *Sign Out*, *Sign Out All*); *Sign In…* (browser) and *Sign In with Code…* (see [Pimento sign-in](#pimento-sign-in-without-the-azure-cli)) |
 | Activation | default duration; parallel requests (1 to 16, default 8); confirm before activating Owner roles (on by default); remember recent justifications and tickets and offer them from the clock buttons next to the fields; start with the last justification filled in |
 | History | keep a history (on by default); keep records for 30, 90 or 365 days or forever; the file, Show in Finder, Clear History |
 | Notifications | macOS permission state, with a shortcut to System Settings when it is off; send a test notification; notify when activations finish, or only when something fails; expiry reminders and how long before (5, 10, 15 or 30 minutes); notify when a scheduled activation starts; approval decisions on your requests; new approval requests for you; sound |
+
+### Updates
+
+Once a day, at launch or while it runs, Pimento asks GitHub for the latest release and compares it
+with its own version (semantic versioning; drafts and pre-releases are ignored). When a newer one
+exists, a one-line notice above the role table and in the menu bar says *Pimento 0.2.0 is
+available*, with **Download** (the release's `Pimento.dmg` in your browser) and **Release Notes**
+(the release page). Open the disk image and drag Pimento onto Applications to replace the old one;
+your settings, presets, history and sign-in stay. The ✕ hides the notice until the next version.
+
+- **Pimento › Check for Updates…** checks now and says what it found; *Settings › General ›
+  Updates* has *Check Now*, the time and result of the last check, and the switch for the daily
+  check (on by default). A manual check works with the switch off.
+- **The CLI** never checks on its own: `pimento version --check` asks and prints the current and
+  latest versions and how to update (re-run the [installer](#install-the-command-line-tool); the CLI
+  inside Pimento.app is updated with the app).
+- **Turn it off everywhere** with `PIMENTO_NO_UPDATE_CHECK=1` (in the environment of the app, for
+  example with `launchctl setenv`, or of the CLI). Demo mode never checks.
+
+Nothing is downloaded or installed automatically. What is sent is under
+[Security and privacy](#security-and-privacy).
 
 ### Themes
 
@@ -763,7 +790,7 @@ suite and its presets, history and sign-in settings in `~/Library/Application Su
 both start from the demo data on every launch unless *Keep demo changes* is on. The demo account's
 tokens are in memory, never in the Keychain. Demo notifications are marked as such and withdrawn when
 the demo ends. Requests to the network, the Azure CLI, the sign-in listener and the browser (sign-in
-and device-code pages) are refused for the whole process. Launch at login and the command line tool installer are off. Leaving demo mode restarts
+and device-code pages) are refused for the whole process, and there is no update check. Launch at login and the command line tool installer are off. Leaving demo mode restarts
 Pimento with your own session. Each `pimento --demo` command starts from the demo data in a temporary
 folder that is removed afterwards, and ignores `PIMENTO_TENANT`, `PIMENTO_AUTH` and the token-store
 variables.
@@ -843,6 +870,9 @@ pimento history --since 7d
 pimento history --action approve,deny --outcome failed --json
 pimento history export ~/Desktop/pim-history.csv --since 2026-10-01
 pimento history import-azure --since 30d     # add your requests from the portal (read-only)
+
+# Is there a newer version? (the only command that contacts GitHub)
+pimento version --check
 ```
 
 | Command | What it does |
@@ -867,7 +897,8 @@ pimento history import-azure --since 30d     # add your requests from the portal
 | `pimento logout [--all]` | Forgets the signed-in account (or all); with none left, the Azure CLI is the auth source again |
 | `pimento whoami` | The auth source and where it was chosen, who its token is for, and Pimento sign-in's accounts (exit 3 when not signed in) |
 | `pimento completions zsh\|bash\|fish` | Prints a shell completion script |
-| `pimento version`, `pimento help [COMMAND]` | Version; help for a command (also `COMMAND --help`) |
+| `pimento version [--check] [--json]` | The version; with `--check`, also the latest release on GitHub and how to update (exit 1 when the check could not be made) |
+| `pimento help [COMMAND]` | Help for a command (also `COMMAND --help`) |
 
 `list`, `activate`, `deactivate`, `renew`, `extend`, `scheduled`, `cancel`, `pending`, `wait`, `approvals`, `approve`,
 `deny`, `status` and `tenants` take `-t, --tenant ID` and `--json`. The tenant is
@@ -886,6 +917,12 @@ codes) and the command that fixes them.
 simulated Azure with synthetic data (Contoso, Alex Wilber), offline, in a temporary folder of its own,
 without touching your settings, files or tokens. `PIMENTO_DEMO_CLOCK=10:30` freezes its clock for
 tidy terminal screenshots. See [Demo mode](#demo-mode).
+
+**Updates.** No command contacts anything but Azure, except `pimento version --check`: it asks GitHub
+for the latest release and prints the current and latest versions; when the latest is newer, it prints
+the release page and the installer command to run again. Nothing is downloaded or installed. Exit code
+0 when the check worked (newer version or not), 1 when it could not be made (offline, GitHub's rate
+limit, `PIMENTO_NO_UPDATE_CHECK=1`, demo mode). See [Updates](#updates).
 
 **Selecting roles.** A FILTER matches the resource name (case-insensitive substring); several
 filters are OR-ed. A filter starting with `/` is an ARM scope and matches it and everything below
@@ -1029,6 +1066,7 @@ exactly one JSON document (the plan and progress of `activate` go to stderr):
 | `logout` | `{removed: [accountId], remaining}` |
 | `whoami` | `{source, origin, user, tenantId, error, accounts: [account], clientId, tokenStore}` (`origin` is `commandLine`, `environment`, `saved` or `default`) |
 | `presets list`, `presets show` | `{file, presets: [{id, name, tenantId, roles, match, justification, duration, ticketSystem, createdAt, updatedAt}]}`; `show` prints one preset |
+| `version` | `{version}`; with `--check`: `{version, checked, latest, publishedAt, updateAvailable, releasePage, diskImage, installCommand, error}` (`releasePage`, `diskImage` and `installCommand` only when a newer version exists; `checked: false` with `error` when the check could not be made) |
 
 Times are ISO 8601 in UTC. Keys without a value are left out.
 
@@ -1037,7 +1075,7 @@ Times are ISO 8601 in UTC. Keys without a value are left out.
 | Code | Meaning |
 | --- | --- |
 | 0 | Success, including "nothing to do" (everything already active) and no tenants for `pimento tenants` |
-| 1 | An activation or request failed, no role matched (or none of a preset's roles is eligible), or you answered no |
+| 1 | An activation or request failed, no role matched (or none of a preset's roles is eligible), you answered no, or `version --check` could not check |
 | 2 | Usage error: unknown option, no justification or selection, invalid tenant or `--at` time, a required ticket missing, or a command that changes roles without `--yes` when stdin is not a terminal |
 | 3 | az is missing or not signed in, Pimento sign-in has no (valid) account, or ARM rejected the token (run the `az login` or `pimento login` command it prints) |
 | 4 | `pimento wait`: still no decision when `--timeout` ran out |
@@ -1180,7 +1218,20 @@ directly with the PIM APIs (`api-version=2020-10-01`):
 - The `pimento` CLI keeps no other state: no settings of its own beyond `auth.json`, no access-token
   cache. It writes the presets file (`pimento presets save` and `delete`), the history, and with
   `pimento login` / `logout` the refresh token and `auth.json`.
-- No analytics, no update checks, no third-party dependencies (the CLI's argument parser is
+- **Update check.** The app (once a day, unless turned off in *Settings › General*) and
+  `pimento version --check` (only when you run it) send one HTTPS `GET` to
+  `https://api.github.com/repos/Melvin2306/pimento/releases/latest`, with a 10-second timeout and a
+  20-second limit for the whole check. The request carries no token, cookie, account, tenant, device
+  or installation ID: only `User-Agent: Pimento/<version>` (GitHub requires one) and the API's
+  `Accept` header. GitHub sees your IP address, as with any request. Redirects are refused, and a
+  guard refuses any other URL or method. The answer is treated as untrusted: the tag must be a strict
+  semantic version, drafts and pre-releases are ignored, answers over 1 MB are refused, and the links
+  Pimento opens (release page, disk image) are built from that version and must lie under
+  `https://github.com/Melvin2306/pimento/`; no URL is taken from the answer. Nothing is downloaded or
+  installed; *Download* opens your browser. The app keeps the time and result of the last check (and the version whose notice you closed) in its
+  `UserDefaults`. `PIMENTO_NO_UPDATE_CHECK=1` turns the check off in the app and the CLI; demo mode
+  never checks. No other command of the CLI reaches anything but Azure.
+- No analytics, no telemetry, no third-party dependencies (the CLI's argument parser is
   hand-written, so the build needs no package downloads).
 
 See [SECURITY.md](SECURITY.md) for how to report a vulnerability.
@@ -1314,7 +1365,8 @@ for a later tap.
 
 ```
 Sources/PimentoCore/     logic and ARM/az plumbing: models, matching, request bodies,
-                         error mapping, tenant resolution, per-platform paths. Fully unit-tested.
+                         error mapping, tenant resolution, per-platform paths, the update
+                         check (semantic versions, GitHub's answer). Fully unit-tested.
 Sources/PimentoCore/SignIn/ Pimento sign-in: PKCE, loopback listener, device code, token
                          endpoint requests and errors, Keychain/file token store. Unit-tested.
 Sources/PimentoCore/CLI/ the CLI's commands: parser, selection, confirmation, exit codes,

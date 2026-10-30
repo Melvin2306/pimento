@@ -6,6 +6,26 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Update check**: once a day (at launch, or while running) the app asks GitHub for the latest
+  release and, when it is newer, shows a one-line notice above the role table and in the menu bar
+  with *Download* (the release's disk image) and *Release Notes*; the ✕ hides it until the next
+  version. **Pimento › Check for Updates…** checks now; *Settings › General › Updates* has the
+  switch (on by default), *Check Now* and the last result. `pimento version --check [--json]`
+  prints the current and latest versions and how to update (re-run the installer); no other CLI
+  command contacts GitHub. Versions are compared as semantic versions; drafts and pre-releases are
+  ignored. Nothing is downloaded or installed automatically. `PIMENTO_NO_UPDATE_CHECK=1` turns it
+  off in the app and the CLI, and demo mode never checks.
+
+### Security
+
+- The update check sends one HTTPS `GET` to `api.github.com` with only a `User-Agent:
+  Pimento/<version>` header (no cookies, tokens or IDs), with a timeout, through a guard that
+  refuses any other URL or method. The answer is untrusted: a strict version parse, a size limit,
+  and links built from the version under `https://github.com/Melvin2306/pimento/`, never taken from
+  the answer. See README › Security and privacy.
+
 ## [0.1.0] - 2026-10-30
 
 The first public release. It covers everything built before it; the development history is in
