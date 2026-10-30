@@ -220,7 +220,7 @@ public enum UpdateCheck {
     public static let maxResponseBytes = 1 << 20
 
     /// The only header that says who asks (GitHub's API requires a User-Agent).
-    public static var userAgent: String { "Pimento/\(AppInfo.version)" }
+    public static var userAgent: String { AppInfo.userAgent }
 
     /// The installer one-liners (README › Install the command-line tool).
     public static let installScript = "curl -fsSL https://raw.githubusercontent.com/Melvin2306/pimento/main/scripts/install.sh | sh"
@@ -271,13 +271,10 @@ public enum UpdateCheck {
     public static func request() -> URLRequest {
         var r = URLRequest(url: endpoint, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData, timeoutInterval: timeout)
         r.httpMethod = "GET"
-        r.httpShouldHandleCookies = false
-        r.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+        // User-Agent (GitHub's API requires one) and a fixed Accept-Language, no cookies.
+        r.setAnonymousClientHeaders()
         r.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         r.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
-        // Otherwise Foundation adds the user's preferred languages: the same
-        // value for everyone instead.
-        r.setValue("en", forHTTPHeaderField: "Accept-Language")
         return r
     }
 

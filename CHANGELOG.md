@@ -85,8 +85,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Security
 
-- The update check sends one HTTPS `GET` to `api.github.com` with only a `User-Agent:
-  Pimento/<version>` header (no cookies, tokens or IDs), with a timeout, through a guard that
+- The update check sends one HTTPS `GET` to `api.github.com` with only `User-Agent:
+  Pimento/<version>` and a fixed `Accept-Language: en` (no cookies, tokens or IDs; the same two
+  headers as the logo fetch), with a timeout, through a guard that
   refuses any other URL or method. The answer is untrusted: a strict version parse, a size limit,
   and links built from the version under `https://github.com/Melvin2306/pimento/`, never taken from
   the answer. See README › Security and privacy.

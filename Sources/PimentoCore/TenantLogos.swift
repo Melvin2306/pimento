@@ -473,7 +473,7 @@ public struct LogoTransport: HTTPTransport {
         self.maxBytes = maxBytes
     }
 
-    public static var userAgent: String { "\(AppInfo.name)/\(AppInfo.version)" }
+    public static var userAgent: String { AppInfo.userAgent }
 
     static let session: URLSession = {
         let config = URLSessionConfiguration.ephemeral
@@ -492,9 +492,7 @@ public struct LogoTransport: HTTPTransport {
     /// and `Accept-Language: en` (otherwise Foundation sends the user's preferred languages).
     static func prepared(_ request: URLRequest) -> URLRequest {
         var request = request
-        request.httpShouldHandleCookies = false
-        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
-        request.setValue("en", forHTTPHeaderField: "Accept-Language")
+        request.setAnonymousClientHeaders()
         return request
     }
 
