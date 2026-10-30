@@ -1,0 +1,23 @@
+Tests/PimentoCoreTests/TenantLogoTests.swift
+  s_4884204a812fec::t_aa29ca19dfb5ac 1-518
+Tests/PimentoCoreTests/TenantMonogramTests.swift
+  s_4884204a812fec::t_d88099833459e5 1-112
+Tests/PimentoCoreTests/PreferencesTests.swift
+  s_4884204a812fec::t_fdd285e070727e 31,49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "916cf5d910d48d6363c34bceddb4b38398cfebb7",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
