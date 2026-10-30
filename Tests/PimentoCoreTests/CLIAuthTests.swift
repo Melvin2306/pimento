@@ -168,8 +168,7 @@ struct CLIAuthTests {
         #expect(h.err.components(separatedBy: "could not save the sign-in settings").count == 3)
     }
 
-    @Test(.enabled(if: LoopbackListener.isSupported, "no loopback listener on Windows"))
-    func loginWithTheBrowserPassesASavedClaimsChallenge() async throws {
+    @Test func loginWithTheBrowserPassesASavedClaimsChallenge() async throws {
         let h = CLIHarness()
         let opened = TestBox<URL>()
         h.signInTransport = fakeLogin { opened.value.flatMap { query($0)["nonce"] } }
@@ -195,8 +194,7 @@ struct CLIAuthTests {
     }
 
     /// No browser could be opened: the URL is printed, to be opened by hand.
-    @Test(.enabled(if: LoopbackListener.isSupported, "no loopback listener on Windows"))
-    func loginPrintsTheURLOnlyWhenNoBrowserOpened() async throws {
+    @Test func loginPrintsTheURLOnlyWhenNoBrowserOpened() async throws {
         let h = CLIHarness()
         let opened = TestBox<URL>()
         h.signInTransport = fakeLogin { opened.value.flatMap { query($0)["nonce"] } }
@@ -215,7 +213,7 @@ struct CLIAuthTests {
         #expect(h.err.contains(url.absoluteString))
     }
 
-    /// Windows has no browser sign-in: `login` uses a device code by itself.
+    /// Where browser sign-in is off, `login` uses a device code by itself.
     @Test func loginWithoutABrowserUsesADeviceCode() async throws {
         let h = CLIHarness()
         h.browserSignIn = false
@@ -228,11 +226,6 @@ struct CLIAuthTests {
         #expect(h.err.contains("Browser sign-in is not available on this platform"))
         #expect(h.err.contains("https://microsoft.com/devicelogin") && h.err.contains("WXYZ-1234"))
         #expect(h.out.contains("Signed in as Test User <test@example.com>"))
-    }
-
-    @Test(.enabled(if: !LoopbackListener.isSupported, "Windows only"))
-    func listenerIsUnavailableOnWindows() {
-        #expect(throws: SignInError.self) { _ = try LoopbackListener() }
     }
 
     @Test func loginNeedsAClientId() async throws {
