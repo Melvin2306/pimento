@@ -36,13 +36,17 @@ public struct EligibleRole: Identifiable, Hashable, Sendable {
     public var activeSince: Date?
     /// The `roleAssignmentSchedules` id of the current activation, if known.
     public var activeScheduleId: String?
+    /// The eligibility the current activation was made with (its instance's
+    /// `linkedRoleEligibilityScheduleId`), if known. With eligibilities both
+    /// direct and through a group, it may be the other row's.
+    public var activeEligibilityScheduleId: String?
 
     public init(
         id: String, eligibilityScheduleId: String, roleDefinitionId: String, roleName: String,
         scope: String, scopeName: String, scopeType: String, membership: Membership,
         condition: String? = nil, conditionVersion: String? = nil,
         isActive: Bool = false, activeUntil: Date? = nil,
-        activeSince: Date? = nil, activeScheduleId: String? = nil
+        activeSince: Date? = nil, activeScheduleId: String? = nil, activeEligibilityScheduleId: String? = nil
     ) {
         self.id = id
         self.eligibilityScheduleId = eligibilityScheduleId
@@ -58,6 +62,7 @@ public struct EligibleRole: Identifiable, Hashable, Sendable {
         self.activeUntil = activeUntil
         self.activeSince = activeSince
         self.activeScheduleId = activeScheduleId
+        self.activeEligibilityScheduleId = activeEligibilityScheduleId
     }
 
     public static let ownerRoleGUID = "8e3af657-a8ff-443c-a75c-2fe8c4bcb635"
@@ -118,6 +123,8 @@ public enum RoleMatcher {
         public var end: Date?
         public var start: Date?
         public var scheduleId: String?
+        /// `linkedRoleEligibilityScheduleId` of the instance.
+        public var eligibilityScheduleId: String?
     }
 
     /// Active (Activated, not yet expired) assignments → latest end time per key.
@@ -136,7 +143,8 @@ public enum RoleMatcher {
             let end = AzureDate.parse(p.endDateTime)
             if let end, end <= now { continue }
             let k = key(scope: p.scope, roleDefinitionId: p.roleDefinitionId)
-            let activation = Activation(end: end, start: AzureDate.parse(p.startDateTime), scheduleId: p.roleAssignmentScheduleId)
+            let activation = Activation(end: end, start: AzureDate.parse(p.startDateTime), scheduleId: p.roleAssignmentScheduleId,
+                                        eligibilityScheduleId: p.linkedRoleEligibilityScheduleId.flatMap { $0.isEmpty ? nil : $0 })
             if let existing = index[k] {
                 // Keep the later expiry; nil (open-ended) wins.
                 guard let current = existing.end else { continue }
@@ -206,7 +214,8 @@ public enum RoleMatcher {
                 isActive: activeEntry != nil,
                 activeUntil: activeEntry?.end,
                 activeSince: activeEntry?.start,
-                activeScheduleId: activeEntry?.scheduleId
+                activeScheduleId: activeEntry?.scheduleId,
+                activeEligibilityScheduleId: activeEntry?.eligibilityScheduleId
             ))
         }
         return rows.sorted {

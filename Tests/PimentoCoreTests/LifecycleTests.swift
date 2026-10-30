@@ -393,7 +393,9 @@ struct RenewServiceTests {
             "SelfDeactivate": [(requestStatus("Revoked", requestType: "SelfDeactivate"), 201)],
             "SelfActivate": [(Data(), -1), (armError("RoleAssignmentExists"), 400)],
         ])
-        await transport.answerGET { ids in self.activeInstance(schedule: ids[1], start: "2026-10-29T11:00:00Z") }
+        await transport.answerGET { ids in
+            ids.count > 1 ? self.activeInstance(schedule: ids[1], start: "2026-10-29T11:00:00Z") : Data(#"{"value":[]}"#.utf8)
+        }
         let outcome = try await run(transport, try plan(owner))
         #expect(outcome == .renewed(until: AzureDate.parse("2026-10-29T13:00:00Z")))
         let sent = await transport.sent
@@ -446,5 +448,101 @@ struct RenewServiceTests {
             "SelfActivate": [(try Fixture.data("success-response"), 201)],
         ])
         guard case .renewed = try await run(transport, try plan(owner)) else { Issue.record("expected renewed"); return }
+    }
+}
+
+@Suite("Deactivation eligibility link")
+struct DeactivationLinkTests {
+    static let scope = "/subscriptions/cccccccc-0000-0000-0000-00000000000c/resourceGroups/rg-app-dev"
+    static let ownerId = "/subscriptions/cccccccc-0000-0000-0000-00000000000c/providers/Microsoft.Authorization/roleDefinitions/8e3af657-a8ff-443c-a75c-2fe8c4bcb635"
+    static let directSchedule = "\(scope)/providers/Microsoft.Authorization/roleEligibilitySchedules/direct"
+    static let groupSchedule = "\(scope)/providers/Microsoft.Authorization/roleEligibilitySchedules/group"
+
+    /// Owner on rg-app-dev, eligible directly and through a group, activated
+    /// through the group's eligibility.
+    static func listings(linked: String? = groupSchedule) throws -> ([EligibilityScheduleInstance], [AssignmentScheduleInstance]) {
+        func eligibility(_ id: String, _ schedule: String, _ member: String) -> String {
+            #"{"id":"\#(id)","properties":{"roleEligibilityScheduleId":"\#(schedule)","scope":"\#(scope)","roleDefinitionId":"\#(ownerId)","memberType":"\#(member)"}}"#
+        }
+        let e = #"{"value":[\#(eligibility("e-direct", directSchedule, "Direct")),\#(eligibility("e-group", groupSchedule, "Group"))]}"#
+        let link = linked.map { #""linkedRoleEligibilityScheduleId":"\#($0)","# } ?? ""
+        let a = #"""
+        {"value":[{"id":"i1","properties":{"roleAssignmentScheduleId":"\#(scope)/providers/Microsoft.Authorization/roleAssignmentSchedules/s1",
+          "assignmentType":"Activated","memberType":"Group",\#(link)"scope":"\#(scope)","roleDefinitionId":"\#(ownerId)",
+          "startDateTime":"2026-10-29T10:00:00Z","endDateTime":"2026-10-29T14:00:00Z"}}]}
+        """#
+        return (try JSONDecoder().decode(ARMList<EligibilityScheduleInstance>.self, from: Data(e.utf8)).value,
+                try JSONDecoder().decode(ARMList<AssignmentScheduleInstance>.self, from: Data(a.utf8)).value)
+    }
+
+    static func linkedId(_ body: Data?) -> String? {
+        let json = body.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+        return (json?["properties"] as? [String: Any])?["linkedRoleEligibilityScheduleId"] as? String
+    }
+
+    @Test func rowsKnowTheEligibilityTheirActivationWasMadeWith() throws {
+        let (e, a) = try Self.listings()
+        let rows = RoleMatcher.rows(eligibilities: e, assignments: a, now: Fixture.now)
+        #expect(rows.count == 2)
+        #expect(rows.allSatisfy { $0.activeEligibilityScheduleId == Self.groupSchedule })
+        #expect(RenewPlan.asEligible(rows[0]).activeEligibilityScheduleId == nil)
+    }
+
+    @Test func theDeactivationSendsTheActivationsEligibilityNotTheRows() throws {
+        let (e, a) = try Self.listings()
+        let rows = RoleMatcher.rows(eligibilities: e, assignments: a, now: Fixture.now)
+        let plans = try ActivationRequestBuilder.deactivationPlan(rows, principalId: Fixture.userOID)
+        #expect(plans.count == 1)
+        // Whichever row is kept, the activation was made with the group's eligibility.
+        #expect(plans[0].body.properties.linkedRoleEligibilityScheduleId == Self.groupSchedule)
+        #expect(Self.linkedId(plans[0].bodyJSON) == Self.groupSchedule)
+    }
+
+    @Test func anUnknownLinkIsReadFromTheActivationBeforeSending() async throws {
+        let (e, unlinked) = try Self.listings(linked: nil)
+        let rows = RoleMatcher.rows(eligibilities: e, assignments: unlinked, now: Fixture.now)
+        #expect(rows.allSatisfy { $0.isActive && $0.activeEligibilityScheduleId == nil })
+        let plans = try ActivationRequestBuilder.deactivationPlan(rows.filter { $0.membership == .direct }, principalId: Fixture.userOID)
+        #expect(plans[0].body.properties.linkedRoleEligibilityScheduleId == Self.directSchedule)
+        let (_, linked) = try Self.listings()
+        let listing = try JSONSerialization.data(withJSONObject: ["value": [[
+            "id": "i1", "properties": [
+                "roleAssignmentScheduleId": "\(Self.scope)/providers/Microsoft.Authorization/roleAssignmentSchedules/s1",
+                "assignmentType": "Activated", "scope": Self.scope, "roleDefinitionId": Self.ownerId,
+                "linkedRoleEligibilityScheduleId": linked[0].properties.linkedRoleEligibilityScheduleId!,
+                "startDateTime": "2026-10-29T10:00:00Z", "endDateTime": "2026-10-29T14:00:00Z"]]]])
+        let transport = RecordingTransport { request in
+            request.httpMethod == "GET" ? (listing, 200) : (Data(#"{"properties":{"status":"Revoked"}}"#.utf8), 201)
+        }
+        let service = PIMService(transport: transport, tokens: StaticTokenProvider(), clock: { Fixture.now })
+        let box = OutcomeBox()
+        try await service.execute(plans) { plan, outcome in box.set(plan.id, outcome) }
+        let sent = await transport.requests
+        #expect(sent.map { $0.httpMethod ?? "" } == ["GET", "PUT"])
+        #expect(Self.linkedId(sent[1].httpBody) == Self.groupSchedule)
+    }
+
+    @Test func aKnownLinkNeedsNoRead() async throws {
+        let (e, a) = try Self.listings()
+        let rows = RoleMatcher.rows(eligibilities: e, assignments: a, now: Fixture.now)
+        let plans = try ActivationRequestBuilder.deactivationPlan(rows, principalId: Fixture.userOID)
+        let transport = RecordingTransport { _ in (Data(#"{"properties":{"status":"Revoked"}}"#.utf8), 201) }
+        let service = PIMService(transport: transport, tokens: StaticTokenProvider(), clock: { Fixture.now })
+        try await service.execute(plans) { _, _ in }
+        #expect(await transport.requests.map { $0.httpMethod ?? "" } == ["PUT"])
+    }
+
+    @Test func aFailedReadSendsTheRowsEligibility() async throws {
+        let (e, unlinked) = try Self.listings(linked: nil)
+        let rows = RoleMatcher.rows(eligibilities: e, assignments: unlinked, now: Fixture.now)
+        let plans = try ActivationRequestBuilder.deactivationPlan(rows.filter { $0.membership == .direct }, principalId: Fixture.userOID)
+        let transport = RecordingTransport { request in
+            request.httpMethod == "GET" ? (Data(), 500) : (Data(#"{"properties":{"status":"Revoked"}}"#.utf8), 201)
+        }
+        let service = PIMService(transport: transport, tokens: StaticTokenProvider(), clock: { Fixture.now })
+        try await service.execute(plans) { _, _ in }
+        let sent = await transport.requests
+        #expect(sent.map { $0.httpMethod ?? "" } == ["GET", "PUT"])
+        #expect(Self.linkedId(sent[1].httpBody) == Self.directSchedule)
     }
 }

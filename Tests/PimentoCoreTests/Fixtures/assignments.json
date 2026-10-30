@@ -4,6 +4,7 @@
    "properties": {
     "roleAssignmentScheduleId": "/SUBSCRIPTIONS/AAAAAAAA-0000-0000-0000-00000000000A//providers/Microsoft.Authorization/roleAssignmentSchedules/a1",
     "assignmentType": "Activated",
+    "linkedRoleEligibilityScheduleId": "/subscriptions/aaaaaaaa-0000-0000-0000-00000000000a/providers/Microsoft.Authorization/roleEligibilitySchedules/sched-1",
     "scope": "/SUBSCRIPTIONS/AAAAAAAA-0000-0000-0000-00000000000A/",
     "roleDefinitionId": "/subscriptions/aaaaaaaa-0000-0000-0000-00000000000a/providers/Microsoft.Authorization/roleDefinitions/8e3af657-a8ff-443c-a75c-2fe8c4bcb635",
     "principalId": "11111111-2222-3333-4444-555555555555",
@@ -34,6 +35,7 @@
    "properties": {
     "roleAssignmentScheduleId": "/subscriptions/bbbbbbbb-0000-0000-0000-00000000000b/providers/Microsoft.Authorization/roleAssignmentSchedules/a3",
     "assignmentType": "Activated",
+    "linkedRoleEligibilityScheduleId": "/subscriptions/bbbbbbbb-0000-0000-0000-00000000000b/providers/Microsoft.Authorization/roleEligibilitySchedules/sched-3",
     "scope": "/subscriptions/bbbbbbbb-0000-0000-0000-00000000000b",
     "roleDefinitionId": "/subscriptions/bbbbbbbb-0000-0000-0000-00000000000b/providers/Microsoft.Authorization/roleDefinitions/b24988ac-6180-42a0-ab88-20f7382dd24c",
     "principalId": "11111111-2222-3333-4444-555555555555",
@@ -49,6 +51,7 @@
    "properties": {
     "roleAssignmentScheduleId": "/subscriptions/cccccccc-0000-0000-0000-00000000000c/resourceGroups/rg-app-dev/providers/Microsoft.Authorization/roleAssignmentSchedules/a4",
     "assignmentType": "Activated",
+    "linkedRoleEligibilityScheduleId": "/subscriptions/cccccccc-0000-0000-0000-00000000000c/resourceGroups/rg-app-dev/providers/Microsoft.Authorization/roleEligibilitySchedules/sched-4",
     "scope": "/subscriptions/cccccccc-0000-0000-0000-00000000000c/resourceGroups/rg-app-dev",
     "roleDefinitionId": "/subscriptions/cccccccc-0000-0000-0000-00000000000c/providers/Microsoft.Authorization/roleDefinitions/8e3af657-a8ff-443c-a75c-2fe8c4bcb635",
     "principalId": "11111111-2222-3333-4444-555555555555",
@@ -64,6 +67,7 @@
    "properties": {
     "roleAssignmentScheduleId": "/subscriptions/cccccccc-0000-0000-0000-00000000000c/resourceGroups/rg-app-dev/providers/Microsoft.Authorization/roleAssignmentSchedules/a5",
     "assignmentType": "Activated",
+    "linkedRoleEligibilityScheduleId": "/subscriptions/cccccccc-0000-0000-0000-00000000000c/resourceGroups/rg-app-dev/providers/Microsoft.Authorization/roleEligibilitySchedules/sched-4",
     "scope": "/subscriptions/cccccccc-0000-0000-0000-00000000000c/resourceGroups/rg-app-dev",
     "roleDefinitionId": "/subscriptions/dddddddd-0000-0000-0000-00000000000d/providers/Microsoft.Authorization/roleDefinitions/8e3af657-a8ff-443c-a75c-2fe8c4bcb635",
     "principalId": "11111111-2222-3333-4444-555555555555",

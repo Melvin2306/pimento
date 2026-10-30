@@ -187,6 +187,7 @@ public final class PIMService: Sendable {
     ) async throws {
         guard !plans.isEmpty else { return }
         let token = try await tokens.accessToken()
+        let plans = await linkingActivations(plans, token: token)
         let limit = max(1, maxConcurrent)
         await withTaskGroup(of: (PlannedRequest, ActivationOutcome).self) { group in
             var pending = plans.makeIterator()
@@ -205,6 +206,21 @@ public final class PIMService: Sendable {
                 await onResult(plan, outcome)
                 if let plan = pending.next() { enqueue(plan) }
             }
+        }
+    }
+
+    /// Deactivations whose activation's eligibility is not known (a row the
+    /// app shows as active before Azure lists it, say) get it from the
+    /// role's current activation, read once for all of them. Everything else,
+    /// and everything when the read fails, is returned as it was.
+    func linkingActivations(_ plans: [PlannedRequest], token: String) async -> [PlannedRequest] {
+        guard plans.contains(where: { $0.needsActivationLink }),
+              let instances: [AssignmentScheduleInstance] = try? await listAll(ARM.assignmentInstancesURL, token: token)
+        else { return plans }
+        let active = RoleMatcher.activations(instances, now: clock())
+        return plans.map { plan in
+            guard plan.needsActivationLink, let linked = active[plan.role.policyKey]?.eligibilityScheduleId else { return plan }
+            return plan.linked(to: linked)
         }
     }
 
@@ -245,6 +261,8 @@ public final class PIMService: Sendable {
     ) async throws {
         guard !plans.isEmpty else { return }
         let token = try await tokens.accessToken()
+        let linked = await linkingActivations(plans.map(\.deactivation), token: token)
+        let plans = zip(plans, linked).map { $0.with(deactivation: $1) }
         let limit = max(1, maxConcurrent)
         await withTaskGroup(of: (RenewPlan, ActivationOutcome, String?).self) { group in
             var pending = plans.makeIterator()

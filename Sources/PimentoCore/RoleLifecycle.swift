@@ -139,7 +139,14 @@ public struct RenewPlan: Identifiable, Sendable, Equatable {
         r.activeUntil = nil
         r.activeSince = nil
         r.activeScheduleId = nil
+        r.activeEligibilityScheduleId = nil
         return r
+    }
+
+    /// The same renewal with `deactivation` (the eligibility link resolved).
+    func with(deactivation: PlannedRequest) -> RenewPlan {
+        RenewPlan(role: role, principalId: principalId, justification: justification, duration: duration, ticket: ticket,
+                  deactivation: deactivation, plannedActivation: plannedActivation)
     }
 
     /// PIM still holds the old assignment (or the deactivation request) for a

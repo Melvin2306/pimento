@@ -131,6 +131,19 @@ public struct PlannedRequest: Identifiable, Sendable, Equatable {
 
     public var bodyJSON: Data { ActivationRequestBuilder.encode(body) }
 
+    /// A deactivation that does not know which eligibility its activation
+    /// was made with.
+    var needsActivationLink: Bool { action == .deactivate && role.activeEligibilityScheduleId == nil }
+
+    /// This deactivation for an activation made with eligibility `id`.
+    func linked(to id: String) -> PlannedRequest {
+        var role = role
+        role.activeEligibilityScheduleId = id
+        guard let body = try? ActivationRequestBuilder.deactivationBody(
+            for: role, principalId: body.properties.principalId, justification: body.properties.justification) else { return self }
+        return PlannedRequest(role: role, url: url, body: body, requestedAt: requestedAt, duration: duration, action: action, start: start)
+    }
+
     public var prettyBody: String { String(decoding: bodyJSON, as: UTF8.self) }
 }
 
@@ -198,7 +211,8 @@ public enum ActivationRequestBuilder {
     public static let defaultDeactivationJustification = "Ended early with Pimento"
 
     /// `SelfDeactivate` for the activation of `role`. No schedule; the
-    /// eligibility and any condition are those the activation was made with.
+    /// eligibility (`activeEligibilityScheduleId`, else the row's) and any
+    /// condition are those the activation was made with.
     public static func deactivationBody(
         for role: EligibleRole, principalId: String, justification: String = ""
     ) throws -> ActivationRequestBody {
@@ -210,7 +224,7 @@ public enum ActivationRequestBuilder {
             principalId: principalId,
             roleDefinitionId: role.roleDefinitionId,
             requestType: RequestAction.deactivate.requestType,
-            linkedRoleEligibilityScheduleId: role.eligibilityScheduleId,
+            linkedRoleEligibilityScheduleId: role.activeEligibilityScheduleId ?? role.eligibilityScheduleId,
             justification: text.isEmpty ? defaultDeactivationJustification : text,
             scheduleInfo: nil,
             condition: condition,
