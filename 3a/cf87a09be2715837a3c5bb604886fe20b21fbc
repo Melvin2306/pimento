@@ -1,0 +1,47 @@
+CHANGELOG.md
+  s_4884204a812fec::t_a2972c24e5fa5e 25-27
+Sources/PimentoApp/AccountViews.swift
+  s_4884204a812fec::t_2a2abdfb61b212 184
+README.md
+  s_4884204a812fec::t_a2972c24e5fa5e 668-669,677
+Sources/PimentoApp/AccountModel.swift
+  s_4884204a812fec::t_2a2abdfb61b212 98
+Tests/PimentoCoreTests/DemoIsolationTests.swift
+  s_4884204a812fec::t_7415d4f92d5f5e 151,153,159
+  s_4884204a812fec::t_2a2abdfb61b212 143-150,152,154-158,160-162
+Sources/PimentoCore/SignIn/BrowserLaunch.swift
+  s_4884204a812fec::t_235b6204fc28ea 103,113-123
+  s_4884204a812fec::t_26bcb5aa10dbe5 124-125
+Sources/PimentoCore/Demo/NetworkGuard.swift
+  s_4884204a812fec::t_4f3ec4684b989b 44
+  s_4884204a812fec::t_235b6204fc28ea 5-7,40-43
+Sources/pimento/main.swift
+  s_4884204a812fec::t_235b6204fc28ea 155
+Tests/PimentoCoreTests/DemoAppSourceTests.swift
+  s_4884204a812fec::t_2a2abdfb61b212 46-57
+Sources/PimentoApp/DemoSupport.swift
+  s_4884204a812fec::t_5523ee54d12ee2 265-267
+  s_4884204a812fec::t_2a2abdfb61b212 261-264,268-270
+  h_464ee3ce4ea982 300,302
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3acf87a09be2715837a3c5bb604886fe20b21fbc",
+  "prompts": {},
+  "humans": {
+    "h_464ee3ce4ea982": {
+      "author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  },
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}

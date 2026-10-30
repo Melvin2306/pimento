@@ -1,0 +1,54 @@
+Sources/PimentoApp/DemoSupport.swift
+  s_4884204a812fec::t_b74bff5cfd5e16 1-280,283-287,304-335,337,340,342,344-346
+  s_4884204a812fec::t_a8c1b1c445fda5 336,338-339,341,343,347-353
+  s_4884204a812fec::t_d180528cb30aff 281-282,288-289,291,293-303
+Sources/PimentoApp/AccountModel.swift
+  s_4884204a812fec::t_bf7d2f318b0858 24,82-94
+Sources/PimentoApp/AppModel.swift
+  s_4884204a812fec::t_16d919c82226df 68,113,132,142-143,249,278-294,308,332,338,343,346-351,353,356-358,362,471,474,479,485,490,497,502,526,575,797,823,859-861,872,878,897,900,909,986,1187,1199,1227,1331,1654,1691,1712,1814,1839,1886-1887,1893,1898,1911
+Sources/PimentoApp/ApprovalViews.swift
+  s_4884204a812fec::t_0cd39f2f3321aa 140,152,263
+Sources/PimentoApp/ContentView.swift
+  s_4884204a812fec::t_b2c34ccb6c8ccb 124-128,397
+Sources/PimentoApp/HistoryViews.swift
+  s_4884204a812fec::t_5776cc3e6be700 357,362-369
+Sources/PimentoApp/MenuBarModel.swift
+  s_4884204a812fec::t_603b1a93751ef5 117-121
+Sources/PimentoApp/MenuBarViews.swift
+  s_4884204a812fec::t_cc0fe54e66b4a2 40,54,64,74-76,237-240,270
+Sources/PimentoApp/Notifier.swift
+  s_4884204a812fec::t_729dcbc298dbe1 40,42-43,101-103,120,125,127,139,155,158,172,175-176,185-186,229,240-242,246,333-337
+Sources/PimentoApp/ScheduleViews.swift
+  s_4884204a812fec::t_692951e18d7339 22,65,260,264
+Sources/PimentoApp/main.swift
+  s_4884204a812fec::t_03e0ca553cdcf1 14-17,25-30,60,75,77,121
+Sources/PimentoCore/HistoryImport.swift
+  s_4884204a812fec::t_71f2cb493546d3 82
+Sources/PimentoCore/PIMService.swift
+  s_4884204a812fec::t_4677eab891d8a5 158-160
+Sources/PimentoCore/ScheduledRequest.swift
+  s_4884204a812fec::t_794c2143ddeedb 314,320-322
+Sources/PimentoApp/SettingsView.swift
+  s_4884204a812fec::t_d180528cb30aff 91
+Sources/PimentoApp/AppearanceSettings.swift
+  s_4884204a812fec::t_5cbf4e572dd965 290
+Tests/PimentoCoreTests/DemoAppSourceTests.swift
+  s_4884204a812fec::t_d93c32fe241757 1-49
+  s_4884204a812fec::t_8da5231d76b7d8 50-52
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "003806fdea678c4817ccc0fc08c6b0538be38904",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
