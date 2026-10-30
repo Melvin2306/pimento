@@ -525,7 +525,7 @@ extension CLIRunner {
             return notFound.isEmpty && unsendable.isEmpty ? .success : .failure
         }
         if confirm == .ask {
-            env.write("\(o.decision.rawValue) \(CLIFormat.plural(sendable.count, "request"))\(o.decision == .approve && owners > 0 ? ", including \(owners) Owner" : "")? [y/N] ", .err)
+            write("\(o.decision.rawValue) \(CLIFormat.plural(sendable.count, "request"))\(o.decision == .approve && owners > 0 ? ", including \(owners) Owner" : "")? [y/N] ", .err)
             guard ConfirmationPolicy.isYes(env.readLine()) else {
                 err("Nothing was sent.")
                 return .failure

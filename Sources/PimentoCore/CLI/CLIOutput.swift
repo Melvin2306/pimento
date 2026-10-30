@@ -23,6 +23,98 @@ public struct TerminalStyle: Equatable, Sendable {
     public func boldRed(_ s: String) -> String { wrap(s, "1;31") }
 }
 
+/// Makes text safe for a terminal. Much of what the CLI shows comes from
+/// other people: a requester's justification and ticket, role, resource,
+/// group and tenant names, Azure's error messages. Raw, a carriage return
+/// could overwrite a table row just before a `[y/N]` prompt, an escape
+/// sequence could hide text, set the clipboard or fake a link, and a bidi
+/// override could reorder what is shown. Every such character is shown as a
+/// visible escape instead (`\r`, `\e`, `\u{202E}`).
+public enum TerminalText {
+    /// The colour codes `TerminalStyle` writes; nothing else passes `output`.
+    static let styleSequences: [[Unicode.Scalar]] = ["0", "1", "2", "31", "32", "33", "1;31"].map {
+        Array("\u{1B}[\($0)m".unicodeScalars)
+    }
+
+    /// C0 and C1 controls, DEL, bidi embeddings, overrides, isolates and
+    /// marks, and the Unicode line and paragraph separators.
+    static func isUnsafe(_ s: Unicode.Scalar) -> Bool {
+        switch s.value {
+        case 0x00...0x1F, 0x7F...0x9F: true
+        case 0x061C, 0x200E, 0x200F, 0x202A...0x202E, 0x2066...0x2069, 0x2028, 0x2029: true
+        default: false
+        }
+    }
+
+    static func visible(_ s: Unicode.Scalar) -> String {
+        switch s.value {
+        case 0x0A: "\\n"
+        case 0x0D: "\\r"
+        case 0x09: "\\t"
+        case 0x1B: "\\e"
+        case 0x07: "\\a"
+        case 0x08: "\\b"
+        default: "\\u{" + String(s.value, radix: 16, uppercase: true) + "}"
+        }
+    }
+
+    /// Text from elsewhere, for one line or cell: every unsafe character
+    /// (line breaks and tabs too) escaped.
+    public static func sanitize(_ text: String) -> String {
+        guard text.unicodeScalars.contains(where: isUnsafe) else { return text }
+        var out = String.UnicodeScalarView()
+        for scalar in text.unicodeScalars {
+            if isUnsafe(scalar) { out.append(contentsOf: visible(scalar).unicodeScalars) } else { out.append(scalar) }
+        }
+        return String(out)
+    }
+
+    /// What the CLI writes to stdout or stderr: line breaks and tabs stay,
+    /// and with `keepStyles` the exact colour codes `TerminalStyle` writes;
+    /// every other unsafe character is escaped. The last line of defence for
+    /// text interpolated into messages.
+    public static func output(_ text: String, keepStyles: Bool) -> String {
+        guard text.unicodeScalars.contains(where: { isUnsafe($0) && $0 != "\n" && $0 != "\t" }) else { return text }
+        let scalars = Array(text.unicodeScalars)
+        var out = String.UnicodeScalarView()
+        var i = 0
+        outer: while i < scalars.count {
+            let scalar = scalars[i]
+            if scalar == "\u{1B}", keepStyles {
+                for sequence in styleSequences where scalars[i...].starts(with: sequence) {
+                    out.append(contentsOf: sequence)
+                    i += sequence.count
+                    continue outer
+                }
+            }
+            if isUnsafe(scalar), scalar != "\n", scalar != "\t" {
+                out.append(contentsOf: visible(scalar).unicodeScalars)
+            } else {
+                out.append(scalar)
+            }
+            i += 1
+        }
+        return String(out)
+    }
+
+    /// JSON text with DEL, C1 controls, bidi characters and line separators
+    /// written as `\uXXXX` escapes: the same values, harmless on a terminal.
+    /// (JSONEncoder escapes C0 controls itself; these occur only in strings.)
+    public static func json(_ text: String) -> String {
+        guard text.unicodeScalars.contains(where: { isUnsafe($0) && $0.value >= 0x7F }) else { return text }
+        var out = String.UnicodeScalarView()
+        for scalar in text.unicodeScalars {
+            if isUnsafe(scalar), scalar.value >= 0x7F {
+                let hex = String(scalar.value, radix: 16)
+                out.append(contentsOf: ("\\u" + String(repeating: "0", count: 4 - hex.count) + hex).unicodeScalars)
+            } else {
+                out.append(scalar)
+            }
+        }
+        return String(out)
+    }
+}
+
 /// Aligned plain-text columns. Widths come from the content; on a terminal
 /// the flexible columns shrink (with "…") to fit `maxWidth`.
 public struct TextTable: Sendable {
@@ -32,8 +124,9 @@ public struct TextTable: Sendable {
         public var text: String
         public var tone: Tone
 
+        /// `text` is shown as given, with controls escaped (`TerminalText`).
         public init(_ text: String, _ tone: Tone = .plain) {
-            self.text = text
+            self.text = TerminalText.sanitize(text)
             self.tone = tone
         }
     }
@@ -473,6 +566,6 @@ public enum CLIJSON {
     public static func encode<T: Encodable>(_ value: T) -> String {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-        return String(decoding: (try? encoder.encode(value)) ?? Data("{}".utf8), as: UTF8.self)
+        return TerminalText.json(String(decoding: (try? encoder.encode(value)) ?? Data("{}".utf8), as: UTF8.self))
     }
 }

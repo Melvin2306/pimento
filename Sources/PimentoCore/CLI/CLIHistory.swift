@@ -44,7 +44,7 @@ extension CLIRunner {
             return .success
         }
         if o.csv {
-            env.write(HistoryCSV.encode(shown, timeZone: env.timeZone), .out)
+            csvOut(HistoryCSV.encode(shown, timeZone: env.timeZone))
             return .success
         }
         guard !shown.isEmpty else {
@@ -101,7 +101,7 @@ extension CLIRunner {
         let matching = filter.apply(store.records(now: env.now()))
         let records = o.limit.map { Array(matching.prefix($0)) } ?? matching
         if file == "-" {
-            env.write(HistoryCSV.encode(records, timeZone: env.timeZone), .out)
+            csvOut(HistoryCSV.encode(records, timeZone: env.timeZone))
             return .success
         }
         let url = URL(fileURLWithPath: PimentoPaths.expandTilde(file))
@@ -156,7 +156,7 @@ extension CLIRunner {
         let policy = ConfirmationPolicy.decide(dryRun: false, assumeYes: assumeYes, interactive: env.stdinIsTTY)
         if policy == .refuse { throw CLIParseError.clearNeedsConfirmation }
         if policy == .ask {
-            env.write("Delete all \(CLIFormat.plural(count, "history record")) in \(store.url.path)? [y/N] ", .err)
+            write("Delete all \(CLIFormat.plural(count, "history record")) in \(store.url.path)? [y/N] ", .err)
             guard ConfirmationPolicy.isYes(env.readLine()) else {
                 err("Cancelled. Nothing was deleted.")
                 return .failure

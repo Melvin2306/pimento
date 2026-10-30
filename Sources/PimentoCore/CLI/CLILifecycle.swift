@@ -175,7 +175,7 @@ extension CLIRunner {
             return selection.tooSoon.isEmpty ? .success : .failure
         }
         if confirm == .ask {
-            env.write("Deactivate \(CLIFormat.plural(plans.count, "role"))\(owners > 0 ? ", including \(owners) Owner" : "")? [y/N] ", .err)
+            write("Deactivate \(CLIFormat.plural(plans.count, "role"))\(owners > 0 ? ", including \(owners) Owner" : "")? [y/N] ", .err)
             guard ConfirmationPolicy.isYes(env.readLine()) else {
                 err("Cancelled. Nothing was sent.")
                 return .failure
@@ -315,7 +315,7 @@ extension CLIRunner {
             return outcomes.isEmpty ? .success : .failure
         }
         if confirm == .ask {
-            env.write("Renew \(CLIFormat.plural(plans.count, "role"))\(owners > 0 ? ", including \(owners) Owner" : "") (off for a few minutes)? [y/N] ", .err)
+            write("Renew \(CLIFormat.plural(plans.count, "role"))\(owners > 0 ? ", including \(owners) Owner" : "") (off for a few minutes)? [y/N] ", .err)
             guard ConfirmationPolicy.isYes(env.readLine()) else {
                 err("Cancelled. Nothing was sent.")
                 return .failure
@@ -409,7 +409,7 @@ extension CLIRunner {
             return .success
         }
         if confirm == .ask {
-            env.write("Request \(CLIFormat.plural(plans.count, "extension"))? [y/N] ", .err)
+            write("Request \(CLIFormat.plural(plans.count, "extension"))? [y/N] ", .err)
             guard ConfirmationPolicy.isYes(env.readLine()) else {
                 err("Cancelled. Nothing was sent.")
                 return .failure

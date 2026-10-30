@@ -158,8 +158,19 @@ public struct CLIRunner: Sendable {
     /// The command that fixes a sign-in error.
     func loginHint(tenant: String?) -> String { "hint: sign in with `\(auth.loginCommand(tenant: tenant))`" }
 
-    func out(_ s: String = "") { env.write(s + "\n", .out) }
-    func err(_ s: String) { env.write(s + "\n", .err) }
+    /// Every line the CLI writes goes through `TerminalText.output`: text from
+    /// Azure, Entra or other people cannot move the cursor, hide text or
+    /// reorder it (JSON is already escaped).
+    func out(_ s: String = "") { write(s + "\n", .out) }
+    func err(_ s: String) { write(s + "\n", .err) }
+    func write(_ s: String, _ stream: CLIEnvironment.Stream) {
+        env.write(TerminalText.output(s, keepStyles: (stream == .out ? outStyle : errStyle).colors), stream)
+    }
+    /// CSV on stdout: exact when piped or redirected (it is data), escaped
+    /// like any other output on a terminal.
+    func csvOut(_ csv: String) {
+        env.write(env.stdoutIsTTY ? TerminalText.output(csv, keepStyles: false) : csv, .out)
+    }
 
     public func run(_ arguments: [String]) async -> Int32 {
         let invocation: CLIInvocation
@@ -577,7 +588,7 @@ public struct CLIRunner: Sendable {
         }
 
         if policy == .ask {
-            env.write("\(start == nil ? "Activate" : "Schedule") \(CLIFormat.plural(plans.count, "role"))\(owners > 0 ? ", including \(owners) Owner" : "")? [y/N] ", .err)
+            write("\(start == nil ? "Activate" : "Schedule") \(CLIFormat.plural(plans.count, "role"))\(owners > 0 ? ", including \(owners) Owner" : "")? [y/N] ", .err)
             guard ConfirmationPolicy.isYes(env.readLine()) else {
                 err("Cancelled. Nothing was sent.")
                 return .failure

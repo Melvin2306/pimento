@@ -386,6 +386,12 @@ All notable changes to this project are documented here. The format follows
   answer the loopback redirect with a code for their own account. macOS opens it through
   LaunchServices without a child process; Linux runs `xdg-open` on a private redirect page (mode 600
   in a new 700 folder in the temporary directory), removed when the sign-in is over.
+- The CLI shows text that comes from others (a requester's justification and ticket, role, resource,
+  group and tenant names, Azure's error messages, an approver's reason) with control characters, escape
+  sequences and bidi overrides as visible escapes (`\r`, `\e`, `\u{202E}`). Before, a carriage return
+  in a justification could overwrite the row shown just before `approve`'s `[y/N]`, and escape
+  sequences could hide text, set the clipboard or fake links. `--json` keeps the exact values (DEL, C1
+  and bidi characters are now written as `\uXXXX`); CSV on stdout is exact when piped.
 
 ## [0.1.0] - 2026-10-29
 

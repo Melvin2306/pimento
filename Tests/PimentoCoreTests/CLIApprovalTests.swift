@@ -408,3 +408,93 @@ struct CLIApproverTests {
         #expect(empty.err.contains("You have no approvals to review."))
     }
 }
+
+@Suite("CLI: text from others is shown, not obeyed by the terminal")
+struct CLITerminalSafetyTests {
+    /// Raw characters that must never reach the terminal from someone else's text.
+    static let raw: [Character] = ["\r", "\u{1B}", "\u{07}", "\u{9B}", "\u{202E}", "\u{2066}", "\u{200F}", "\u{7F}"]
+
+    /// No raw character from `raw`, once Pimento's own colour codes are taken out.
+    static func clean(_ text: String) -> Bool {
+        var text = text
+        for code in ["0", "1", "2", "31", "32", "33", "1;31"] { text = text.replacingOccurrences(of: "\u{1B}[\(code)m", with: "") }
+        // CR is checked by scalar: "\r\n" is one Character.
+        return !text.unicodeScalars.contains { s in raw.contains { $0.unicodeScalars.first == s } }
+    }
+
+    @Test func sanitiserEscapesControlsEscapesAndBidi() {
+        #expect(TerminalText.sanitize("plain · text ✓") == "plain · text ✓")
+        #expect(TerminalText.sanitize("a\rb") == "a\\rb")
+        #expect(TerminalText.sanitize("a\r\nb\tc") == "a\\r\\nb\\tc")
+        #expect(TerminalText.sanitize("\u{1B}]52;c;ZXZpbA==\u{07}") == "\\e]52;c;ZXZpbA==\\a")
+        #expect(TerminalText.sanitize("x\u{9B}31my\u{7F}") == "x\\u{9B}31my\\u{7F}")
+        #expect(TerminalText.sanitize("evil\u{202E}txt.exe\u{2066}\u{200E}") == "evil\\u{202E}txt.exe\\u{2066}\\u{200E}")
+        // Output keeps line breaks, tabs and (only when colours are on) Pimento's own colour codes.
+        let ours = TerminalStyle(colors: true).red("failed") + "\tline\n"
+        #expect(TerminalText.output(ours, keepStyles: true) == ours)
+        #expect(TerminalText.output(ours, keepStyles: false) == "\\e[31mfailed\\e[0m\tline\n")
+        // Anything else that starts with ESC is escaped, colours on or not.
+        #expect(TerminalText.output("\u{1B}[8mhidden\u{1B}[2K\r", keepStyles: true) == "\\e[8mhidden\\e[2K\\r")
+        #expect(TerminalText.output("\u{1B}]8;;https://evil.example\u{1B}\\link", keepStyles: true) == "\\e]8;;https://evil.example\\e\\link")
+        // JSON: the same values, written as escapes.
+        let json = CLIJSON.encode(["name": "a\u{202E}b\u{85}c\u{1B}d"])
+        #expect(Self.clean(json) && !json.contains("\u{85}"))
+        #expect(json.contains(#"a\u202eb\u0085c\u001bd"#) || json.contains(#"a\u202eb\u0085c\u001Bd"#))
+        let decoded = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: String]
+        #expect(decoded?["name"] == "a\u{202E}b\u{85}c\u{1B}d")
+    }
+
+    /// The report's case: a justification that starts with CR and repeats a
+    /// harmless row. On a terminal it would overwrite the real row (User
+    /// Access Administrator on production) just before `[y/N]`.
+    @Test func aCarriageReturnCannotOverwriteTheRowBeforeThePrompt() async throws {
+        let name = "f6f6f6f6-0000-4000-8000-000000000016"
+        var item = CLIApproverTests.inboxItem(name: name, roleGUID: "18d7d88d-d35e-4fb5-a5c3-7773c20a72d9",
+                                              roleName: "User Access Administrator", scopeName: "Contoso Production")
+        var props = try #require(item["properties"] as? [String: Any])
+        props["justification"] = "\r\(name.prefix(8))  Dummy Requester  Reader  Contoso Sandbox  8 h  read-only audit.\u{1B}[8m"
+        props["ticketInfo"] = ["ticketNumber": "T\u{1B}]52;c;ZXZpbA==\u{07}", "ticketSystem": "\u{1B}]8;;https://evil.example\u{1B}\\x"]
+        item["properties"] = props
+        let listing = try JSONSerialization.data(withJSONObject: ["value": [item]])
+        for colours in [false, true] {
+            let h = CLIHarness(answers: ["n"])
+            h.stdinIsTTY = true
+            h.stdoutIsTTY = colours
+            h.width = 400
+            h.get = { request in request.url!.absoluteString.contains("asApprover()") ? (listing, 200) : nil }
+            #expect(await h.run("approve", "f6f6", "-j", "ok") == 1)
+            #expect(Self.clean(h.out) && Self.clean(h.err))
+            #expect(!h.out.contains("\u{1B}[8m") && !h.out.contains("\u{1B}]"))
+            #expect(h.out.contains("User Access Administrator") && h.out.contains("Contoso Production"))
+            #expect(h.out.contains("\\rf6f6f6f6  Dummy Requester  Reader"))
+            #expect(h.err.contains("Approve 1 request? [y/N]"))
+            #expect(await h.transport.requests.filter { $0.httpMethod == "PATCH" }.isEmpty)
+
+            let list = CLIHarness()
+            list.stdoutIsTTY = colours
+            list.get = h.get
+            #expect(await list.run("approvals") == 0)
+            #expect(Self.clean(list.out) && Self.clean(list.err))
+            #expect(list.out.contains("\\e]52;c;ZXZpbA==\\a"))
+        }
+        // --json keeps the exact values, escaped as JSON.
+        let json = CLIHarness()
+        json.get = { request in request.url!.absoluteString.contains("asApprover()") ? (listing, 200) : nil }
+        #expect(await json.run("approvals", "--json") == 0)
+        #expect(Self.clean(json.out))
+        let doc = try #require(try JSONSerialization.jsonObject(with: Data(json.out.utf8)) as? [String: Any])
+        let request = try #require((doc["requests"] as? [[String: Any]])?.first)
+        #expect((request["justification"] as? String)?.hasPrefix("\r") == true)
+    }
+
+    /// Names and messages interpolated into result lines and errors.
+    @Test func errorMessagesAndNamesInResultLinesAreEscaped() async throws {
+        let h = CLIHarness(put: { _ in
+            (Data(#"{"error":{"code":"RoleAssignmentRequestPolicyValidationFailed","message":"bad\r\u001b[2Kfine \u202Etxt"}}"#.utf8), 400)
+        })
+        h.stdoutIsTTY = true
+        #expect(await h.run("activate", "staging", "-j", "x", "--yes") == 1)
+        #expect(Self.clean(h.out) && Self.clean(h.err))
+        #expect((h.out + h.err).contains("bad\\r\\e[2Kfine \\u{202E}txt"))
+    }
+}

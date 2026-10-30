@@ -242,7 +242,7 @@ extension CLIRunner {
             return selection.unknownIds.isEmpty ? .success : .failure
         }
         if confirm == .ask {
-            env.write("Cancel \(CLIFormat.plural(selection.requests.count, "request"))? [y/N] ", .err)
+            write("Cancel \(CLIFormat.plural(selection.requests.count, "request"))? [y/N] ", .err)
             guard ConfirmationPolicy.isYes(env.readLine()) else {
                 err("Nothing was cancelled.")
                 return .failure
