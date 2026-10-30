@@ -1,0 +1,26 @@
+Tests/PimentoCoreTests/MCPTests.swift
+  s_4884204a812fec::t_6552f2547aee5c 1-846
+  s_4884204a812fec::t_a3f4e4119c4635 847-876
+Sources/PimentoCore/MCP/JSONValue.swift
+  s_4884204a812fec::t_ac382baa09b87a 261-262
+Sources/PimentoCore/MCP/MCPServer.swift
+  s_4884204a812fec::t_dc0cc34d3354d6 28,355-359,385,473-477
+Sources/PimentoCore/MCP/MCPTools.swift
+  s_4884204a812fec::t_84e467ff07c379 690-692,711,715-716,739
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f3857da0beb0562e63b9583bf736c5ef87752dee",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
