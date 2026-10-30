@@ -6,8 +6,9 @@
 #   Windows  build/pimento-cli-<version>-windows-<arch>.zip       (Git Bash) with the Swift runtime DLLs
 #
 # Each holds pimento (pimento.exe and its DLLs), LICENSE, README.md (the
-# command-line part of the README) and, on macOS and Linux, completions/
-# (_pimento, pimento.bash, pimento.fish). The SHA-256 of the archive is printed last.
+# command-line part of the README) and completions/: _pimento, pimento.bash and
+# pimento.fish on macOS and Linux, pimento.ps1 (PowerShell) on Windows. The
+# SHA-256 of the archive is printed last.
 #
 #   scripts/package-cli.sh              # macOS: universal binary
 #   scripts/package-cli.sh --host-arch  # macOS: only this Mac's architecture (faster)
@@ -100,8 +101,11 @@ if [[ $OS == windows ]]; then
 else
   "$STAGE/$EXE" version >/dev/null
 fi
-if [[ $OS != windows ]]; then
-  mkdir -p "$STAGE/completions"
+mkdir -p "$STAGE/completions"
+if [[ $OS == windows ]]; then
+  "$STAGE/$EXE" completions powershell > "$STAGE/completions/pimento.ps1"
+  grep -q Register-ArgumentCompleter "$STAGE/completions/pimento.ps1"
+else
   "$STAGE/$EXE" completions zsh > "$STAGE/completions/_pimento"
   "$STAGE/$EXE" completions bash > "$STAGE/completions/pimento.bash"
   "$STAGE/$EXE" completions fish > "$STAGE/completions/pimento.fish"
@@ -127,7 +131,8 @@ cp LICENSE "$STAGE/LICENSE"
     windows)
       echo "Keep \`pimento.exe\` and the DLLs next to it together, in a folder on your PATH."
       echo "It needs the Microsoft Visual C++ Redistributable (most systems have it). Files live in \`%APPDATA%\\Pimento\`."
-      echo "Browser sign-in is not available on Windows: \`pimento login\` uses a device code."
+      echo "PowerShell completions are in \`completions\\pimento.ps1\`: dot-source it from your \`\$PROFILE\`"
+      echo "(\`scripts/install.ps1\` does that for you). cmd.exe has no programmable completion."
       ;;
   esac
   echo
