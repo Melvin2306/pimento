@@ -37,10 +37,15 @@ public actor TokenBroker {
 
     public func accounts() throws -> [SignedInAccount] { try store.accounts() }
 
-    /// `id`, or the most recent account when `id` is nil or gone.
+    /// The account `id`, or the most recent one when `id` is nil. An `id`
+    /// that is gone (signed out, perhaps by another process) is an error:
+    /// tokens never silently come from another account.
     public func account(_ id: String?) throws -> SignedInAccount {
         let all = try store.accounts()
-        if let id, let match = all.first(where: { $0.id == id }) { return match }
+        if let id {
+            guard let match = all.first(where: { $0.id == id }) else { throw SignInError.notSignedIn }
+            return match
+        }
         guard let latest = all.first else { throw SignInError.notSignedIn }
         return latest
     }

@@ -821,7 +821,9 @@ struct TokenBrokerTests {
         try store.save(newer, refreshToken: "y")
         #expect(try await broker.account(nil) == newer)
         #expect(try await broker.account(older.id) == older)
-        #expect(try await broker.account("gone") == newer)
+        // The chosen account is gone: an error, never another account's tokens.
+        await #expect(throws: SignInError.notSignedIn) { _ = try await broker.account("gone") }
+        await #expect(throws: SignInError.notSignedIn) { _ = try await broker.accessToken(accountId: "gone", tenantId: nil) }
         older.name = "Older"
         #expect(older.displayName == "Older <a>")
     }
