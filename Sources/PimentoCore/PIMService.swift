@@ -80,15 +80,47 @@ public struct ReadOnlyTransport: HTTPTransport {
     }
 }
 
-public enum PIMServiceError: Error, LocalizedError {
+public enum PIMServiceError: Error, LocalizedError, Equatable {
     case http(Int, String)
     case noIdentity
+    /// A listing went on past `ARM.maxPages` pages or `ARM.maxItems` items,
+    /// or its `nextLink` came back to a page already read.
+    case listingTooLong(String)
 
     public var errorDescription: String? {
         switch self {
         case .http(let status, let message): "ARM returned HTTP \(status): \(message)"
         case .noIdentity: "The az token has no `oid` claim — cannot tell who you are."
+        case .listingTooLong(let why): "Azure's listing did not end: \(why). Pimento stopped instead of showing part of it."
         }
+    }
+}
+
+/// Counts the pages and items of one listing against `ARM.maxPages` /
+/// `ARM.maxItems` and notices a `nextLink` that leads back to a page read before.
+struct PageBudget {
+    var maxPages = ARM.maxPages
+    var maxItems = ARM.maxItems
+    private(set) var pages = 0
+    private(set) var items = 0
+    private var seen = Set<String>()
+
+    init(maxPages: Int = ARM.maxPages, maxItems: Int = ARM.maxItems) {
+        self.maxPages = maxPages
+        self.maxItems = maxItems
+    }
+
+    /// Before reading `url`.
+    mutating func read(_ url: URL) throws {
+        guard seen.insert(url.absoluteString).inserted else { throw PIMServiceError.listingTooLong("a page linked back to an earlier one") }
+        guard pages < maxPages else { throw PIMServiceError.listingTooLong("more than \(maxPages) pages") }
+        pages += 1
+    }
+
+    /// After a page with `count` items.
+    mutating func add(_ count: Int) throws {
+        items += count
+        guard items <= maxItems else { throw PIMServiceError.listingTooLong("more than \(maxItems) items") }
     }
 }
 
@@ -168,12 +200,12 @@ public final class PIMService: Sendable {
                             timeBoundAssignments: RoleMatcher.timeBoundAssignments(active, now: now))
     }
 
-    func listAll<Item: Decodable>(_ first: URL, token: String) async throws -> [Item] {
+    func listAll<Item: Decodable>(_ first: URL, token: String, budget: PageBudget = PageBudget()) async throws -> [Item] {
         var items: [Item] = []
         var next: URL? = first
-        var pages = 0
-        while let url = next, pages < 100 {
-            pages += 1
+        var budget = budget
+        while let url = next {
+            try budget.read(url)
             var request = URLRequest(url: url, timeoutInterval: 60)
             request.httpMethod = "GET"
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -182,6 +214,7 @@ public final class PIMService: Sendable {
                 throw PIMServiceError.http(status, ARMErrorEnvelope.describe(data) ?? String(decoding: data.prefix(300), as: UTF8.self))
             }
             let page = try JSONDecoder().decode(ARMList<Item>.self, from: data)
+            try budget.add(page.value.count)
             items += page.value
             // Only follow pagination links back to ARM, never send the token elsewhere.
             next = ARM.followableNextLink(page.nextLink)

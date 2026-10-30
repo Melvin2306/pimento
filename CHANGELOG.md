@@ -498,6 +498,13 @@ All notable changes to this project are documented here. The format follows
   (16 MB, stderr 1 MB; beyond that az is ended), and the SIGKILL that follows a timeout's SIGTERM
   is cancelled once az's process group let go of its output. On Linux, `xdg-open` is likewise
   looked up only in absolute `PATH` folders.
+- Listings stop with an error instead of being cut short without a word: more than 100 pages or
+  20,000 items, or a `nextLink` back to a page already read, is "Azure's listing did not end"
+  (before, the 101st page and beyond were dropped silently, and `/tenants` after 20 pages). A
+  `nextLink` with a user name or password, or whose host is ARM only once percent-decoded, is not
+  followed. The policy lookup URL encodes its scope and filter with the same ASCII-only allowlist as
+  the activation URLs (it used Unicode letters), and a scope that cannot be a path is a failed
+  lookup instead of a crash.
 
 ## [0.1.0] - 2026-10-29
 

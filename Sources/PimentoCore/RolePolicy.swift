@@ -132,15 +132,16 @@ public enum RolePolicyParser {
 
 extension ARM {
     /// `GET {scope}/providers/Microsoft.Authorization/roleManagementPolicyAssignments?$filter=roleDefinitionId eq '…'`
-    public static func policyAssignmentsURL(scope: String, roleDefinitionId: String) -> URL {
-        var scope = scope
-        if !scope.hasPrefix("/") { scope = "/" + scope }
-        while scope.count > 1, scope.hasSuffix("/") { scope.removeLast() }
-        var allowed = CharacterSet.alphanumerics
+    /// The policy assignments of `scope` for one role. The scope is a path as
+    /// `ARMScope.path` makes it (ASCII allowlist), the filter is encoded with
+    /// the same ASCII allowlist; nil for a scope that cannot be a path.
+    public static func policyAssignmentsURL(scope: String, roleDefinitionId: String) -> URL? {
+        var allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
         allowed.insert(charactersIn: "-._~/")
-        let filter = "roleDefinitionId eq '\(roleDefinitionId)'".addingPercentEncoding(withAllowedCharacters: allowed) ?? ""
-        let path = scope.addingPercentEncoding(withAllowedCharacters: allowed.union(CharacterSet(charactersIn: "()"))) ?? scope
-        return URL(string: "\(baseURL)\(path)/providers/Microsoft.Authorization/roleManagementPolicyAssignments?api-version=\(apiVersion)&$filter=\(filter)")!
+        guard let path = ARMScope.path(scope),
+              let filter = "roleDefinitionId eq '\(roleDefinitionId)'".addingPercentEncoding(withAllowedCharacters: allowed)
+        else { return nil }
+        return URL(string: "\(baseURL)\(path)/providers/Microsoft.Authorization/roleManagementPolicyAssignments?api-version=\(apiVersion)&$filter=\(filter)")
     }
 }
 
@@ -177,7 +178,10 @@ extension PIMService {
     }
 
     func loadPolicy(for role: EligibleRole, token: String) async -> PolicyLookup {
-        var request = URLRequest(url: ARM.policyAssignmentsURL(scope: role.scope, roleDefinitionId: role.roleDefinitionId), timeoutInterval: 30)
+        guard let url = ARM.policyAssignmentsURL(scope: role.scope, roleDefinitionId: role.roleDefinitionId) else {
+            return .failed(ActivationRequestError.invalidScope(role.scope).localizedDescription)
+        }
+        var request = URLRequest(url: url, timeoutInterval: 30)
         request.httpMethod = "GET"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         do {

@@ -18,11 +18,22 @@ public enum ARM {
 
     /// A list response's `nextLink`, only when it points back to ARM over
     /// HTTPS: the bearer token is never sent anywhere else, nor in the clear.
+    /// The host must be spelled out (not percent-encoded) and the link may
+    /// carry no user name or password.
     public static func followableNextLink(_ link: String?) -> URL? {
         guard let url = link.flatMap(URL.init(string:)), url.scheme?.lowercased() == "https",
-              url.host?.lowercased() == host, url.port == nil || url.port == 443 else { return nil }
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              components.percentEncodedHost?.lowercased() == host, url.host?.lowercased() == host,
+              components.percentEncodedUser == nil, components.percentEncodedPassword == nil,
+              url.port == nil || url.port == 443 else { return nil }
         return url
     }
+
+    /// The most pages and items one listing may take before it is stopped
+    /// with an error (`PIMServiceError.listingTooLong`) instead of being cut
+    /// short without a word or running forever.
+    public static let maxPages = 100
+    public static let maxItems = 20_000
 }
 
 /// One page of an ARM list response.

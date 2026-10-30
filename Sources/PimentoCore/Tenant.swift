@@ -242,9 +242,9 @@ public enum TenantDirectory {
         let token = try await tokens.accessToken()
         var tenants: [TenantInfo] = []
         var next: URL? = armTenantsURL
-        var pages = 0
-        while let url = next, pages < maxPages {
-            pages += 1
+        var budget = PageBudget(maxPages: maxPages)
+        while let url = next {
+            try budget.read(url)
             var request = URLRequest(url: url, timeoutInterval: 30)
             request.httpMethod = "GET"
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -254,6 +254,7 @@ public enum TenantDirectory {
                 throw PIMServiceError.http(status, [env?.error?.code, env?.error?.message].compactMap { $0 }.joined(separator: ": "))
             }
             guard let page = parseARMPage(data) else { throw PIMServiceError.http(status, "unexpected /tenants response") }
+            try budget.add(page.tenants.count)
             tenants += page.tenants
             next = page.next
         }

@@ -162,14 +162,26 @@ struct RolePolicyTests {
     }
 
     @Test func urlFiltersByRoleDefinition() throws {
-        let url = ARM.policyAssignmentsURL(
+        let url = try #require(ARM.policyAssignmentsURL(
             scope: "/subscriptions/aaaaaaaa-0000-0000-0000-00000000000a/resourceGroups/rg-app-dev/",
-            roleDefinitionId: "/subscriptions/aaaaaaaa-0000-0000-0000-00000000000a/providers/Microsoft.Authorization/roleDefinitions/\(EligibleRole.ownerRoleGUID)")
+            roleDefinitionId: "/subscriptions/aaaaaaaa-0000-0000-0000-00000000000a/providers/Microsoft.Authorization/roleDefinitions/\(EligibleRole.ownerRoleGUID)"))
         #expect(url.host == "management.azure.com")
         #expect(url.path == "/subscriptions/aaaaaaaa-0000-0000-0000-00000000000a/resourceGroups/rg-app-dev/providers/Microsoft.Authorization/roleManagementPolicyAssignments")
         #expect(url.absoluteString.contains("api-version=2020-10-01&$filter=roleDefinitionId%20eq%20%27/subscriptions/"))
         let filter = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "$filter" }?.value
         #expect(filter == "roleDefinitionId eq '/subscriptions/aaaaaaaa-0000-0000-0000-00000000000a/providers/Microsoft.Authorization/roleDefinitions/\(EligibleRole.ownerRoleGUID)'")
+    }
+
+    /// The scope and the filter are encoded with the ASCII allowlist of
+    /// `ARMScope` (a Unicode letter is encoded, not passed through); a scope
+    /// that cannot be a path gives no URL.
+    @Test func urlEncodesScopeAndFilterAsASCII() throws {
+        let url = try #require(ARM.policyAssignmentsURL(scope: "/subscriptions/s/resourceGroups/rg-münchen?x#y",
+                                                        roleDefinitionId: "/r/roleDefinitions/ä"))
+        #expect(url.absoluteString.hasPrefix("https://management.azure.com/subscriptions/s/resourceGroups/rg-m%C3%BCnchen%3Fx%23y/providers/"))
+        #expect(url.absoluteString.hasSuffix("roleDefinitions%2F%C3%A4%27") || url.absoluteString.hasSuffix("roleDefinitions/%C3%A4%27"))
+        #expect(url.query?.contains("api-version=2020-10-01") == true)
+        #expect(ARM.policyAssignmentsURL(scope: "/subscriptions/../x", roleDefinitionId: "r") == nil)
     }
 
     @Test func serviceLoadsOncePerScopeAndRoleWithBoundedConcurrency() async throws {

@@ -38,6 +38,7 @@ public enum CLIExit: Int32, Sendable {
         case let e as PIMServiceError:
             switch e {
             case .noIdentity: return .auth
+            case .listingTooLong: return .failure
             case .http(let status, let message):
                 let tokenError = ActivationResponseMapper.authErrorCodes.contains { message.contains($0) }
                 return status == 401 || tokenError ? .auth : .failure

@@ -383,6 +383,41 @@ struct PIMServiceTests {
         #expect(ARM.followableNextLink("https://Management.Azure.com/tenants?$skiptoken=2") != nil)
         #expect(ARM.followableNextLink("http://management.azure.com/tenants") == nil)
         #expect(ARM.followableNextLink(nil) == nil)
+        // A user name or password, or a host that is only ARM once decoded: not followed.
+        #expect(ARM.followableNextLink("https://evil@management.azure.com/tenants") == nil)
+        #expect(ARM.followableNextLink("https://u:p@management.azure.com/tenants") == nil)
+        #expect(ARM.followableNextLink("https://management%2Eazure%2Ecom/tenants") == nil)
+        #expect(ARM.followableNextLink("https://management.azure.com:8443/tenants") == nil)
+        #expect(ARM.followableNextLink("https://management.azure.com:443/tenants") != nil)
+    }
+
+    /// A listing that does not end is an error, not a silently cut list.
+    @Test func endlessListingsStopWithAnError() async throws {
+        // A nextLink back to the same page.
+        let loop = RecordingTransport { request in
+            (Data(#"{"value":[],"nextLink":"\#(request.url!.absoluteString)"}"#.utf8), 200)
+        }
+        await #expect(throws: PIMServiceError.listingTooLong("a page linked back to an earlier one")) {
+            _ = try await PIMService(transport: loop, tokens: StaticTokenProvider()).loadRoles()
+        }
+        // Ever new pages.
+        let counter = TestBox<Int>(0)
+        let endless = RecordingTransport { _ in
+            counter.value = (counter.value ?? 0) + 1
+            let next = "https://management.azure.com/providers/x?$skiptoken=\(counter.value!)"
+            return (Data(#"{"value":[],"nextLink":"\#(next)"}"#.utf8), 200)
+        }
+        let service = PIMService(transport: endless, tokens: StaticTokenProvider())
+        await #expect(throws: PIMServiceError.listingTooLong("more than \(ARM.maxPages) pages")) {
+            let _: [EligibilityScheduleInstance] = try await service.listAll(ARM.eligibilityInstancesURL, token: "t")
+        }
+        // Too many items.
+        let big = RecordingTransport { _ in (Data(#"{"value":[{},{},{}]}"#.utf8), 200) }
+        struct Any3: Decodable {}
+        await #expect(throws: PIMServiceError.listingTooLong("more than 2 items")) {
+            let _: [Any3] = try await PIMService(transport: big, tokens: StaticTokenProvider())
+                .listAll(ARM.eligibilityInstancesURL, token: "t", budget: PageBudget(maxItems: 2))
+        }
     }
 
     @Test func listingErrorSurfacesARMMessage() async throws {
