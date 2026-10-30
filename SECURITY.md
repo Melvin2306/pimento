@@ -25,12 +25,17 @@ In scope, for example:
   `management.azure.com`;
 - with Pimento sign-in: a refresh token, authorization code or PKCE verifier sent anywhere but
   `login.microsoftonline.com`, stored outside the Keychain (or the documented token file), or
-  readable by other users; the loopback listener accepting a redirect without the right `state`,
-  listening beyond the loopback interface, or staying open after sign-in;
+  readable by other users (including the sign-in URL's `state`, `nonce` or PKCE challenge, for
+  example through process arguments); the loopback listener accepting a redirect without the right
+  `state`, listening beyond the loopback interface, leaving one of 127.0.0.1 and ::1 on its port
+  to another program, or staying open after sign-in;
 - any way to make a preview or `--dry-run`, or a read-only command (`list`, `status`, `tenants`,
   `scheduled`, `pending`, `wait`, `approvals`, `history import-azure`), send a write request;
 - a write sent without the confirmation it should have: a CLI write without its `[y/N]` answer or
-  `--yes`, or Owner roles activated without the Owner confirmation;
+  `--yes`, a decision sent for another request than the one named, Owner roles activated without
+  the Owner confirmation, or a reminder action run from a locked Mac;
+- text from Azure, Entra or other people (justifications, tickets, names, error messages) changing
+  what the CLI shows on a terminal, or exported history turning into spreadsheet formulas;
 - argument injection into the `az` process.
 
 Out of scope: the security of Azure, Microsoft Entra ID or the Azure CLI themselves, and
@@ -61,13 +66,22 @@ anything that requires an attacker to already control your user account or `az` 
   sequences other than its own colour codes, and bidi overrides in text from Azure, Entra or other
   people are shown as visible escapes, so a justification or a name cannot rewrite what a `[y/N]`
   prompt is about. JSON escapes them as `\uXXXX`.
-- `az` is started with an argv array, never through a shell; tenant values are validated.
+- `az` is started with an argv array, never through a shell; tenant values (`--tenant`,
+  `$PIMENTO_TENANT`, a preset's tenant) are validated.
 - The only write requests are the `roleAssignmentScheduleRequests` `PUT`s (activate, deactivate,
   renew, extend), `POST …/cancel` and the approval `PATCH` (approve, deny), from the app after you
   confirm or tap a reminder action (which macOS lets run only on an unlocked Mac; End Now on an
   Owner role asks in the app first), and from the CLI after its `[y/N]` prompt or `--yes`. Previews
-  and `--dry-run`, and every read of the app and the CLI, go through a transport that refuses
-  anything but `GET`.
+  and `--dry-run`, the CLI's read-only commands and the app's reads go through a transport that
+  refuses anything but `GET`. Renew leaves a role alone when its policy cannot be read.
+- `pimento approve|deny --yes` decides only whole request ids, matched exactly: a requester cannot
+  re-point a reviewed prefix to another request. Prefixes work on a terminal, where the prompt
+  shows the whole id of the request it matched.
+- Files: private files are created 600 in a 700 folder; lock, history and private files are never
+  opened through a symbolic link; the history CSV quotes every field and guards formulas (`'`) at
+  the start of a field and after each `;` or tab.
+- Sign-out holds across processes: a refresh in another Pimento process replaces the stored refresh
+  token only while it is the one it redeemed, and never re-creates a removed account.
 - Builds: CI and releases run with read-only tokens (only the publish job can write the release),
   check out without keeping credentials, pin actions to commit SHAs and the Linux container to a
   digest. Release downloads carry GitHub build provenance attestations. The Mac app and CLI are
