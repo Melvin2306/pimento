@@ -644,6 +644,51 @@ struct TokenBrokerTests {
         #expect(try store.refreshToken(for: account.id) == nil)
     }
 
+    /// Two processes (two brokers) sharing one store: `pimento logout` in one
+    /// while the other refreshes. The late rotated token must not bring the
+    /// account back; each broker's own generation cannot see the other.
+    @Test(arguments: ["memory", "file"])
+    func signOutInAnotherProcessDuringARefreshKeepsTheAccountRemoved(_ kind: String) async throws {
+        let url = TestTemp.url("tokens").appendingPathComponent("tokens.json")
+        let store: TokenStore = kind == "file" ? FileTokenStore(url: url) : InMemoryTokenStore()
+        let account = SignedInAccount(objectId: Fixture.userOID, homeTenantId: homeTenant, tenantId: homeTenant, username: "test@example.com",
+                                      name: "Test User", clientId: testClientId, signedInAt: Fixture.now)
+        try store.save(account, refreshToken: "rt-0")
+        let gate = TransportGate()
+        let app = TokenBroker(store: store, transport: GatedTransport(gate: gate, answer: (tokenAnswer(refresh: "rt-rotated"), 200)))
+        let cli = TokenBroker(store: store, transport: OfflineTransport())
+        let refresh = Task { try await app.accessToken(accountId: account.id, tenantId: otherTenant) }
+        await gate.waitUntilEntered()
+        try await cli.signOut(account.id)
+        gate.release()
+        await #expect(throws: SignInError.notSignedIn) { _ = try await refresh.value }
+        #expect(try store.accounts().isEmpty)
+        #expect(try store.refreshToken(for: account.id) == nil)
+        if kind == "file" { #expect(!FileManager.default.fileExists(atPath: url.path)) }
+    }
+
+    /// … and a sign-in again in the other process keeps its new token.
+    @Test(arguments: ["memory", "file"])
+    func signInAgainInAnotherProcessDuringARefreshKeepsTheNewToken(_ kind: String) async throws {
+        let url = TestTemp.url("tokens").appendingPathComponent("tokens.json")
+        let store: TokenStore = kind == "file" ? FileTokenStore(url: url) : InMemoryTokenStore()
+        let account = SignedInAccount(objectId: Fixture.userOID, homeTenantId: homeTenant, tenantId: homeTenant, username: "test@example.com",
+                                      name: "Test User", clientId: testClientId, signedInAt: Fixture.now)
+        try store.save(account, refreshToken: "rt-0")
+        let gate = TransportGate()
+        let app = TokenBroker(store: store, transport: GatedTransport(gate: gate, answer: (tokenAnswer(refresh: "rt-rotated"), 200)))
+        let refresh = Task { try await app.accessToken(accountId: account.id, tenantId: otherTenant) }
+        await gate.waitUntilEntered()
+        try store.save(account, refreshToken: "rt-new")
+        gate.release()
+        _ = try await refresh.value
+        #expect(try store.refreshToken(for: account.id) == "rt-new")
+        // Without anything in between, the rotated token replaces the old one.
+        let plain = TokenBroker(store: store, transport: RecordingTransport { _ in (tokenAnswer(refresh: "rt-next"), 200) })
+        _ = try await plain.accessToken(accountId: account.id, tenantId: otherTenant)
+        #expect(try store.refreshToken(for: account.id) == "rt-next")
+    }
+
     @Test func signInAgainDuringARefreshKeepsTheNewSignIn() async throws {
         let gate = TransportGate()
         let store = InMemoryTokenStore()

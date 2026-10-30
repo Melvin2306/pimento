@@ -405,6 +405,10 @@ All notable changes to this project are documented here. The format follows
 - The history CSV quotes every field and puts the formula guard (`'`) also after each `;` or tab
   inside a field: a ticket number such as `INC1;=1+1;` from a requester no longer becomes a formula
   cell in a spreadsheet that splits on `;` (the list separator of many locales).
+- Signing out in one Pimento process (`pimento logout`, or the app) can no longer be undone by a
+  token refresh in flight in another: the rotated refresh token replaces the stored one only while
+  it is still the one redeemed (under the file lock; Keychain items are only updated, never
+  re-created), so a removed account stays removed and a newer sign-in keeps its token.
 
 ## [0.1.0] - 2026-10-29
 

@@ -85,6 +85,22 @@ struct KeychainStoreTests {
         return item
     }
 
+    /// A refresh replaces the token only in place of the one it redeemed,
+    /// and never re-creates an item deleted meanwhile.
+    @Test func replacingARefreshTokenIsConditionalAndUpdateOnly() throws {
+        let keychain = FakeKeychain()
+        let store = KeychainTokenStore(service: Self.service, keychain: keychain)
+        try store.save(account(1), refreshToken: "rt-1")
+        #expect(try !store.replaceRefreshToken(account(1).id, expected: "rt-other", with: "rt-2"))
+        #expect(try store.refreshToken(for: account(1).id) == "rt-1")
+        #expect(try store.replaceRefreshToken(account(1).id, expected: "rt-1", with: "rt-2"))
+        #expect(try store.refreshToken(for: account(1).id) == "rt-2")
+        #expect(try store.accounts().map(\.id) == [account(1).id])
+        try store.remove(account(1).id)
+        #expect(try !store.replaceRefreshToken(account(1).id, expected: "rt-2", with: "rt-3"))
+        #expect(keychain.count == 0)
+    }
+
     @Test func savesListsAndRemovesThroughTheKeychainCalls() throws {
         let keychain = FakeKeychain()
         let store = KeychainTokenStore(service: Self.service, keychain: keychain)

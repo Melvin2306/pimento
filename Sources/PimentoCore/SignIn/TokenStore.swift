@@ -54,6 +54,11 @@ public protocol TokenStore: Sendable {
     func refreshToken(for accountId: String) throws -> String?
     /// Adds or replaces the account and its refresh token.
     func save(_ account: SignedInAccount, refreshToken: String) throws
+    /// After a refresh: replaces the account's refresh token with `rotated`
+    /// only while the stored one is still `expected` (compare and swap).
+    /// Never adds an account, so one signed out meanwhile (by this process or
+    /// another) stays signed out. Returns whether it replaced the token.
+    func replaceRefreshToken(_ accountId: String, expected: String, with rotated: String) throws -> Bool
     func remove(_ accountId: String) throws
     /// Removes every account (Sign Out All), also ones `accounts()` cannot read.
     func removeAll() throws
@@ -66,6 +71,7 @@ public extension TokenStore {
         for account in try accounts() { try remove(account.id) }
     }
 }
+
 
 /// Keeps everything in memory (tests, previews).
 public final class InMemoryTokenStore: TokenStore, @unchecked Sendable {
@@ -84,6 +90,14 @@ public final class InMemoryTokenStore: TokenStore, @unchecked Sendable {
 
     public func save(_ account: SignedInAccount, refreshToken: String) throws {
         lock.withLock { entries[account.id] = (account, refreshToken) }
+    }
+
+    public func replaceRefreshToken(_ accountId: String, expected: String, with rotated: String) throws -> Bool {
+        lock.withLock {
+            guard let entry = entries[accountId], entry.1 == expected else { return false }
+            entries[accountId] = (entry.0, rotated)
+            return true
+        }
     }
 
     public func remove(_ accountId: String) throws { _ = lock.withLock { entries.removeValue(forKey: accountId) } }
@@ -183,6 +197,18 @@ public struct FileTokenStore: TokenStore {
             file.accounts.removeAll { $0.account.id == account.id }
             file.accounts.append(Entry(account: account, refreshToken: refreshToken))
             try write(file)
+        }
+    }
+
+    /// Under the file lock: another process signing out cannot be undone.
+    public func replaceRefreshToken(_ accountId: String, expected: String, with rotated: String) throws -> Bool {
+        try locked {
+            var file = try read()
+            guard let i = file.accounts.firstIndex(where: { $0.account.id == accountId }),
+                  file.accounts[i].refreshToken == expected else { return false }
+            file.accounts[i].refreshToken = rotated
+            try write(file)
+            return true
         }
     }
 
@@ -323,6 +349,18 @@ public struct KeychainTokenStore: TokenStore {
         for (k, v) in attributes { add[k] = v }
         let added = keychain.add(add as CFDictionary)
         guard added == errSecSuccess else { throw Self.failure(added) }
+    }
+
+    /// Compares the stored secret, then updates the existing item only
+    /// (`SecItemUpdate`, never `SecItemAdd`): an item deleted meanwhile, by
+    /// this process or another, is not created again.
+    public func replaceRefreshToken(_ accountId: String, expected: String, with rotated: String) throws -> Bool {
+        guard try refreshToken(for: accountId) == expected else { return false }
+        let status = keychain.update(query([kSecAttrAccount: accountId]) as CFDictionary,
+                                     [kSecValueData as String: Data(rotated.utf8)] as CFDictionary)
+        if status == errSecItemNotFound { return false }
+        guard status == errSecSuccess else { throw Self.failure(status) }
+        return true
     }
 
     public func remove(_ accountId: String) throws {

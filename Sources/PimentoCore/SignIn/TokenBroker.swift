@@ -87,9 +87,15 @@ public actor TokenBroker {
         // Signed out (or in again) meanwhile: keep nothing of this answer, or
         // the rotated refresh token would bring the removed account back.
         guard generation[account.id, default: 0] == started else { throw SignInError.notSignedIn }
-        // Entra rotates refresh tokens; keep the newest.
-        if let rotated = response.refreshToken, rotated != refreshToken {
-            try store.save(account, refreshToken: rotated)
+        // Entra rotates refresh tokens; keep the newest, but only in place of
+        // the one redeemed: another process may have signed the account out
+        // (or in again) meanwhile, which this broker's generation cannot see.
+        // Not replaced and gone: signed out elsewhere, so keep nothing.
+        // Not replaced but present: another process rotated it first; keep that one.
+        if let rotated = response.refreshToken, rotated != refreshToken,
+           try !store.replaceRefreshToken(account.id, expected: refreshToken, with: rotated),
+           try store.refreshToken(for: account.id) == nil {
+            throw SignInError.notSignedIn
         }
         remember(response, key: key)
         return response.accessToken
