@@ -1,0 +1,21 @@
+scripts/install.ps1
+  s_4884204a812fec::t_be4d7a9b4b9768 71-73,77-78
+scripts/test-install.ps1
+  s_4884204a812fec::t_b96bf3ab0617d3 180-195,197-199,204-206,226-227
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6c591f8cbb660aea3dae7ba0d1c6dbdc589e5f92",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
