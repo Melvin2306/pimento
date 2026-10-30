@@ -181,4 +181,13 @@ struct PowerShellCompletionTests {
         #expect(PowerShellCompletion.list(["a", "b'c"]) == "@('a', 'b''c')")
         #expect(PowerShellCompletion.list([]) == "@()")
     }
+
+    /// PowerShell takes U+2018-U+201B as single quotes and U+201C-U+201E as
+    /// double quotes: a preset name with one (macOS types them for ' and ")
+    /// is quoted, and its single ones doubled, or the completed line breaks
+    /// out of the string. (scripts/test-install.ps1 runs it on Windows.)
+    @Test func presetNamesWithTypographicQuotesAreQuoted() {
+        #expect(script.contains(#"if ($text -match '[\s''"`$;,(){}|&<>@#\u2018-\u201E]') {"#))
+        #expect(script.contains(#"$completion = "'" + ($text -replace '[''\u2018-\u201B]', '$0$0') + "'""#))
+    }
 }

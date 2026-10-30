@@ -240,7 +240,11 @@ public enum PowerShellCompletion {
             $text = [string]$candidate
             if (-not $text.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) { continue }
             $completion = $text
-            if ($text -match '[\s''"`$;,(){}|&<>@#]') { $completion = "'" + ($text -replace "'", "''") + "'" }
+            # PowerShell also takes U+2018-U+201B as single and U+201C-U+201E as
+            # double quotes: they are quoted (and the single ones doubled) too.
+            if ($text -match '[\s''"`$;,(){}|&<>@#\u2018-\u201E]') {
+                $completion = "'" + ($text -replace '[''\u2018-\u201B]', '$0$0') + "'"
+            }
             $tip = $text
             if ($kind -eq 'ParameterName' -and $descriptions.ContainsKey($text)) { $tip = $descriptions[$text] }
             elseif (($null -eq $command -or $command -eq 'help') -and $commands.Contains($text)) { $tip = $commands[$text] }
