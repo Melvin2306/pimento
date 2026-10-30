@@ -24,6 +24,8 @@ public final class FileLock {
     #endif
 
     /// Locks `url` (created, mode 600, in a folder created 700 if needed).
+    /// A symbolic link (a reparse point on Windows) at `url` is refused, not
+    /// followed: the lock file is never anything but Pimento's own file.
     public init(url: URL) throws {
         try PrivateFile.createDirectory(url.deletingLastPathComponent())
         #if os(Windows)
@@ -31,10 +33,15 @@ public final class FileLock {
         let opened = path.withCString(encodedAs: UTF16.self) {
             CreateFileW($0, DWORD(GENERIC_READ) | DWORD(GENERIC_WRITE),
                         DWORD(FILE_SHARE_READ) | DWORD(FILE_SHARE_WRITE) | DWORD(FILE_SHARE_DELETE),
-                        nil, DWORD(OPEN_ALWAYS), DWORD(FILE_ATTRIBUTE_NORMAL), nil)
+                        nil, DWORD(OPEN_ALWAYS), DWORD(FILE_ATTRIBUTE_NORMAL) | DWORD(FILE_FLAG_OPEN_REPARSE_POINT), nil)
         }
         guard let opened, opened != INVALID_HANDLE_VALUE else {
             throw Failed(message: "could not open \(path) (Windows error \(GetLastError()))")
+        }
+        var info = BY_HANDLE_FILE_INFORMATION()
+        guard GetFileInformationByHandle(opened, &info), info.dwFileAttributes & DWORD(FILE_ATTRIBUTE_REPARSE_POINT) == 0 else {
+            CloseHandle(opened)
+            throw Failed(message: "refusing to lock \(path): it is a link, not a file")
         }
         var overlapped = OVERLAPPED()
         if !LockFileEx(opened, DWORD(LOCKFILE_EXCLUSIVE_LOCK), 0, DWORD.max, DWORD.max, &overlapped) {
@@ -44,8 +51,16 @@ public final class FileLock {
         }
         handle = opened
         #else
-        let opened = open(url.path, O_RDWR | O_CREAT | O_CLOEXEC, 0o600)
-        guard opened >= 0 else { throw Failed(message: "could not open \(url.path): \(String(cString: strerror(errno)))") }
+        let opened = open(url.path, O_RDWR | O_CREAT | O_CLOEXEC | O_NOFOLLOW, 0o600)
+        guard opened >= 0 else {
+            if errno == ELOOP { throw Failed(message: "refusing to lock \(url.path): it is a symbolic link") }
+            throw Failed(message: "could not open \(url.path): \(String(cString: strerror(errno)))")
+        }
+        var info = stat()
+        guard fstat(opened, &info) == 0, info.st_mode & mode_t(S_IFMT) == mode_t(S_IFREG) else {
+            close(opened)
+            throw Failed(message: "refusing to lock \(url.path): not a regular file")
+        }
         while flock(opened, LOCK_EX) != 0 {
             if errno == EINTR { continue }
             let why = String(cString: strerror(errno))

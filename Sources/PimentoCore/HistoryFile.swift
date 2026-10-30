@@ -18,13 +18,19 @@ extension HistoryStore {
     func withLockedFile(_ body: (_ write: (Data) throws -> Void) throws -> Void) throws {
         try createDirectory()
         for _ in 0..<8 {
-            let fd = open(url.path, O_WRONLY | O_APPEND | O_CREAT | O_CLOEXEC, 0o600)
-            guard fd >= 0 else { throw HistoryError.io(String(cString: strerror(errno))) }
+            // Never through a symbolic link: the history is Pimento's own file.
+            let fd = open(url.path, O_WRONLY | O_APPEND | O_CREAT | O_CLOEXEC | O_NOFOLLOW, 0o600)
+            guard fd >= 0 else {
+                throw HistoryError.io(errno == ELOOP ? "\(url.path) is a symbolic link; Pimento does not write through it"
+                                                     : String(cString: strerror(errno)))
+            }
             defer { close(fd) }
             guard flock(fd, LOCK_EX) == 0 else { throw HistoryError.io(String(cString: strerror(errno))) }
             var held = stat(), current = stat()
             guard fstat(fd, &held) == 0 else { throw HistoryError.io(String(cString: strerror(errno))) }
-            guard stat(url.path, &current) == 0, current.st_ino == held.st_ino, current.st_dev == held.st_dev else { continue }
+            guard held.st_mode & mode_t(S_IFMT) == mode_t(S_IFREG) else { throw HistoryError.io("\(url.path) is not a regular file") }
+            // lstat: the name must still be this very file, not a link to it.
+            guard lstat(url.path, &current) == 0, current.st_ino == held.st_ino, current.st_dev == held.st_dev else { continue }
             _ = fchmod(fd, 0o600)
             if held.st_size > off_t(maxBytes) {
                 _ = rename(url.path, rotatedURL.path)
@@ -32,7 +38,7 @@ extension HistoryStore {
             }
             // A line cut off by a crash must not swallow the next record.
             if held.st_size > 0 {
-                let reader = open(url.path, O_RDONLY | O_CLOEXEC)
+                let reader = open(url.path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW)
                 if reader >= 0 {
                     var last: UInt8 = 0
                     if pread(reader, &last, 1, held.st_size - 1) == 1, last != 0x0A { try Self.writeAll(fd, Data([0x0A])) }
@@ -49,7 +55,7 @@ extension HistoryStore {
     /// Called with the lock held.
     func replace(_ file: URL, with data: Data) throws {
         let temp = file.deletingLastPathComponent().appendingPathComponent(".\(file.lastPathComponent).\(UUID().uuidString).tmp")
-        let fd = open(temp.path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0o600)
+        let fd = open(temp.path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0o600)
         guard fd >= 0 else { throw HistoryError.io(String(cString: strerror(errno))) }
         do {
             try Self.writeAll(fd, data)
@@ -114,6 +120,10 @@ extension HistoryStore {
         func append(_ data: Data) throws {
             do {
                 if handle == nil {
+                    // Never through a symbolic link (reparse point): the history is Pimento's own file.
+                    if (try? files.attributesOfItem(atPath: url.path))?[.type] as? FileAttributeType == .typeSymbolicLink {
+                        throw HistoryError.io("\(url.path) is a symbolic link; Pimento does not write through it")
+                    }
                     if !files.fileExists(atPath: url.path), !files.createFile(atPath: url.path, contents: nil) {
                         throw HistoryError.io("could not create \(url.path)")
                     }

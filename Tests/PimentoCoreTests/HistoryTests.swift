@@ -1,3 +1,8 @@
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 import Foundation
 import Testing
 @testable import PimentoCore
@@ -516,4 +521,46 @@ struct HistoryWindowTests {
         record.durationMinutes = 90
         #expect(HistoryReplay.duration(of: record) == nil)
     }
+}
+
+@Suite("Private files are never written through a symbolic link")
+struct SymlinkRefusalTests {
+    /// A folder with `victim` (someone else's file, say) and a symbolic link
+    /// `name` to it; nil where links cannot be made (Windows without the right).
+    static func linked(_ name: String) throws -> (dir: URL, link: URL, victim: URL)? {
+        let dir = TestTemp.url("symlink")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let victim = dir.appendingPathComponent("victim.txt")
+        try Data("keep me\n".utf8).write(to: victim)
+        let link = dir.appendingPathComponent(name)
+        do { try FileManager.default.createSymbolicLink(at: link, withDestinationURL: victim) } catch { return nil }
+        return (dir, link, victim)
+    }
+
+    @Test func theLockFileIsNotFollowed() throws {
+        guard let (_, link, victim) = try Self.linked("presets.json.lock") else { return }
+        #expect(throws: FileLock.Failed.self) { _ = try FileLock(url: link) }
+        #expect(try String(contentsOf: victim, encoding: .utf8) == "keep me\n")
+        // The same through the stores that lock.
+        let presets = PresetStore(url: link.deletingLastPathComponent().appendingPathComponent("presets.json"))
+        #expect(throws: (any Error).self) { try presets.save(PresetLibrary(presets: [])) }
+    }
+
+    @Test func theHistoryIsNotAppendedThroughALink() throws {
+        guard let (_, link, victim) = try Self.linked("history.jsonl") else { return }
+        let store = HistoryStore(url: link)
+        #expect(throws: HistoryError.self) { try store.append([.sample(1)]) }
+        #expect(try String(contentsOf: victim, encoding: .utf8) == "keep me\n")
+    }
+
+    #if !os(Windows)
+    @Test func aLockFileThatIsNoRegularFileIsRefused() throws {
+        let dir = TestTemp.url("fifo")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let path = dir.appendingPathComponent("x.lock").path
+        #expect(mkfifo(path, 0o600) == 0)
+        // O_RDWR on a FIFO does not block; the lock is still refused.
+        #expect(throws: FileLock.Failed.self) { _ = try FileLock(url: URL(fileURLWithPath: path)) }
+    }
+    #endif
 }

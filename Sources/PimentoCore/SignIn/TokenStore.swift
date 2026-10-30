@@ -254,7 +254,7 @@ enum PrivateFile {
         try data.write(to: url, options: .atomic)
         #else
         let temp = dir.appendingPathComponent(".\(url.lastPathComponent).\(UUID().uuidString.prefix(8))")
-        let fd = open(temp.path, O_WRONLY | O_CREAT | O_EXCL, 0o600)
+        let fd = open(temp.path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0o600)
         guard fd >= 0 else { throw CocoaError(.fileWriteNoPermission, userInfo: [NSFilePathErrorKey: temp.path]) }
         let ok = data.withUnsafeBytes { buffer -> Bool in
             var offset = 0
@@ -263,6 +263,8 @@ enum PrivateFile {
                 guard n > 0 else { return false }
                 offset += n
             }
+            // On the descriptor, not by path after the rename (the name could be swapped meanwhile).
+            _ = fchmod(fd, 0o600)
             _ = fsync(fd)
             return true
         }
@@ -271,7 +273,6 @@ enum PrivateFile {
             unlink(temp.path)
             throw CocoaError(.fileWriteUnknown, userInfo: [NSFilePathErrorKey: url.path])
         }
-        _ = chmod(url.path, 0o600)
         #endif
     }
 }
