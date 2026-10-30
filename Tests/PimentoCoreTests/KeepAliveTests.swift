@@ -551,3 +551,80 @@ struct KeepAliveDemoTests {
         #expect(!scheduled.contains { $0.policyKey == kv.policyKey && $0.start == at("2026-10-30T09:38") })
     }
 }
+
+@Suite("Keep-alive: roles that grant access, and the history")
+struct KeepAliveConsentTests {
+    func roleNamed(_ name: String, guid: String, id: String = "row-x") -> EligibleRole {
+        EligibleRole(id: id, eligibilityScheduleId: "e", roleDefinitionId: "\(sub)/providers/Microsoft.Authorization/roleDefinitions/\(guid)",
+                     roleName: name, scope: sub, scopeName: "Contoso Staging", scopeType: "subscription", membership: .direct,
+                     isActive: true, activeUntil: mon("14:00"), activeSince: mon("10:00"))
+    }
+
+    var owner: EligibleRole { roleNamed("Owner", guid: EligibleRole.ownerRoleGUID) }
+    var uaa: EligibleRole { roleNamed("User Access Administrator", guid: AccessGrantingRole.userAccessAdministratorGUID) }
+    var rbac: EligibleRole { roleNamed("Role Based Access Control Administrator", guid: AccessGrantingRole.rbacAdministratorGUID) }
+
+    @Test func accessGrantingRolesNeedConfirmationOnce() {
+        let contributor = role(until: mon("14:00"))
+        #expect(owner.grantsAccess && uaa.grantsAccess && rbac.grantsAccess)
+        #expect(!contributor.grantsAccess)
+        let needing = KeepAliveConsent.needingConfirmation([contributor, owner, uaa, owner], confirmed: [], enabled: true)
+        #expect(needing.map(\.roleName) == ["Owner", "User Access Administrator"])
+        let confirmed = KeepAliveConsent.accessKeys([owner, contributor])
+        #expect(confirmed == [ReminderRole.key(owner.policyKey)])
+        #expect(KeepAliveConsent.needingConfirmation([owner, uaa], confirmed: confirmed, enabled: true).map(\.roleName) == ["User Access Administrator"])
+        #expect(KeepAliveConsent.needingConfirmation([owner, rbac], confirmed: [], enabled: false).isEmpty, "the confirmation is off")
+        let message = KeepAliveConsent.message([owner])
+        #expect(message.contains("grant access"))
+        #expect(message.contains("• Owner · Contoso Staging"))
+    }
+
+    @Test func anUnconfirmedAccessRoleIsNeverSent() {
+        let key = ReminderRole.key(owner.policyKey)
+        func status(_ confirmed: Set<String>?) -> KeepAliveStatus? {
+            var book = KeepAliveBook()
+            book[key] = track()
+            return KeepAlivePlanner.plan(
+                roles: [owner], rules: [key: KeepAliveRule()], policies: [owner.policyKey: policy()], infos: [:], pending: [],
+                book: &book, hours: WorkingHours(), paused: false, now: mon("13:50"), calendar: calendar, confirmedAccess: confirmed
+            ).first?.status
+        }
+        #expect(status([]) == .excluded(.notConfirmed))
+        #expect(status([]).map(\.isExcluded) == true)
+        #expect(status([key])?.action != nil)
+        #expect(status(nil)?.action != nil, "no confirmation needed")
+        #expect(KeepAliveStatus.excluded(.notConfirmed).summary(now: mon("13:50"), timeZone: utc).contains("not confirmed"))
+    }
+
+    @Test func keepAliveHasItsOwnHistorySource() throws {
+        #expect(HistorySource.keepAlive.rawValue == "keepAlive")
+        #expect(HistorySource.keepAlive.title == "Keep alive")
+        let data = try JSONEncoder().encode(HistorySource.keepAlive)
+        #expect(String(decoding: data, as: UTF8.self) == "\"keepAlive\"")
+        #expect(try JSONDecoder().decode(HistorySource.self, from: data) == .keepAlive)
+        let store = HistoryStore(url: TestTemp.url("keepalive-history").appendingPathComponent("history.jsonl"))
+        let app = HistoryRecorder(store: store, source: .app)
+        app.setTenantLabels(["11111111-2222-4333-8444-555555555555": "Contoso"])
+        let keep = app.with(source: .keepAlive)
+        #expect(keep.source == .keepAlive)
+        #expect(keep.context(tenantId: "11111111-2222-4333-8444-555555555555").tenantLabel == "Contoso")
+        #expect(app.source == .app)
+    }
+
+    @Test func whatAPassSendsIsRecordedAsKeepAlive() async throws {
+        let demo = DemoFixture(start: KeepAliveDemoTests.start)
+        let store = HistoryStore(url: TestTemp.url("keepalive-pass").appendingPathComponent("history.jsonl"))
+        let service = demo.service().recording(to: HistoryRecorder(store: store, source: .app, clock: { [clock = demo.clock] in clock.now() }))
+        let kv = try await demo.role("kv-contoso-prod", "Key Vault Secrets User")
+        let clock = demo.clock
+        let result = try await demo.offline {
+            try await KeepAliveSession().pass(reader: service.readOnly, writer: service, perRole: [ReminderRole.key(kv.policyKey)], presets: [],
+                                              hours: WorkingHours(), paused: false, calendar: calendar, clock: { clock.now() })
+        }
+        #expect(result.events.count == 1)
+        let records = store.records(now: clock.now())
+        #expect(records.count == 1)
+        #expect(records.first?.source == .keepAlive)
+        #expect(HistoryCSV.encode(records).contains("\"keepAlive\""))
+    }
+}

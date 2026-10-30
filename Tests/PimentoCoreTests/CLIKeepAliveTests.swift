@@ -81,3 +81,30 @@ struct CLIKeepAliveTests {
         cli.expectIsolated()
     }
 }
+
+@Suite("CLI: pimento keep-alive and roles that grant access")
+struct CLIKeepAliveConsentTests {
+    @Test func thePromptNamesRolesThatGrantAccessAndNoSendsNothing() async {
+        let cli = DemoCLIRun()
+        var env = cli.environment
+        env.stdinIsTTY = true
+        env.readLine = { "n" }
+        let o: KeepAliveOptions = {
+            var o = KeepAliveOptions()
+            o.criteria.filters = ["Contoso Staging"]
+            o.maxPasses = 1
+            return o
+        }()
+        let code = await NetworkGuard.$monitor.withValue(cli.monitor) {
+            await CLIRunner(environment: env).runDemo(CLIInvocation(.keepAlive(o), demo: true))
+        }
+        #expect(code == 1)
+        #expect(cli.stdout.contains("can grant access to anyone on the resource"))
+        #expect(cli.stdout.contains("Owner (!)"))
+        #expect(cli.stdout.contains("User Access Administrator (!)"))
+        #expect(cli.stderr.contains("that can grant access until you stop it (Ctrl-C)? [y/N]"))
+        #expect(cli.stderr.contains("Cancelled. Nothing was sent."))
+        #expect(CLIHelp.text(for: "keep-alive").contains("only when confirmed"))
+        cli.expectIsolated()
+    }
+}
