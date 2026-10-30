@@ -55,6 +55,8 @@ public protocol TokenStore: Sendable {
     /// Adds or replaces the account and its refresh token.
     func save(_ account: SignedInAccount, refreshToken: String) throws
     func remove(_ accountId: String) throws
+    /// Removes every account (Sign Out All), also ones `accounts()` cannot read.
+    func removeAll() throws
     /// For Settings and `--help`: "Keychain", "~/.config/pimento/tokens.json".
     var label: String { get }
 }
@@ -259,8 +261,16 @@ public struct KeychainTokenStore: TokenStore {
     public static let defaultService = "io.github.melvin2306.pimento"
 
     public let service: String
+    let keychain: KeychainItems
 
-    public init(service: String = KeychainTokenStore.defaultService) { self.service = service }
+    public init(service: String = KeychainTokenStore.defaultService) { self.init(service: service, keychain: SystemKeychain()) }
+
+    /// `keychain`: the Security framework, or a fake in tests (which must
+    /// never touch the login keychain).
+    init(service: String, keychain: KeychainItems) {
+        self.service = service
+        self.keychain = keychain
+    }
 
     public var label: String { "Keychain" }
 
@@ -277,7 +287,7 @@ public struct KeychainTokenStore: TokenStore {
 
     public func accounts() throws -> [SignedInAccount] {
         var result: CFTypeRef?
-        let status = SecItemCopyMatching(query([kSecMatchLimit: kSecMatchLimitAll, kSecReturnAttributes: true]) as CFDictionary, &result)
+        let status = keychain.copyMatching(query([kSecMatchLimit: kSecMatchLimitAll, kSecReturnAttributes: true]) as CFDictionary, &result)
         if status == errSecItemNotFound { return [] }
         guard status == errSecSuccess else { throw Self.failure(status) }
         let items = (result as? [[String: Any]]) ?? []
@@ -290,7 +300,7 @@ public struct KeychainTokenStore: TokenStore {
 
     public func refreshToken(for accountId: String) throws -> String? {
         var result: CFTypeRef?
-        let status = SecItemCopyMatching(query([kSecAttrAccount: accountId, kSecReturnData: true, kSecMatchLimit: kSecMatchLimitOne]) as CFDictionary, &result)
+        let status = keychain.copyMatching(query([kSecAttrAccount: accountId, kSecReturnData: true, kSecMatchLimit: kSecMatchLimitOne]) as CFDictionary, &result)
         if status == errSecItemNotFound { return nil }
         guard status == errSecSuccess else { throw Self.failure(status) }
         return (result as? Data).map { String(decoding: $0, as: UTF8.self) }
@@ -306,19 +316,48 @@ public struct KeychainTokenStore: TokenStore {
             kSecAttrLabel as String: "\(AppInfo.name) sign-in (\(account.username ?? account.objectId))",
             kSecAttrDescription as String: "\(AppInfo.name) refresh token",
         ]
-        let status = SecItemUpdate(query([kSecAttrAccount: account.id]) as CFDictionary, attributes as CFDictionary)
+        let status = keychain.update(query([kSecAttrAccount: account.id]) as CFDictionary, attributes as CFDictionary)
         if status == errSecSuccess { return }
         guard status == errSecItemNotFound else { throw Self.failure(status) }
         var add = query([kSecAttrAccount: account.id, kSecAttrAccessible: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly])
         for (k, v) in attributes { add[k] = v }
-        let added = SecItemAdd(add as CFDictionary, nil)
+        let added = keychain.add(add as CFDictionary)
         guard added == errSecSuccess else { throw Self.failure(added) }
     }
 
     public func remove(_ accountId: String) throws {
-        let status = SecItemDelete(query([kSecAttrAccount: accountId]) as CFDictionary)
+        let status = keychain.delete(query([kSecAttrAccount: accountId]) as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else { throw Self.failure(status) }
     }
+
+    /// Deletes every item of the service, whatever its account info: an item
+    /// whose info cannot be read (damaged, or from a newer Pimento) is not in
+    /// `accounts()`, and would otherwise outlive Sign Out All. Repeated until
+    /// none is left, as a delete may remove only the first match.
+    public func removeAll() throws {
+        for _ in 0..<10_000 {
+            let status = keychain.delete(query() as CFDictionary)
+            if status == errSecItemNotFound { return }
+            guard status == errSecSuccess else { throw Self.failure(status) }
+        }
+        throw SignInError.storage("Keychain: items of \(service) kept coming back")
+    }
+}
+
+/// The Security framework calls `KeychainTokenStore` makes.
+protocol KeychainItems: Sendable {
+    func copyMatching(_ query: CFDictionary, _ result: UnsafeMutablePointer<CFTypeRef?>?) -> OSStatus
+    func update(_ query: CFDictionary, _ attributes: CFDictionary) -> OSStatus
+    func add(_ attributes: CFDictionary) -> OSStatus
+    func delete(_ query: CFDictionary) -> OSStatus
+}
+
+/// The login keychain.
+struct SystemKeychain: KeychainItems {
+    func copyMatching(_ query: CFDictionary, _ result: UnsafeMutablePointer<CFTypeRef?>?) -> OSStatus { SecItemCopyMatching(query, result) }
+    func update(_ query: CFDictionary, _ attributes: CFDictionary) -> OSStatus { SecItemUpdate(query, attributes) }
+    func add(_ attributes: CFDictionary) -> OSStatus { SecItemAdd(attributes, nil) }
+    func delete(_ query: CFDictionary) -> OSStatus { SecItemDelete(query) }
 }
 #endif
 
