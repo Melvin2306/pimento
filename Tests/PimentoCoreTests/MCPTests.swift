@@ -721,6 +721,54 @@ struct MCPConfirmationTests {
         #expect(!w.toolText.contains(TestTemp.root.path))
         await h.finish()
     }
+
+    // MARK: Review: TOCTOU, display, cancellation
+
+    static let twoReaders: JSONValue = ["roles": [["role": "Reader", "scope": "Contoso Production"], ["role": "Reader", "scope": "Contoso Root"]],
+                                        "justification": "INC-1234 read the logs"]
+
+    @Test func aPlanThatChangesWhileTheUserDecidesIsNotSent() async throws {
+        let h = try MCPHarness(MCPConfiguration(allowActivate: true))
+        _ = try await h.initialize()
+        h.call(1, "activate_roles", Self.twoReaders)
+        let ask = try await h.next()
+        #expect(ask["method"] == "elicitation/create")
+        // Meanwhile one role is activated elsewhere (the app, the CLI): the plan the user saw is stale.
+        try await h.activateElsewhere(role: "Reader", scopeName: "Contoso Root")
+        h.send(["jsonrpc": "2.0", "id": ask["id"]!, "result": ["action": "accept", "content": ["confirm": true]]])
+        let result = try await h.next()
+        #expect(result.isToolError)
+        #expect(result.toolText.contains("changed while the user was deciding"), "\(result.toolText)")
+        #expect(h.methods.writes == 0)
+        #expect(h.mcpHistory.isEmpty)
+        await h.finish()
+    }
+
+    @Test func aStatelessConfirmationOfAStalePlanIsNotSent() async throws {
+        let h = try MCPHarness(MCPConfiguration(allowActivate: true))
+        let meta = MCPHarness.modernMeta()
+        let first = try await h.request(1, "tools/call", ["_meta": meta, "name": "activate_roles", "arguments": Self.twoReaders])
+        let state = try #require(first["result"]?["requestState"])
+        try await h.activateElsewhere(role: "Reader", scopeName: "Contoso Root")
+        let late = try await h.request(2, "tools/call", ["_meta": meta, "name": "activate_roles", "arguments": Self.twoReaders, "requestState": state,
+                                                          "inputResponses": ["pimento_confirm": ["action": "accept", "content": ["confirm": true]]]])
+        #expect(late.isToolError)
+        #expect(late.toolText.contains("changed after the user confirmed"), "\(late.toolText)")
+        #expect(h.methods.writes == 0)
+        await h.finish()
+    }
+}
+
+extension MCPHarness {
+    /// Activates a role directly on the simulator, not through the server.
+    func activateElsewhere(role: String, scopeName: String) async throws {
+        let service = session.makeService(tokens: session.azureCLITokens(tenantId: nil))
+        let snapshot = try await service.loadRoles()
+        let row = try #require(snapshot.roles.first { $0.roleName == role && $0.scopeName == scopeName })
+        let plans = try ActivationPlanning.activationPlans(
+            [row], policies: [:], principalId: snapshot.identity.objectId, justification: "elsewhere", requested: .hours(1), ticket: nil, now: clock.now())
+        try await service.execute(plans) { _, _ in }
+    }
 }
 
 // MARK: - CLI and end to end
