@@ -83,6 +83,7 @@ public enum ActivationRequestError: Error, Equatable, LocalizedError {
     case missingPrincipal
     case notActive
     case invalidDays(Int)
+    case invalidScope(String)
 
     public var errorDescription: String? {
         switch self {
@@ -92,6 +93,7 @@ public enum ActivationRequestError: Error, Equatable, LocalizedError {
         case .missingPrincipal: "Could not determine your user object id from the token."
         case .notActive: "The role is not active."
         case .invalidDays(let d): "--days must be \(ExtendOptionsRange.days.lowerBound)-\(ExtendOptionsRange.days.upperBound) (got \(d))."
+        case .invalidScope(let s): "Azure returned a scope Pimento cannot build a request URL for: “\(s)”."
         }
     }
 }
@@ -245,7 +247,7 @@ public enum ActivationRequestBuilder {
         return try roles.filter { seen.insert($0.policyKey).inserted }.map { role in
             PlannedRequest(
                 role: role,
-                url: url(for: role, requestId: makeId()),
+                url: try url(for: role, requestId: makeId()),
                 body: try deactivationBody(for: role, principalId: principalId, justification: justification),
                 requestedAt: now,
                 duration: EffectiveDuration(minutes: 0, requested: .hours(0), policyMaxMinutes: nil),
@@ -292,7 +294,7 @@ public enum ActivationRequestBuilder {
         try assignments.map { a in
             PlannedRequest(
                 role: a.asRole,
-                url: url(scope: a.scope, requestId: makeId()),
+                url: try url(scope: a.scope, requestId: makeId()),
                 body: try extensionBody(for: a, principalId: principalId, justification: justification, days: days),
                 requestedAt: now,
                 duration: EffectiveDuration(minutes: days * 1440, requested: .hours(0), policyMaxMinutes: nil),
@@ -300,16 +302,20 @@ public enum ActivationRequestBuilder {
         }
     }
 
-    public static func url(scope rawScope: String, requestId: UUID) -> URL {
-        var scope = rawScope
-        if !scope.hasPrefix("/") { scope = "/" + scope }
-        while scope.count > 1, scope.hasSuffix("/") { scope.removeLast() }
-        let path = "\(ARM.baseURL)\(scope)/providers/Microsoft.Authorization/roleAssignmentScheduleRequests/\(requestId.uuidString.lowercased())?api-version=\(ARM.apiVersion)"
-        return URL(string: path)!
+    /// `PUT {scope}/providers/Microsoft.Authorization/roleAssignmentScheduleRequests/{id}`,
+    /// the scope percent-encoded (`ARMScope.path`): a `?`, `#` or space in it
+    /// cannot cut the path short or add a query. Throws for a scope that
+    /// cannot be a path (`..` segments, nothing but slashes).
+    public static func url(scope rawScope: String, requestId: UUID) throws -> URL {
+        guard let scope = ARMScope.path(rawScope),
+              let url = URL(string: "\(ARM.baseURL)\(scope)/providers/Microsoft.Authorization/roleAssignmentScheduleRequests/"
+                  + "\(requestId.uuidString.lowercased())?api-version=\(ARM.apiVersion)")
+        else { throw ActivationRequestError.invalidScope(rawScope) }
+        return url
     }
 
-    public static func url(for role: EligibleRole, requestId: UUID) -> URL {
-        url(scope: role.scope, requestId: requestId)
+    public static func url(for role: EligibleRole, requestId: UUID) throws -> URL {
+        try url(scope: role.scope, requestId: requestId)
     }
 
     /// The same number of hours for every role (no policy cap).
@@ -345,7 +351,7 @@ public enum ActivationRequestBuilder {
             let d = duration(role)
             return PlannedRequest(
                 role: role,
-                url: url(for: role, requestId: makeId()),
+                url: try url(for: role, requestId: makeId()),
                 body: try body(for: role, principalId: principalId, justification: justification, minutes: d.minutes,
                                now: now, start: start, ticket: ticket),
                 requestedAt: now,
@@ -366,4 +372,25 @@ public enum ExtendOptionsRange {
     /// How many days `pimento extend` may ask for.
     public static let days = 1...365
     public static let defaultDays = 30
+}
+
+/// An ARM scope as a URL path.
+public enum ARMScope {
+    /// Characters left as they are; everything else is percent-encoded
+    /// (ASCII only: a Unicode letter in a resource name is encoded too).
+    static let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~/()")
+
+    /// `/subscriptions/…` with a leading and no trailing slash, each
+    /// character outside `allowed` percent-encoded (empty for the root scope
+    /// `/`); nil for a scope with an empty, `.` or `..` segment.
+    public static func path(_ raw: String) -> String? {
+        var scope = raw
+        if !scope.hasPrefix("/") { scope = "/" + scope }
+        while scope.count > 1, scope.hasSuffix("/") { scope.removeLast() }
+        // The root scope: `/providers/…` directly.
+        if scope == "/" { return "" }
+        let segments = scope.split(separator: "/", omittingEmptySubsequences: false).dropFirst()
+        guard !segments.isEmpty, segments.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }) else { return nil }
+        return scope.addingPercentEncoding(withAllowedCharacters: allowed)
+    }
 }

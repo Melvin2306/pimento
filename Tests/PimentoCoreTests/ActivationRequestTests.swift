@@ -86,10 +86,42 @@ struct ActivationRequestTests {
     @Test func urlTargetsTheEligibilityScopeWithANewGUID() throws {
         let rgOwner = try Fixture.role("rg-app-dev", "Owner")
         let id = UUID(uuidString: "0F1E2D3C-4B5A-6978-8796-A5B4C3D2E1F0")!
-        let url = ActivationRequestBuilder.url(for: rgOwner, requestId: id)
+        let url = try ActivationRequestBuilder.url(for: rgOwner, requestId: id)
         #expect(url.absoluteString ==
             "https://management.azure.com/subscriptions/cccccccc-0000-0000-0000-00000000000c/resourceGroups/rg-app-dev"
             + "/providers/Microsoft.Authorization/roleAssignmentScheduleRequests/0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0?api-version=2020-10-01")
+    }
+
+    /// Regression: the scope went into the URL unencoded (and the URL was
+    /// force-unwrapped), so a `?` or `#` in it cut the PUT path short.
+    @Test func theScopeIsPercentEncodedAndABadOneThrows() throws {
+        let id = UUID(uuidString: "0F1E2D3C-4B5A-6978-8796-A5B4C3D2E1F0")!
+        let tail = "/providers/Microsoft.Authorization/roleAssignmentScheduleRequests/0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0?api-version=2020-10-01"
+        let base = "https://management.azure.com/subscriptions/cccccccc-0000-0000-0000-00000000000c/resourceGroups/"
+        let cases = [
+            "rg app?x=1#frag": "rg%20app%3Fx%3D1%23frag",
+            "rg-(test)_1.a~b": "rg-(test)_1.a~b",
+            "rg-Grüße%": "rg-Gr%C3%BC%C3%9Fe%25",
+        ]
+        for (name, encoded) in cases {
+            let url = try ActivationRequestBuilder.url(scope: "/subscriptions/cccccccc-0000-0000-0000-00000000000c/resourceGroups/\(name)/", requestId: id)
+            #expect(url.absoluteString == base + encoded + tail)
+            #expect(url.host == "management.azure.com")
+            #expect(url.query == "api-version=2020-10-01" && url.fragment == nil)
+            #expect(url.path.hasSuffix("/roleAssignmentScheduleRequests/0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"))
+        }
+        #expect(try ActivationRequestBuilder.url(scope: "/", requestId: id).absoluteString == "https://management.azure.com" + tail)
+        for bad in ["/subscriptions/../../x", "/subscriptions/./x", "/subscriptions//x"] {
+            #expect(throws: ActivationRequestError.invalidScope(bad)) { try ActivationRequestBuilder.url(scope: bad, requestId: id) }
+        }
+        // Planning a role with such a scope fails as an error, not a crash.
+        let owner = try Fixture.role("rg-app-dev", "Owner")
+        let role = EligibleRole(id: owner.id, eligibilityScheduleId: owner.eligibilityScheduleId, roleDefinitionId: owner.roleDefinitionId,
+                                roleName: owner.roleName, scope: "/subscriptions/../x", scopeName: owner.scopeName,
+                                scopeType: owner.scopeType, membership: owner.membership)
+        #expect(throws: ActivationRequestError.invalidScope("/subscriptions/../x")) {
+            try ActivationRequestBuilder.plan([role], principalId: "me", justification: "x", hours: 1, now: Fixture.now)
+        }
     }
 
     @Test func planUsesOneFreshRequestIdPerRole() throws {

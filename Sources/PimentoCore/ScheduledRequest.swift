@@ -103,12 +103,7 @@ public struct ScheduledRequest: Identifiable, Hashable, Sendable {
     /// `POST {scope}/providers/Microsoft.Authorization/roleAssignmentScheduleRequests/{name}/cancel`.
     public var cancelURL: URL? {
         guard !name.isEmpty, name.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-") }) else { return nil }
-        var s = scope
-        if !s.hasPrefix("/") { s = "/" + s }
-        while s.count > 1, s.hasSuffix("/") { s.removeLast() }
-        var allowed = CharacterSet.alphanumerics
-        allowed.insert(charactersIn: "-._~/()")
-        guard let path = s.addingPercentEncoding(withAllowedCharacters: allowed) else { return nil }
+        guard let path = ARMScope.path(scope) else { return nil }
         return URL(string: "\(ARM.baseURL)\(path)/providers/Microsoft.Authorization/roleAssignmentScheduleRequests/\(name)/cancel?api-version=\(ARM.apiVersion)")
     }
 

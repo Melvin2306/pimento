@@ -132,7 +132,7 @@ public struct RenewPlan: Identifiable, Sendable, Equatable {
         let active = Self.asEligible(role)
         return PlannedRequest(
             role: active,
-            url: ActivationRequestBuilder.url(for: role, requestId: requestId),
+            url: try ActivationRequestBuilder.url(for: role, requestId: requestId),
             body: try ActivationRequestBuilder.body(
                 for: active, principalId: principalId, justification: justification, minutes: duration.minutes, now: now,
                 ticket: ticket),
@@ -237,7 +237,7 @@ extension ActivationRequestBuilder {
             let eligible = RenewPlan.asEligible(off.role)
             let on = PlannedRequest(
                 role: eligible,
-                url: url(for: off.role, requestId: makeId()),
+                url: try url(for: off.role, requestId: makeId()),
                 body: try body(for: eligible, principalId: principalId, justification: text, minutes: d.minutes, now: now, ticket: t),
                 requestedAt: now,
                 duration: d)

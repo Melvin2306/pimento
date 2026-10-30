@@ -414,6 +414,9 @@ All notable changes to this project are documented here. The format follows
 - Renew (app and `pimento renew`) skips a role whose policy could not be read (`PolicyUnknown`)
   instead of treating it as "no approval needed": before, a failed policy read let renew end a role
   that then waited for an approver to come back.
+- Activation, deactivation, renewal and extension URLs percent-encode the scope (as cancel already
+  did, now with an ASCII-only allowlist): a `?`, `#` or space in a scope can no longer cut the `PUT`
+  path short. A scope that cannot be a path (`..`, empty segments) is an error instead of a crash.
 
 ## [0.1.0] - 2026-10-29
 
