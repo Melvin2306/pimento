@@ -217,10 +217,8 @@ final class AppModel {
     var showDeviceCodeSheet = false
     var deviceCodeInMainWindow = false
     @ObservationIgnored var signInTask: Task<Void, Never>?
-    /// The Settings window's tab (so the main window can open Account).
-    var settingsTab: SettingsTab = .general
-
-    enum SettingsTab: Hashable { case general, account, activation, notifications, history }
+    /// The Settings window's pane (so the main window can open Account).
+    var settingsTab: SettingsPane = .general
 
     enum SignInState: Equatable {
         case idle

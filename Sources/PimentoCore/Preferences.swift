@@ -9,7 +9,7 @@ public protocol PreferenceStore: AnyObject {
 
 extension UserDefaults: PreferenceStore {}
 
-/// The look of the app's windows (Settings › General › Appearance). Only
+/// The look of the app's windows (Settings › Appearance). Only
 /// styling changes; every control and shortcut stays the same.
 public enum AppTheme: String, Codable, CaseIterable, Sendable {
     /// The standard macOS look, following the system's light or dark mode.
@@ -37,7 +37,7 @@ public enum AppTheme: String, Codable, CaseIterable, Sendable {
     public var supportsDarkMode: Bool { self != .windowsXP }
 }
 
-/// Light or dark (Settings › General › Appearance), for every window.
+/// Light or dark (Settings › Appearance), for every window.
 public enum AppearanceMode: String, Codable, CaseIterable, Sendable {
     /// Follow the system's light or dark mode.
     case system

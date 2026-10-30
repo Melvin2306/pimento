@@ -263,6 +263,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- **Settings window redesigned**: wider (800 pt) and compact, so no pane needs scrolling. Each
+  pane lays its options out in two columns of grouped cards with right-aligned labels; simple
+  on/off options are checkboxes instead of switches; long explanations moved into ⓘ buttons
+  (tooltip on hover, popover on click). A new **Appearance** pane picks the theme from cards with
+  a small preview of each, the mode from a segmented control (the time-of-day times in one row),
+  and the table columns as one row of checkboxes. Every option, its default and where it is
+  stored are unchanged.
 - The `az not found` error names the install command of the platform (`brew`, Microsoft's Linux
   packages, `winget`). An HTTP error without a body reads the same on every platform ("forbidden").
 - The app binary is `Pimento.app/Contents/MacOS/Pimento` (SwiftPM product `PimentoApp`:

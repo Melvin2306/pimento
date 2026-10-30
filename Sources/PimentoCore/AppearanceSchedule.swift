@@ -32,7 +32,7 @@ public struct ClockTime: Hashable, Comparable, Sendable {
     public static func < (a: ClockTime, b: ClockTime) -> Bool { a.minutes < b.minutes }
 }
 
-/// Settings › General › Appearance › By time of day: light, dark and,
+/// Settings › Appearance › By time of day: light, dark and,
 /// optionally, ultra dark, each from a time of day.
 ///
 /// The rules, all in local wall-clock time:

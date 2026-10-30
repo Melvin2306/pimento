@@ -2,7 +2,7 @@ import AppKit
 import PimentoCore
 import SwiftUI
 
-// The look chosen in Settings › General › Appearance. Only styling lives here:
+// The look chosen in Settings › Appearance. Only styling lives here:
 // every view keeps its controls, actions, shortcuts and accessibility labels,
 // and with `.native` (unless ultra dark) each modifier below returns its
 // content unchanged.
@@ -433,8 +433,6 @@ extension View {
     func themedCell(checked: Bool) -> some View { modifier(CellHighlight(checked: checked)) }
     /// A flat text field with a thin border (the caller keeps `.roundedBorder` for native).
     func themedTextField(focused: Bool = false) -> some View { modifier(TextFieldChrome(focused: focused)) }
-    /// A themed form (Settings): page background behind the grouped sections.
-    func themedForm() -> some View { modifier(FormChrome()) }
     /// The Settings window's tab bar: black in ultra dark; nothing otherwise.
     func themedSettingsToolbar() -> some View { modifier(SettingsToolbarChrome()) }
 }
@@ -586,24 +584,6 @@ private struct TextFieldChrome: ViewModifier {
                         .strokeBorder(focused && theme == .azure ? palette.accentFill : palette.fieldBorder,
                                       lineWidth: focused && theme == .azure ? 2 : 1)
                 }
-        }
-    }
-}
-
-private struct FormChrome: ViewModifier {
-    @Environment(\.appTheme) private var theme
-    @Environment(\.colorScheme) private var scheme
-    @Environment(\.ultraDark) private var ultra
-
-    func body(content: Content) -> some View {
-        let palette = ThemePalette(theme, scheme, ultra: ultra)
-        if theme == .native && !palette.isUltra {
-            content.background(WindowBackground(black: false))
-        } else {
-            content
-                .scrollContentBackground(.hidden)
-                .background(palette.page)
-                .background(WindowBackground(black: palette.isUltra))
         }
     }
 }

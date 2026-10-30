@@ -423,45 +423,61 @@ struct HistorySettingsView: View {
 
     var body: some View {
         @Bindable var model = model
-        Form {
-            Section {
-                Toggle("Keep a history of what Pimento sends", isOn: $model.historySettings.enabled)
-                Picker("Keep records for", selection: $model.historySettings.retention) {
-                    ForEach(HistoryRetention.allCases, id: \.self) { r in Text(r.title).tag(r) }
-                }
-                .disabled(!model.historySettings.enabled)
-            } footer: {
-                Text("Activations, schedules, renewals, extensions, cancellations, approvals and denials, from the app and the "
-                    + "pimento command, with their outcome, justification and ticket. Never tokens or request bodies. "
-                    + "Older records are removed; past 5 MB the file starts over, keeping one previous file.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-
-            Section {
-                LabeledContent("File") {
-                    Text(model.historyStore.url.path.replacingOccurrences(of: NSHomeDirectory(), with: "~"))
-                        .lineLimit(1).truncationMode(.middle)
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
-                        .help(model.historyStore.url.path)
-                }
-                LabeledContent("Records") {
-                    HStack {
-                        Text("\(model.historyRecords.count)").foregroundStyle(.secondary).monospacedDigit()
-                        Button("Show in Finder") { model.showHistoryInFinder() }
-                        Button("Clear History…") { model.showClearHistoryConfirmation = true }
-                            .disabled(model.historyRecords.isEmpty)
+        SettingsPaneContainer {
+            SettingsColumns(trailingLabelWidth: 64) {
+                SettingsGroup("Recording") {
+                    SettingsRow {
+                        HStack(spacing: 6) {
+                            Toggle("Keep a history of what Pimento sends", isOn: $model.historySettings.enabled)
+                            InfoButton("Activations, schedules, renewals, extensions, cancellations, approvals and denials, from the app and the "
+                                + "pimento command, with their outcome, justification and ticket. Never tokens or request bodies.",
+                                label: "About the history")
+                        }
+                    }
+                    HStack(spacing: 8) {
+                        Text("Keep records for:")
+                        Picker("Keep records for", selection: $model.historySettings.retention) {
+                            ForEach(HistoryRetention.allCases, id: \.self) { r in Text(r.title).tag(r) }
+                        }
+                        .labelsHidden()
+                        .fixedSize()
+                    }
+                    .disabled(!model.historySettings.enabled)
+                    .settingsIndent()
+                    SettingsRow {
+                        SettingsNote("Older records are removed; past 5 MB the file starts over, keeping one previous file.")
                     }
                 }
-            } footer: {
-                Text("Readable only by you (mode 600) and shared with the command line (pimento history); "
-                    + "$\(HistoryStore.environmentVariable) points both elsewhere.")
-                    .font(.caption).foregroundStyle(.secondary)
+            } trailing: {
+                SettingsGroup("File") {
+                    SettingsRow("Location") {
+                        Text(model.historyStore.url.path.replacingOccurrences(of: NSHomeDirectory(), with: "~"))
+                            .lineLimit(1).truncationMode(.middle)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                            .help(model.historyStore.url.path)
+                    }
+                    SettingsRow("Records") {
+                        Text("\(model.historyRecords.count)").foregroundStyle(.secondary).monospacedDigit()
+                    }
+                    SettingsRow {
+                        HStack {
+                            Button("Show in Finder") { model.showHistoryInFinder() }
+                            Button("Clear History…") { model.showClearHistoryConfirmation = true }
+                                .disabled(model.historyRecords.isEmpty)
+                        }
+                    }
+                    SettingsRow {
+                        HStack(spacing: 4) {
+                            SettingsNote("Only you can read it; shared with pimento history.")
+                                .fixedSize()
+                            InfoButton("Readable only by you (mode 600) and shared with the command line (pimento history); "
+                                + "$\(HistoryStore.environmentVariable) points both elsewhere.", label: "About the history file")
+                        }
+                    }
+                }
             }
         }
-        .formStyle(.grouped)
-        .themedForm()
-        .fixedSize(horizontal: false, vertical: true)
         .onAppear { model.reloadHistory() }
         .confirmationDialog("Clear the history?", isPresented: $model.showClearHistoryConfirmation) {
             Button("Clear History", role: .destructive) { model.clearHistory() }

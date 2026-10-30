@@ -563,12 +563,14 @@ to sign in again.
 
 ### Settings
 
-<kbd>⌘</kbd><kbd>,</kbd> opens Settings. Changes apply immediately; *Reset All Settings to Defaults*
-is under General.
+<kbd>⌘</kbd><kbd>,</kbd> opens Settings: one toolbar tab per pane, each pane two columns of grouped
+options, with an ⓘ button where an option needs more explanation. Changes apply immediately;
+*Reset All Settings to Defaults* is under General.
 
 | Tab | Options |
 | --- | --- |
-| General | tenant to open with (last used, az's current, or a specific one); load roles on launch; refresh automatically (off, 1, 5 or 15 minutes); menu bar icon (on by default), its remaining time, hide the Dock icon, launch at login (see [Menu bar](#menu-bar)); theme (see below); show or hide the Type, Membership, Condition and Duration columns (also via right-click on a column header); unhide hidden tenants |
+| General | tenant to open with (last used, az's current, or a specific one); unhide hidden tenants; load roles on launch; refresh automatically (off, 1, 5 or 15 minutes); menu bar icon (on by default), its remaining time, hide the Dock icon, launch at login (see [Menu bar](#menu-bar)) |
+| Appearance | theme, picked from preview cards; mode (see [Themes](#themes)); show or hide the Type, Membership, Condition and Duration columns (also via right-click on a column header) |
 | Account | sign in with the Azure CLI or Pimento sign-in; the client ID of your app registration; signed-in accounts (*Use*, *Sign Out*, *Sign Out All*); *Sign In…* (browser) and *Sign In with Code…* (see [Pimento sign-in](#pimento-sign-in-without-the-azure-cli)) |
 | Activation | default duration; parallel requests (1 to 16, default 8); confirm before activating Owner roles (on by default); remember recent justifications and tickets and offer them from the clock buttons next to the fields; start with the last justification filled in |
 | History | keep a history (on by default); keep records for 30, 90 or 365 days or forever; the file, Show in Finder, Clear History |
@@ -576,7 +578,7 @@ is under General.
 
 ### Themes
 
-*Settings › General › Appearance* switches the look of the main window, its sheets, the tenant
+*Settings › Appearance* switches the look of the main window, its sheets, the tenant
 picker and the Settings window. The change applies right away. Only the styling changes: every
 control, shortcut and accessibility label works the same in each theme.
 
@@ -586,7 +588,7 @@ control, shortcut and accessibility label works the same in each theme.
 | Azure-style | Flat and blue: the title bar and toolbar form one near-black portal-style top bar, with a "My roles" page title below it, the table on a white card with light-blue checked rows, portal-style status badges, square blue buttons. Light and dark. Uses Segoe UI if the Mac has it, otherwise the system font. |
 | Windows XP-style | Beige window under a glossy blue title bar (the toolbar itself), a white list box with blue checked rows, light rounded buttons and a green **Activate** button (orange with Owner roles). Light only. Uses Tahoma if the Mac has it (macOS ships it), otherwise the system font. |
 
-**Mode** next to the theme applies to every Pimento window at once:
+**Mode** (below the theme cards) applies to every Pimento window at once:
 
 | Mode | What applies |
 | --- | --- |

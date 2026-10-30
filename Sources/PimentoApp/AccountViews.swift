@@ -9,80 +9,80 @@ struct AccountSettings: View {
 
     var body: some View {
         @Bindable var model = model
-        Form {
-            Section {
-                Picker("Sign in with", selection: source) {
-                    ForEach(AuthSource.allCases, id: \.self) { s in Text(s.title).tag(s) }
+        SettingsPaneContainer {
+            SettingsColumns(leadingWidth: 236) {
+                SettingsGroup("Sign in with") {
+                    Picker("Sign in with", selection: source) {
+                        ForEach(AuthSource.allCases, id: \.self) { s in Text(s.title).tag(s) }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.radioGroup)
+                    .disabled(model.authSelection.isOverride || model.isActivating)
+                    if model.authSelection.isOverride {
+                        SettingsNote("This launch uses $\(AuthSourceResolver.environmentVariable), which takes precedence.")
+                    }
+                    SettingsNote(model.authSource == .az
+                        ? "Uses your Azure CLI session (az login). Nothing is stored by Pimento."
+                        : "Pimento signs in by itself with your app registration. No Azure CLI needed.")
                 }
-                .pickerStyle(.radioGroup)
-                .disabled(model.authSelection.isOverride || model.isActivating)
-                if model.authSelection.isOverride {
-                    Text("This launch uses $\(AuthSourceResolver.environmentVariable), which takes precedence.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-            } header: {
-                Text("Auth source")
-            } footer: {
-                Text(model.authSource == .az
-                    ? "Uses your Azure CLI session (az login). Nothing is stored by Pimento."
-                    : "Pimento signs in by itself with your app registration. No Azure CLI needed.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-
-            Section {
-                LabeledContent("Client ID") {
-                    TextField("Client ID", text: $model.clientIdDraft, prompt: Text("00000000-0000-0000-0000-000000000000"))
-                        .labelsHidden()
-                        .font(.body.monospaced())
-                        .frame(minWidth: 280)
-                        .onSubmit { model.commitClientId() }
-                        .onChange(of: model.clientIdDraft) { _, _ in
-                            if model.clientIdProblem == nil { model.commitClientId() }
+            } trailing: {
+                SettingsGroup("Pimento sign-in") {
+                    SettingsRow("Client ID") {
+                        TextField("Client ID", text: $model.clientIdDraft, prompt: Text("00000000-0000-0000-0000-000000000000"))
+                            .labelsHidden()
+                            .font(.body.monospaced())
+                            .frame(maxWidth: 320)
+                            .onSubmit { model.commitClientId() }
+                            .onChange(of: model.clientIdDraft) { _, _ in
+                                if model.clientIdProblem == nil { model.commitClientId() }
+                            }
+                        if let problem = model.clientIdProblem {
+                            SettingsNote(problem, kind: .error)
+                        } else if ProcessInfo.processInfo.environment[AuthSourceResolver.clientIdVariable] != nil {
+                            SettingsNote("$\(AuthSourceResolver.clientIdVariable) is set and takes precedence.")
                         }
-                }
-                if let problem = model.clientIdProblem {
-                    Text(problem).font(.caption).foregroundStyle(.red)
-                        .fixedSize(horizontal: false, vertical: true)
-                } else if ProcessInfo.processInfo.environment[AuthSourceResolver.clientIdVariable] != nil {
-                    Text("$\(AuthSourceResolver.clientIdVariable) is set and takes precedence.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-
-                if model.signedInAccounts.isEmpty {
-                    LabeledContent("Account") { Text("Not signed in").foregroundStyle(.secondary) }
-                } else {
-                    ForEach(model.signedInAccounts) { account in
-                        AccountRow(account: account, isCurrent: account.id == model.currentAccount?.id)
+                    }
+                    SettingsRow("Accounts", alignment: .top) {
+                        if model.signedInAccounts.isEmpty {
+                            Text("Not signed in").foregroundStyle(.secondary)
+                        } else {
+                            VStack(alignment: .leading, spacing: 6) {
+                                ForEach(model.signedInAccounts) { account in
+                                    AccountRow(account: account, isCurrent: account.id == model.currentAccount?.id)
+                                }
+                            }
+                        }
+                    }
+                    SettingsRow {
+                        HStack {
+                            Button("Sign In…") { model.signInWithBrowser() }
+                                .disabled(!model.canSignIn)
+                                .help("Opens your browser to sign in with your Microsoft work account")
+                            Button("Sign In with Code…") { model.signInWithDeviceCode() }
+                                .disabled(!model.canSignIn)
+                                .help("Shows a code to enter at microsoft.com/devicelogin on any device")
+                            Spacer()
+                            if model.signedInAccounts.count > 1 {
+                                Button("Sign Out All") { model.signOutAll() }
+                                    .disabled(model.isActivating)
+                            }
+                        }
+                        SignInStatus()
+                    }
+                    SettingsRow {
+                        HStack(spacing: 4) {
+                            SettingsNote("Needs your own app registration (README › Pimento sign-in).")
+                                .fixedSize()
+                            InfoButton("Needs a public client app registration in Microsoft Entra ID (README › Pimento sign-in). "
+                                + "The refresh token is kept in your Keychain, access tokens only in memory. "
+                                + "Sign-in data goes only to login.microsoftonline.com, tokens only to management.azure.com.",
+                                label: "About Pimento sign-in")
+                        }
                     }
                 }
-
-                HStack {
-                    Button("Sign In…") { model.signInWithBrowser() }
-                        .disabled(!model.canSignIn)
-                        .help("Opens your browser to sign in with your Microsoft work account")
-                    Button("Sign In with Code…") { model.signInWithDeviceCode() }
-                        .disabled(!model.canSignIn)
-                        .help("Shows a code to enter at microsoft.com/devicelogin on any device")
-                    Spacer()
-                    if model.signedInAccounts.count > 1 {
-                        Button("Sign Out All") { model.signOutAll() }
-                            .disabled(model.isActivating)
-                    }
-                }
-                SignInStatus()
-            } header: {
-                Text("Pimento sign-in")
-            } footer: {
-                Text("Needs a public client app registration in Microsoft Entra ID (README › Pimento sign-in). "
-                    + "The refresh token is kept in your Keychain, access tokens only in memory. "
-                    + "Sign-in data goes only to login.microsoftonline.com, tokens only to management.azure.com.")
-                    .font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                .environment(\.settingsLabelWidth, 68)
             }
         }
-        .formStyle(.grouped)
-        .themedForm()
-        .fixedSize(horizontal: false, vertical: true)
         .task { await model.reloadAccounts() }
         .sheet(isPresented: Binding(
             get: { model.showDeviceCodeSheet && !model.deviceCodeInMainWindow },
