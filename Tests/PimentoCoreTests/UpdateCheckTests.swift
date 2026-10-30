@@ -133,9 +133,12 @@ struct UpdateCheckRequestTests {
         #expect(request.timeoutInterval == UpdateCheck.timeout)
         #expect(!request.httpShouldHandleCookies)
         #expect(request.cachePolicy == .reloadIgnoringLocalAndRemoteCacheData)
+        // Header names compared case-insensitively: Foundation on Linux and
+        // Windows normalises their case (X-Github-Api-Version).
         let headers = request.allHTTPHeaderFields ?? [:]
-        #expect(headers["User-Agent"] == "Pimento/\(AppInfo.version)")
-        #expect(Set(headers.keys) == ["User-Agent", "Accept", "X-GitHub-Api-Version"], "no identifiers, tokens or cookies")
+        #expect(request.value(forHTTPHeaderField: "User-Agent") == "Pimento/\(AppInfo.version)")
+        #expect(Set(headers.keys.map { $0.lowercased() }) == ["user-agent", "accept", "x-github-api-version"],
+                "no identifiers, tokens or cookies")
         #expect(result.update?.version == SemanticVersion(0, 2, 0))
     }
 
