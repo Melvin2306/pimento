@@ -18,10 +18,10 @@ unless you prefer otherwise.
 
 | Version | Security fixes |
 | --- | --- |
-| 0.1.x (the latest release) | yes |
-| builds from before 0.1.0, and unreleased `main` | no |
+| 0.2.x (the latest release) | yes |
+| 0.1.x, builds from before 0.1.0, and unreleased `main` | no |
 
-Fixes ship as a new patch release of the latest version (0.1.x for now) and are listed under
+Fixes ship as a new patch release of the latest version (0.2.x for now) and are listed under
 *Security* in the [changelog](CHANGELOG.md). Please check that the problem still exists in the
 [latest release](https://github.com/Melvin2306/pimento/releases/latest) before reporting.
 
