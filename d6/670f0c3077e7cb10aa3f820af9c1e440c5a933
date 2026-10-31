@@ -1,0 +1,20 @@
+.github/release-notes/v0.2.0.md
+  s_4884204a812fec::t_bd945558d10533 29-30
+  s_4884204a812fec::t_1ca50c131b78ec 1-28,31-96
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d6670f0c3077e7cb10aa3f820af9c1e440c5a933",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
