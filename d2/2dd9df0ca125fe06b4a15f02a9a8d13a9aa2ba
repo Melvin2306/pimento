@@ -1,0 +1,23 @@
+.github/ISSUE_TEMPLATE/bug_report.yml
+  s_4884204a812fec::t_ae4c66b6a8814b 27
+README.md
+  s_4884204a812fec::t_2cd218b5732e30 101-102,128,547,769,1191
+SECURITY.md
+  s_4884204a812fec::t_ad7ad1a03ae190 21-22,24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d22dd9df0ca125fe06b4a15f02a9a8d13a9aa2ba",
+  "prompts": {},
+  "sessions": {
+    "s_4884204a812fec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11d489fc-e53a-4e38-a429-da4286dffc13",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Melvin Rinkleff <Melvin2306@users.noreply.github.com>"
+    }
+  }
+}
