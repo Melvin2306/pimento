@@ -73,13 +73,18 @@ let redirectPages = RedirectPages()
 /// nonce, PKCE challenge) never becomes a process argument, where other local
 /// users could read it: macOS asks LaunchServices directly (no child process);
 /// Linux runs `xdg-open` (from PATH) on a private redirect page that holds the
-/// URL (`BrowserLaunch`). Windows has no browser sign-in yet
-/// (`LoopbackListener.isSupported`); its opener uses the same redirect page.
+/// URL (`BrowserLaunch`); Windows hands that page's path to `ShellExecuteW`
+/// (the default browser, through the `.html` file association): no shell
+/// string, no `cmd.exe`, and the URL in no command line.
 func openInBrowser(_ url: URL) -> Bool {
     #if os(macOS)
     return LSOpenCFURLRef(url as CFURL, nil) == noErr
     #elseif os(Windows)
     guard let page = BrowserLaunch.openThroughPage(url, open: { path in
+        // The shell may hand the file to a COM-based handler: COM must be set
+        // up on this thread (and is undone again if this call set it up).
+        let com = CoInitializeEx(nil, DWORD(COINIT_APARTMENTTHREADED.rawValue) | DWORD(COINIT_DISABLE_OLE1DDE.rawValue))
+        defer { if com >= 0 { CoUninitialize() } }
         let result = path.withCString(encodedAs: UTF16.self) { file in
             "open".withCString(encodedAs: UTF16.self) { verb in
                 ShellExecuteW(nil, verb, file, nil, nil, SW_SHOWNORMAL)
@@ -122,7 +127,22 @@ func isBrokenPipe(_ error: Error) -> Bool {
     return false
 }
 
-let environment = CLIEnvironment(
+/// Raw bytes from stdin for `pimento mcp`'s bounded line reader; retried
+/// when a signal interrupts the read. On Windows fd 0 is in text mode, as
+/// `readLine` reads it.
+@Sendable func readStdin(_ buffer: UnsafeMutableRawPointer, _ count: Int) -> Int {
+    #if os(Windows)
+    return Int(_read(0, buffer, UInt32(min(count, Int(Int32.max)))))
+    #else
+    while true {
+        let n = read(0, buffer, count)
+        if n < 0, errno == EINTR { continue }
+        return n
+    }
+    #endif
+}
+
+var environment = CLIEnvironment(
     write: { text, stream in
         let handle = stream == .out ? FileHandle.standardOutput : FileHandle.standardError
         // `write(_:)` raises an Objective-C exception on a closed pipe, which
@@ -156,6 +176,13 @@ let environment = CLIEnvironment(
         openURL: { url in BrowserLaunch.guarded(url, openInBrowser) },
         endBrowserSignIn: { redirectPages.removeAll() })
 )
+
+environment.readInput = readStdin
+// Only `pimento version --check` uses it: one GET of GitHub's latest release
+// (UpdateCheckTransport refuses anything else). No other command goes online.
+environment.updateTransport = UpdateCheckTransport()
+// The app's bundled CLI is updated with the app, not with the installer.
+environment.executablePath = Bundle.main.executableURL?.resolvingSymlinksInPath().path
 
 #if !os(Windows)
 // A closed pipe (`pimento list | head`) should end quietly, not crash.

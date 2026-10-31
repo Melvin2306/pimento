@@ -54,7 +54,7 @@ struct CLILifecycleParserTests {
         #expect(throws: CLIParseError.noActiveSelection("extend")) { try command("extend", "-j", "x") }
         #expect(throws: CLIParseError.unknownOption("--hours", command: "deactivate")) { try command("deactivate", "--all", "--hours", "2") }
         #expect(throws: CLIParseError.unknownOption("--preset", command: "extend")) { try command("extend", "--preset", "x", "-j", "y") }
-        #expect(throws: CLIParseError.conflicting("--preset", "filters, --role or --all")) { try command("deactivate", "--preset", "x", "--all") }
+        #expect(throws: CLIParseError.conflicting("--preset", "filters, --role, --id or --all")) { try command("deactivate", "--preset", "x", "--all") }
         #expect(CLIParseError.noActiveSelection("deactivate").errorDescription?.contains("--preset") == true)
     }
 

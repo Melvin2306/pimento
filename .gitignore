@@ -12,6 +12,11 @@ DerivedData/
 # macOS
 .DS_Store
 
+# Launcher integrations: dependencies and build output (integrations/alfred/build.sh
+# writes build/Pimento.alfredworkflow)
+node_modules/
+*.alfredworkflow
+
 # Secrets and personal data: never commit them (Pimento keeps its own files
 # outside the repository, but copies for debugging end up here).
 .env

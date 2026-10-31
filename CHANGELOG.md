@@ -6,6 +6,164 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **`pimento mcp`**: a Model Context Protocol server on stdin/stdout, so AI agents (Claude Code,
+  Claude Desktop, Cursor, …) can work with your PIM roles. Read-only by default: `list_tenants`,
+  `list_eligible_roles` (with each role's policy), `list_active_roles`, `list_presets`,
+  `list_pending_approvals` and `get_history`. With `--allow-activate` also `activate_roles`,
+  `deactivate_roles` and `renew_roles`: each request is planned read-only, shown to you through MCP
+  elicitation and sent only after you confirm it; clients without elicitation cannot write unless
+  the server runs with `--no-confirm`. Owner, User Access Administrator and Role Based Access
+  Control Administrator need `--allow-privileged` and a second confirmation. Durations are capped
+  at the policy maximum, a justification is required, arguments are validated strictly, results
+  never contain tokens or file paths, and every write is recorded in the history (source `mcp`).
+  `--tenant` (or `PIMENTO_MCP_TENANT`) keeps it in one tenant; `--demo` runs it on the demo data.
+  Speaks the stateless 2026-07-28 revision and the `initialize`-based revisions 2024-11-05 to
+  2025-11-25, without new dependencies, on macOS, Linux and Windows. See README › AI agents (MCP).
+- **Keep alive**: mark active roles (right-click › *Keep Alive*) or a preset (*Keep alive* in Manage
+  Presets), and Pimento renews them shortly before they expire, during working hours (Settings ›
+  Activation › Keep alive: days and hours, Mon–Fri 08:00–18:00 by default, local time). Fifteen
+  minutes before the end it schedules the next activation to start exactly when the current one
+  ends, so there is no gap (PIM has no self-service extension; `SelfExtend` / `SelfRenew` need an
+  administrator). The rules: the policy maximum and working hours apply (the last renewal of the day
+  is shortened to whole hours ending by then, or skipped); the justification and ticket of the
+  activation are reused, and a renewal whose policy needs one that is unknown is skipped with a
+  notification; roles needing approval are never renewed (the UI says why); a role ended early
+  (noticed from the listing and from your requests, also after sleep or a restart) is not brought
+  back and its continuation is withdrawn, as on pause; one that lapsed while the Mac slept is
+  activated again on wake if still inside working hours; failures back off (1, 5, 15 minutes) and
+  stop after 4 per role per window. Status icon and tooltip in the table and the menu bar, a *Keep
+  Alive* toolbar menu, and a global *Pause* (toolbar, menu bar, Settings). Notifications follow the
+  completion settings (*Renewed Contributor until 18:00*, and failures). Works in demo mode.
+- **`pimento keep-alive`**: the same rules as a foreground loop until Ctrl-C, for Linux, Windows and
+  servers (`--days`, `--window`, `--hours`, `-j`, `--preset`, `--dry-run`; asks once, or `--yes`).
+  The scheduler lives in PimentoCore (`KeepAlive`, `KeepAliveSession`), shared by the app and the CLI.
+- Presets have an optional `keepAlive` field.
+- Keeping a role alive that can grant access (Owner, User Access Administrator, RBAC Administrator)
+  asks once when it is marked (per role or through a preset), while *Confirm before activating Owner
+  roles* is on; `pimento keep-alive` asks at its prompt or takes `--yes`, as `activate` does.
+- History: a new source, **Keep alive** (`keepAlive` in the file, CSV and JSON), for everything
+  keep-alive sends.
+- **Update check**: once a day (at launch, or while running) the app asks GitHub for the latest
+  release and, when it is newer, shows a one-line notice above the role table and in the menu bar
+  with *Download* (the release's disk image) and *Release Notes*; the ✕ hides it until the next
+  version. **Pimento › Check for Updates…** checks now; *Settings › General › Updates* has the
+  switch (on by default), *Check Now* and the last result. `pimento version --check [--json]`
+  prints the current and latest versions and how to update (re-run the installer); no other CLI
+  command contacts GitHub. Versions are compared as semantic versions; drafts and pre-releases are
+  ignored. Nothing is downloaded or installed automatically. `PIMENTO_NO_UPDATE_CHECK=1` turns it
+  off in the app and the CLI, and demo mode never checks.
+- **`--id ID`** for `pimento list`, `activate`, `deactivate` and `renew`: exactly the role whose
+  `id` or `eligibilityScheduleId` in `list --json` is ID (repeatable). For scripts and launchers
+  that picked one row, where a scope filter would also match the roles below that scope.
+- **`pimento activate --preset-id ID`**: exactly the preset whose `id` in `presets list --json` is
+  ID, in its own tenant. The Raycast extension and the Alfred workflow activate presets with it.
+- **Raycast extension** (`integrations/raycast`): *Search PIM Roles* (status, activate with a
+  justification, duration and, when the policy asks, a ticket; deactivate), *Activate PIM Preset*
+  and *Active PIM Roles* with the time left. It runs the installed `pimento` with an argument list
+  (`execFile`, no shell), finds it in a preference, `~/.local/bin`, `PATH` or `Pimento.app`, shows
+  the CLI's errors by exit code, and has a demo mode preference. Not in the Raycast Store: install
+  it with `npm ci && npm run dev`.
+- **Alfred workflow** (`integrations/alfred`): the `pim` Script Filter lists presets, active roles
+  (time left) and eligible roles from the CLI's JSON; ↩ activates a role (after `>` and a
+  justification) or a preset, ⌥↩ deactivates. POSIX `sh` and JXA only. `build.sh` packs
+  `build/Pimento.alfredworkflow`; `test.sh` runs the scripts against `pimento --demo` (also in CI).
+- **Tenant badges**: the tenant picker, the toolbar, the menu bar and the tenant menus of Settings
+  and History show each tenant as one or two initials on a colour from its tenant ID (*Northwind
+  Traders* → *NT*; legal forms such as *SE*, *GmbH* or *Inc.* skipped; the domain for unnamed
+  tenants) instead of a building symbol. Drawn offline; the palette keeps white initials at WCAG AA
+  and stays visible in light, dark, ultra dark and the Azure and XP themes.
+- **Fetch tenant logos** (*Settings › General*, off by default): shows the square logo of a
+  tenant's Microsoft sign-in page, else its website's icon, instead of the initials. Unauthenticated
+  and without cookies, Microsoft's branding CDNs only for the sign-in logo, HTTPS, 512 KB and
+  image checks, cached for 7 days with *Refresh Logos* and *Clear Cache*; never in demo mode. It
+  tells Microsoft and each tenant's website that this Mac looked them up (see *Security and privacy*).
+- **Browser sign-in on Windows.** `pimento login` opens the browser there too (authorization code
+  with PKCE), instead of always using a device code; `--device-code` still works. The loopback
+  listener now runs on Winsock with the same code as on macOS and Linux: loopback only (127.0.0.1
+  and ::1 on one port, another port when a program holds the ::1 side), the `state` check, the
+  per-connection and overall timeouts, and one answer. On Windows its port is held with
+  `SO_EXCLUSIVEADDRUSE`, so no other program can bind it, even with `SO_REUSEADDR`. The browser is
+  opened with `ShellExecuteW` on a private redirect page; the URL is never in a command line.
+- **PowerShell completions.** `pimento completions powershell` (or `pwsh`) prints a
+  `Register-ArgumentCompleter` script for Windows PowerShell 5.1 and PowerShell 7. It completes
+  commands, flags, their fixed values, the words after `presets`, `history`, `completions` and
+  `help`, and the names of your presets (read with `pimento presets list --json`, offline). The
+  Windows zip ships it as `completions\pimento.ps1`, and `install.ps1` loads it from a marked block
+  in your PowerShell profile. The block is replaced, not repeated, on every install, and
+  `-Uninstall` removes it; the rest of the profile, and its encoding, stay as they were.
+  `-NoCompletions` (`PIMENTO_NO_COMPLETIONS=1`) skips it, and `-ProfilePath` (`PIMENTO_PROFILE`)
+  picks another profile. cmd.exe has no programmable completion, so it gets none.
+
+### Changed
+
+- `pimento activate` and `renew` plan their requests with the same code as `pimento mcp`
+  (`ActivationPlanning`); their behaviour is unchanged.
+- Sign-in connections end with a lingering close (no more sending, the rest of the request read,
+  then closed), so a connection reset cannot discard the answer page before the browser shows it.
+- The loopback listener tests run on Windows too, and CI tries the PowerShell completions with
+  `TabExpansion2` in both PowerShells.
+
+### Fixed
+
+- When another program holds the sign-in port, the error names the way around it:
+  `pimento login --device-code`, or *Sign In with Code…* in the app. The PowerShell completion
+  passes a typed `--tenant` to `pimento presets list` only when it is a GUID or domain, in one
+  argument (Windows PowerShell 5.1 would split a value with a double quote). `install.ps1` never
+  takes `.` or `..` from its file list as a file to remove.
+- `pimento mcp --tenant`: `list_tenants` lists only the pinned tenant, as the other tools work only
+  there. Error messages shown to the agent now redact a whole file path even when a folder name
+  has spaces (`Application Support`, a user name), not only up to the first space. A confirmation
+  is bound to the signed-in account too, so one given before a switch of account is not used
+  after it. The confirmation names the roles that a keep-alive preset will renew beyond the
+  duration shown. The server no longer keeps finished requests until the end of the session.
+- Keep alive: switching tenant or account while a pass waited for Azure no longer lets that pass
+  write the previous session's state (ends, continuations, justifications) back into the new one,
+  where the next pass could withdraw the old session's continuations with the new token or reuse
+  a justification. The overtaken pass stops; the app runs a new one a few seconds later.
+- The Raycast extension and the Alfred workflow activate a preset by its id, so the preset you
+  picked is the one that runs. They used to pass its name and guess which preset the CLI would
+  choose; that guess could differ from the CLI's (a preset whose tenant is a domain, or names that
+  only Unicode case folding makes equal), so `--yes` could run a same-named preset of another
+  tenant. `pimento activate --preset NAME --tenant DOMAIN` (and `deactivate`, `renew`, `keep-alive`,
+  MCP) now also prefers a preset saved for that domain over one for any tenant.
+
+### Security
+
+- `pimento mcp` refuses every default-ignorable character in an agent's arguments (justification,
+  ticket, preset, role, scope, filters), not only the formatting and zero-width ones: variation
+  selectors (U+FE00–U+FE0F, U+E0100–U+E01EF) and similar characters render as nothing and do not
+  count as characters, so a justification that read *INC-1234 read the logs* in the confirmation
+  could carry thousands of hidden characters to Azure and the history. An emoji's own presentation
+  selector (⚠️, ✔️, 1️⃣) is still accepted, every string is also limited to four Unicode scalars per
+  allowed character, and the confirmation shows any invisible character as an escape.
+- The Raycast extension's preset detail shows the preset, role, scope and rule names, the
+  justification and the ticket system as plain text, no longer as Markdown, in which a name from
+  Azure or the presets file (`![](https://…)`) could load a remote image as soon as the row was
+  selected, or show a link.
+- The Raycast extension and the Alfred workflow skip a `pimento` that another user could have
+  placed or changed when they look for it (the file, after following links, or its folder not
+  owned by you or root, or writable by others or by a group other than wheel or admin), as the CLI
+  does for `az`. Before, a `pimento` in a shared, writable folder on the `PATH` would have been run.
+- The Raycast extension and the Alfred workflow treat User Access Administrator and Role Based
+  Access Control Administrator like Owner (Raycast asks once more before activating them, Alfred
+  warns before ↩), from the new `grantsAccess` field of `pimento list --json`; they used to
+  warn for Owner only. A preset's copied command (*Copy Command*, Alfred's ⌘C) quotes the name
+  for a shell, so pasting it cannot run what a name like `$(…)` contains.
+- The update check uses the logo fetch's private session: no stored credentials, and every
+  authentication request but the certificate check refused, so no client certificate or password
+  can be offered to a server that asks; on macOS its 1 MB limit now stops the download as it is
+  reached. `pimento version --check` prints an installer command for exactly the version it found.
+- Tenant logos: the largest logo decoded is 1024 pixels on a side (was 4096; the badge shows 96),
+  so a large image no longer takes some 64 MB of memory to decode.
+- The update check sends one HTTPS `GET` to `api.github.com` with only `User-Agent:
+  Pimento/<version>` and a fixed `Accept-Language: en` (no cookies, tokens or IDs; the same two
+  headers as the logo fetch), with a timeout, through a guard that
+  refuses any other URL or method. The answer is untrusted: a strict version parse, a size limit,
+  and links built from the version under `https://github.com/Melvin2306/pimento/`, never taken from
+  the answer. See README › Security and privacy.
+
 ## [0.1.0] - 2026-10-30
 
 The first public release. It covers everything built before it; the development history is in

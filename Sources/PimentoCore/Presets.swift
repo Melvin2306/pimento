@@ -74,13 +74,16 @@ public struct Preset: Codable, Hashable, Identifiable, Sendable {
     public var duration: RequestedDuration?
     /// Default ticket system (`ServiceNow`, `Jira`) for roles that need a ticket.
     public var ticketSystem: String?
+    /// Keep-alive: renew the preset's roles while they are active, during
+    /// working hours (`KeepAlive`). Stored only when on.
+    public var keepAlive = false
     public var createdAt: Date?
     public var updatedAt: Date?
 
     public init(
         id: UUID = UUID(), name: String, tenantId: String?, roles: [PresetRole] = [], match: [PresetRule] = [],
         justification: String? = nil, duration: RequestedDuration? = nil, ticketSystem: String? = nil,
-        createdAt: Date? = nil, updatedAt: Date? = nil
+        keepAlive: Bool = false, createdAt: Date? = nil, updatedAt: Date? = nil
     ) {
         self.id = id
         self.name = name
@@ -90,12 +93,13 @@ public struct Preset: Codable, Hashable, Identifiable, Sendable {
         self.justification = justification
         self.duration = duration
         self.ticketSystem = ticketSystem
+        self.keepAlive = keepAlive
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, name, tenantId, roles, match, justification, duration, ticketSystem, createdAt, updatedAt
+        case id, name, tenantId, roles, match, justification, duration, ticketSystem, keepAlive, createdAt, updatedAt
     }
 
     /// Lenient: unknown keys are ignored, a missing id gets a new one, and an
@@ -110,6 +114,7 @@ public struct Preset: Codable, Hashable, Identifiable, Sendable {
         justification = try c.decodeIfPresent(String.self, forKey: .justification)
         duration = (try? c.decodeIfPresent(String.self, forKey: .duration)).flatMap { $0.flatMap(RequestedDuration.init(stringValue:)) }
         ticketSystem = (try? c.decodeIfPresent(String.self, forKey: .ticketSystem))?.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty }
+        keepAlive = (try? c.decodeIfPresent(Bool.self, forKey: .keepAlive)) == true
         createdAt = try? c.decodeIfPresent(Date.self, forKey: .createdAt)
         updatedAt = try? c.decodeIfPresent(Date.self, forKey: .updatedAt)
     }
@@ -124,6 +129,7 @@ public struct Preset: Codable, Hashable, Identifiable, Sendable {
         try c.encodeIfPresent(justification?.nonEmpty, forKey: .justification)
         try c.encodeIfPresent(duration?.stringValue, forKey: .duration)
         try c.encodeIfPresent(trimmedTicketSystem, forKey: .ticketSystem)
+        if keepAlive { try c.encode(true, forKey: .keepAlive) }
         try c.encodeIfPresent(createdAt, forKey: .createdAt)
         try c.encodeIfPresent(updatedAt, forKey: .updatedAt)
     }
@@ -207,6 +213,7 @@ public enum PresetError: Error, Equatable, LocalizedError {
     case emptyName
     case duplicateName(String)
     case notFound(String)
+    case idNotFound(String)
     case ambiguous(String, tenants: [String])
     case otherTenant(String, tenantId: String)
     case noRoles
@@ -219,6 +226,7 @@ public enum PresetError: Error, Equatable, LocalizedError {
         case .emptyName: "A preset needs a name."
         case .duplicateName(let n): "A preset named “\(n)” already exists in this tenant."
         case .notFound(let n): "No preset named “\(n)”. `pimento presets list` shows the saved ones."
+        case .idNotFound(let id): "No preset has the id “\(id)”. `pimento presets list --json` shows the saved ones."
         case .ambiguous(let n, let tenants):
             "There are presets named “\(n)” in \(tenants.count) tenants (\(tenants.joined(separator: ", "))). Pick one with --tenant."
         case .otherTenant(let n, let t): "The preset “\(n)” belongs to tenant \(t). Use --tenant \(t)."
@@ -254,18 +262,28 @@ public struct PresetLibrary: Equatable, Sendable {
     /// Presets with this name (case-insensitive) in any tenant.
     public func named(_ name: String) -> [Preset] { presets.filter { Self.sameName($0.name, name) } }
 
-    /// The preset called `name` for `tenantId`. Without a tenant, the name must
+    /// The preset called `name` for `tenantId` (or `alias`, the tenant as it
+    /// was asked for, which may be a domain). Without a tenant, the name must
     /// be unique. Errors say whether it exists elsewhere.
-    public func find(_ name: String, tenantId: String?) throws -> Preset {
+    public func find(_ name: String, tenantId: String?, alias: String? = nil) throws -> Preset {
         let all = named(name)
         guard !all.isEmpty else { throw PresetError.notFound(name) }
         if let tenantId {
-            if let exact = all.first(where: { $0.tenantId?.caseInsensitiveCompare(tenantId) == .orderedSame }) { return exact }
+            let tenants = [tenantId] + (alias.map { [$0] } ?? [])
+            if let exact = all.first(where: { p in tenants.contains { p.tenantId?.caseInsensitiveCompare($0) == .orderedSame } }) { return exact }
             if let any = all.first(where: { $0.tenantId == nil }) { return any }
             throw PresetError.otherTenant(all[0].name, tenantId: all[0].tenantId ?? "")
         }
         guard all.count == 1 else { throw PresetError.ambiguous(all[0].name, tenants: all.map { $0.tenantId ?? "any" }) }
         return all[0]
+    }
+
+    /// The preset with this id (`presets list --json`), whatever its name: for
+    /// launchers, which cannot tell which of two same-named presets a name picks.
+    public func preset(id: String) throws -> Preset {
+        let raw = id.trimmingCharacters(in: .whitespaces)
+        guard let uuid = UUID(uuidString: raw), let p = presets.first(where: { $0.id == uuid }) else { throw PresetError.idNotFound(raw) }
+        return p
     }
 
     /// Adds or updates `preset` (by id). Names are unique per tenant; with

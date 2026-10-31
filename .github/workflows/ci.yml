@@ -28,9 +28,37 @@ jobs:
           # install.sh is POSIX sh (it runs as `curl … | sh`): checked as such.
           shellcheck --shell=sh scripts/install.sh
           shellcheck --severity=warning scripts/*.sh
+          # The Alfred workflow's scripts are POSIX sh too (Alfred runs them with /bin/sh).
+          shellcheck --shell=sh -x integrations/alfred/*.sh
           # And it parses with the shells it will meet as sh.
           sh -n scripts/install.sh
           bash --posix -n scripts/install.sh
+
+  raycast:
+    name: Raycast extension
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: integrations/raycast
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          # @raycast/api needs Node >= 22.22.2 (its engines); 22.x is the latest 22.
+          node-version: 22.x
+          cache: npm
+          cache-dependency-path: integrations/raycast/package-lock.json
+      - name: Install, test, type-check
+        # The tests against `pimento --demo` are skipped here (no Swift build); the macOS job's
+        # Alfred tests cover the CLI's JSON.
+        run: |
+          node --version
+          npm ci
+          npm test
+          npx tsc --noEmit
 
   build-and-test:
     name: macOS
@@ -49,6 +77,11 @@ jobs:
         run: swift build
       - name: Test
         run: swift test
+      - name: Alfred workflow (its scripts against pimento --demo, and the package)
+        run: |
+          integrations/alfred/test.sh .build/debug/pimento
+          integrations/alfred/build.sh
+          zipinfo -1 build/Pimento.alfredworkflow | sort | tr '\n' ' ' | grep -q 'action.sh alfred.js icon.png info.plist lib.sh scriptfilter.sh'
       - name: Bundle (universal)
         run: |
           scripts/bundle.sh --zip
@@ -157,7 +190,13 @@ jobs:
           bin="$(ls build/cli-check/*/pimento.exe)"
           "$bin" version
           "$bin" help >/dev/null
-          "$bin" help login | grep -q "device code"
+          # Browser sign-in on Windows too, and the device code as the option.
+          "$bin" help login | grep -q "Opens your browser"
+          "$bin" help login | grep -q -- "--device-code"
+          if "$bin" help login | grep -q "no browser sign-in"; then exit 1; fi
+          # PowerShell completions: printed by the CLI and shipped in the zip.
+          "$bin" completions powershell | grep -q "Register-ArgumentCompleter -Native"
+          grep -q "Register-ArgumentCompleter" "$(dirname "$bin")/completions/pimento.ps1"
           "$bin" history --json | grep -q 'AppData'
           # The runner has the Azure CLI (az.cmd) but no session: pimento must find and run it,
           # and fail on the missing login, not with "not found".
@@ -166,7 +205,7 @@ jobs:
           # `! pipeline` does not trip errexit unless it is the last command: test explicitly.
           if echo "$out" | grep -q "not found"; then exit 1; fi
           echo "$out" | grep -q "az login"
-      - name: Installer (install.ps1 with PowerShell 5.1 and 7, against the packaged CLI)
+      - name: Installer (install.ps1 with PowerShell 5.1 and 7, against the packaged CLI, with completions)
         shell: pwsh
         run: scripts/test-install.ps1
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

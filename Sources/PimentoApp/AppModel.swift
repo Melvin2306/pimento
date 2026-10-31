@@ -114,7 +114,9 @@ final class AppModel {
 
     // Presets, shared with the CLI through the presets file.
     let presetStore = AppRuntime.demo?.workspace.presetStore ?? PresetStore()
-    var presetLibrary = PresetLibrary()
+    var presetLibrary = PresetLibrary() {
+        didSet { if presetLibrary != oldValue { keepAlivePresetsChanged() } }
+    }
     /// The presets file could not be read (or written).
     var presetFileError: String?
     var showSavePresetSheet = false
@@ -193,6 +195,8 @@ final class AppModel {
     var hoveredTenantId: String?
     var showTenantSheet = false
     var tenantDraft = ""
+    /// Fetched tenant logos (Settings › General › Fetch tenant logos, off by default).
+    let tenantLogos = TenantLogoStore()
 
     // Account (Settings › Account): where tokens come from, and Pimento's own sign-in.
     /// `auth.json`, shared with the CLI.
@@ -243,6 +247,27 @@ final class AppModel {
     var loginItemState: LoginItemState = .disabled
     var loginItemError: String?
 
+    // Keep alive (`AppModel+KeepAlive.swift`).
+    /// Roles kept alive one by one, by tenant and account (`keepAliveTenantKey`), as role keys.
+    var keepAliveRolesByTenant: [String: Set<String>] = [:]
+    /// Access-granting roles whose keep-alive you confirmed, by tenant and account, as role keys.
+    var keepAliveConfirmedByTenant: [String: Set<String>] = [:]
+    /// The open confirmation for keeping access-granting roles alive.
+    var keepAliveConsent: KeepAliveConsentRequest?
+    /// How each kept role is kept alive (per role or by a preset), by role key.
+    var keepAliveRules: [String: KeepAliveRule] = [:]
+    /// Where each kept role stands after the last pass, by role key.
+    var keepAliveItems: [String: KeepAlivePlanner.Item] = [:]
+    /// The last pass failed to read (shown in the menu bar and the toolbar menu).
+    var keepAliveError: String?
+    @ObservationIgnored let keepAliveSession = KeepAliveSession()
+    @ObservationIgnored var keepAliveTimer: Timer?
+    @ObservationIgnored var keepAliveRunning = false
+    /// What the last pass saw of the kept roles (key: end), to notice changes after a refresh.
+    @ObservationIgnored var keepAliveSeen: [String: Date] = [:]
+    /// Whether a newer Pimento exists (Settings › General › Updates).
+    let updates: UpdateChecker
+
     struct Banner: Equatable {
         enum Kind { case info, success, error }
         let kind: Kind
@@ -257,6 +282,10 @@ final class AppModel {
         static let recentTickets = "recentTickets"
         static let lastTicketSystem = "lastTicketSystem"
         static let tableColumns = "tableColumns"
+        /// Roles kept alive one by one: `{tenant/account: [role key]}`.
+        static let keepAliveRoles = "keepAlive.roles"
+        /// Access-granting roles whose keep-alive was confirmed: `{tenant/account: [role key]}`.
+        static let keepAliveConfirmed = "keepAlive.confirmed"
     }
 
     /// Table columns the Settings window can show or hide.
@@ -299,8 +328,8 @@ final class AppModel {
 
     var authSource: AuthSource { authSelection.source }
 
-    private var service: PIMService
-    private var tenantGeneration = 0
+    private(set) var service: PIMService
+    private(set) var tenantGeneration = 0
 
     /// `tokenStore` / `authSettingsStore` / `signInTransport`: the Keychain,
     /// `auth.json` and the network unless given.
@@ -310,6 +339,7 @@ final class AppModel {
         // preview is a separate action), so the stale setting is dropped.
         let defaults = AppRuntime.defaults
         defaults.removeObject(forKey: "dryRun")
+        updates = UpdateChecker(store: defaults, demo: AppRuntime.isDemo)
         self.commandLineTenant = commandLineTenant
         let prefs = Preferences.load(from: defaults)
         self.prefs = prefs
@@ -360,6 +390,8 @@ final class AppModel {
             tokens: AuthContext(selection: selectedAuth, broker: broker, accountId: auth.accountId, azureCLI: Self.azureCLITokens)
                 .tokens(tenantId: selection.tenantId),
             history: recorder)
+        keepAliveRolesByTenant = Self.loadKeepAliveRoles(from: defaults, key: Keys.keepAliveRoles)
+        keepAliveConfirmedByTenant = Self.loadKeepAliveRoles(from: defaults, key: Keys.keepAliveConfirmed)
         restartAutoRefresh()
         observeClockChanges()
         scheduleAppearanceChange(after: AppClock.now())
@@ -368,6 +400,7 @@ final class AppModel {
         // Old records go once per launch (the CLI and later writes prune too).
         let store = historyStore, retention = historySettings.retention
         Task.detached(priority: .utility) { _ = try? store.prune(retention: retention) }
+        tenantLogos.setEnabled(prefs.fetchTenantLogos)
     }
 
     // MARK: Derived state
@@ -399,6 +432,22 @@ final class AppModel {
 
     func knownTenant(_ id: String) -> TenantInfo? {
         knownTenants.first { $0.id.caseInsensitiveCompare(id) == .orderedSame }
+    }
+
+    /// The tenant in use, for its badge: from the list, or (not listed yet)
+    /// just its ID or the domain it was chosen by. nil for az's default
+    /// tenant before the first load says which one that is.
+    var currentTenantInfo: TenantInfo? {
+        guard let id = effectiveTenantId else { return nil }
+        if let known = knownTenant(id) { return known }
+        return UUID(uuidString: id) != nil ? TenantInfo(id: id.lowercased()) : TenantInfo(id: id.lowercased(), defaultDomain: id)
+    }
+
+    /// Settings › General › Refresh Logos: the current tenant and the ones the
+    /// picker lists (not the hidden ones), ignoring the cache.
+    func refreshTenantLogos() {
+        let listed = TenantDirectory.visible(knownTenants, hidden: hiddenTenantIds, showHidden: false, current: effectiveTenantId)
+        tenantLogos.refresh((currentTenantInfo.map { [$0] } ?? []) + listed)
     }
 
     /// The picker's rows for the current search and hidden setting.
@@ -525,7 +574,9 @@ final class AppModel {
             scheduledRequests = requests
             activationTickets = history.activationTickets
             scheduledLoadState = .loaded
-            Notifier.syncScheduledStarts(requests, tenantId: history.identity.tenantId ?? effectiveTenantId, prefs: prefs)
+            // Keep-alive's continuations get their own notification ("Renewed …").
+            Notifier.syncScheduledStarts(requests.filter { !isKeepAliveContinuation($0) },
+                                         tenantId: history.identity.tenantId ?? effectiveTenantId, prefs: prefs)
             let decided = approvalTracker.update(items: history.items, principalId: history.identity.objectId,
                                                  tenantId: history.identity.tenantId, now: AppClock.now())
             updateApprovalPolling()
@@ -831,6 +882,7 @@ final class AppModel {
             lastRefreshed = AppClock.now()
             loadState = .loaded
             reloadPresets()
+            keepAliveAfterRefresh()
             loadPolicies(retryFailures: true)
             Task { await loadScheduled() }
             Task { await loadApprovals() }
@@ -977,6 +1029,7 @@ final class AppModel {
         banner = nil
         lastRefreshed = nil
         loadState = .idle
+        keepAliveReset()
         Task { await refresh() }
     }
 
@@ -1166,7 +1219,7 @@ final class AppModel {
 
     /// Refreshes now and again shortly: ARM lists a change only after a few
     /// seconds, and the status should come from Azure, not from the overlay.
-    private func refreshAfterChange() async {
+    func refreshAfterChange() async {
         await refresh()
         guard !pending.isEmpty else { return }
         let generation = tenantGeneration
@@ -1662,6 +1715,20 @@ final class AppModel {
 
     func saveDraft() {
         guard let draft = presetDraft else { return }
+        // Keep-alive on for access-granting roles: confirmed once, now.
+        if draft.keepAlive {
+            let needing = keepAliveNeedingConsent(draft.resolve(in: roles).roles)
+            if !needing.isEmpty {
+                keepAliveConsent = KeepAliveConsentRequest(roles: needing, targets: [], preset: draft.name)
+                return
+            }
+        }
+        saveDraftNow()
+    }
+
+    /// Saves the draft (after the keep-alive confirmation, if one was needed).
+    func saveDraftNow() {
+        guard let draft = presetDraft else { return }
         do {
             let saved = try updatePresets { try $0.save(draft) }
             presetDraft = saved
@@ -1869,6 +1936,7 @@ final class AppModel {
         }
         guard prefs != old else { return }
         prefs.save(to: AppRuntime.defaults)
+        tenantLogos.setEnabled(prefs.fetchTenantLogos)
         updateAppearance()
         if AppPresence.activationPolicy(prefs) != AppPresence.activationPolicy(old) { DockIcon.apply(prefs, reactivate: true) }
         if prefs.defaultHours != old.defaultHours, !isActivating { duration = .hours(prefs.defaultHours) }
@@ -1880,8 +1948,12 @@ final class AppModel {
             clearRecentJustifications()
             clearRecentTickets()
         }
+        if prefs.checkForUpdates != old.checkForUpdates { updates.setAutomatic(prefs.checkForUpdates, initialDelay: 0) }
         if prefs.notifyScheduledStart != old.notifyScheduledStart {
             Notifier.syncScheduledStarts(scheduledRequests, tenantId: identity?.tenantId ?? effectiveTenantId, prefs: prefs)
+        }
+        if prefs.keepAliveHours != old.keepAliveHours || prefs.keepAlivePaused != old.keepAlivePaused {
+            keepAliveSettingsChanged(from: old)
         }
         if !prefs.expiryReminders, old.expiryReminders {
             Notifier.cancelReminders()
@@ -1929,7 +2001,11 @@ final class AppModel {
         ]
         clockObservers = names.map { center, name in
             (center, center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.updateAppearance() }
+                MainActor.assumeIsolated {
+                    self?.updateAppearance()
+                    // Timers do not count time asleep: look at the kept roles now.
+                    self?.keepAliveClockChanged()
+                }
             })
         }
     }

@@ -38,7 +38,19 @@ In scope, for example:
   `state`, listening beyond the loopback interface, leaving one of 127.0.0.1 and ::1 on its port
   to another program, or staying open after sign-in;
 - any way to make a preview or `--dry-run`, or a read-only command (`list`, `status`, `tenants`,
-  `scheduled`, `pending`, `wait`, `approvals`, `history import-azure`), send a write request;
+  `scheduled`, `pending`, `wait`, `approvals`, `history import-azure`, and `mcp` without
+  `--allow-activate`), send a write request;
+- `pimento mcp` sending a write that the user was not asked to confirm through elicitation (when
+  the client supports elicitation, whatever `--no-confirm` says), a write other than the plan the user
+  confirmed, any write without `--allow-activate`, or an Owner, User Access Administrator or RBAC
+  Administrator activation or renewal without `--allow-privileged` and its second confirmation;
+  agent text (a justification, ticket or preset name) hiding characters from the confirmation;
+  the server acting in another tenant than its `--tenant`, or its results carrying a token or a
+  file path;
+- keep alive renewing a role that can grant access (Owner, User Access Administrator, RBAC
+  Administrator) that you did not confirm for it, renewing a role you paused or no longer keep
+  alive, bringing back a role you ended (in Pimento or in the portal), renewing a role whose policy
+  needs approval, or acting for another account or tenant than the one it was set up in;
 - a write sent without the confirmation it should have: a CLI write without its `[y/N]` answer or
   `--yes`, a decision sent for another request than the one named, a cancel sent for another
   request than the one named, Owner roles activated without the Owner confirmation, a request for
@@ -48,18 +60,34 @@ In scope, for example:
   request belongs to (after switching accounts or tenants);
 - text from Azure, Entra or other people (justifications, tickets, names, error messages) changing
   what the CLI shows on a terminal, or exported history turning into spreadsheet formulas;
-- argument injection into the `az` process, or Pimento starting an `az` (or `xdg-open`) that
-  someone else could have placed or changed, such as one in the current directory;
+- argument injection into the `az` process, or Pimento starting an `az` (or `xdg-open`, or, from
+  the Raycast and Alfred launchers, a `pimento`) that someone else could have placed or changed,
+  such as one in the current directory or a folder others can write;
 - the command line tool link pointing somewhere other users can change, or Pimento replacing or
   removing another user's link;
 - `scripts/install.sh` or `scripts/install.ps1` installing a file whose SHA-256 does not match the
   release's `SHA256SUMS.txt` (or whose attestation failed), or changing files outside the install
-  folder, the shell completion folders and (on Windows) the user `Path`.
+  folder, the shell completion folders and (on Windows) the user `Path`;
+- the tenant logo fetch running while *Fetch tenant logos* is off, in demo mode or from the CLI,
+  contacting a host other than `login.microsoftonline.com`, Microsoft's branding CDNs and the
+  tenant's own verified domains (README › Security and privacy), sending a token, cookie, account
+  or credential, or writing its cache outside its private folder;
+- the update check sending more than its documented `GET` (any identifier, token or cookie), going
+  to another host than `api.github.com`, running in demo mode or with `PIMENTO_NO_UPDATE_CHECK=1`,
+  opening a link outside `https://github.com/Melvin2306/pimento/`, or downloading or installing
+  anything; or a CLI command other than `pimento version --check` contacting GitHub.
 
 Out of scope: the security of Azure, Microsoft Entra ID or the Azure CLI themselves, and
 anything that requires an attacker to already control your user account or `az` session.
 
 ## Design notes
+
+- The update check (README › Updates) is one `GET` of GitHub's latest release with only a
+  `User-Agent: Pimento/<version>` header (besides fixed `Accept`, API-version and
+  `Accept-Language` headers that are the same for everyone), through a guard that refuses any other URL or method and
+  a private session (the logo fetch's) that keeps no cookies or credentials, refuses redirects and
+  answers no authentication request but the server's certificate check. The answer is untrusted: the tag must parse as a strict
+  semantic version, and the links opened are built from it, never copied from the answer.
 
 - No secret of its own: by default the token comes from `az account get-access-token`; with
   Pimento sign-in, from the user's own public-client app registration (no client secret). Access
@@ -119,6 +147,32 @@ anything that requires an attacker to already control your user account or `az` 
   installed or replacing it, leaves other users' links alone, and links `/usr/local/bin/pimento`
   only to a tool that nobody but root or you can change. The app hands 0.1.0-style flags to the CLI
   only as its read-only modes.
+- `pimento mcp` treats every tool argument as hostile. Without `--allow-activate` the write tools
+  do not exist and every request goes through the GET-only transport. With it, each write is
+  planned read-only, shown through MCP elicitation and planned again before sending; it is sent only
+  if the new plan has the fingerprint the user confirmed (tool, tenant, account, roles, durations,
+  justification, ticket). Stateless confirmations are single-use 256-bit handles bound to the tool
+  and its exact arguments. Roles that can grant access also need `--allow-privileged` and a second
+  box. String arguments are bounded in characters and Unicode scalars and refuse control, bidi,
+  format and every default-ignorable character (an emoji's own presentation selector excepted),
+  so the confirmation shows all of what is sent. `--tenant` limits every tool, `list_tenants` and
+  the history included; results are filtered for tokens and file paths.
+- Keep alive acts only for roles you marked (or a preset with *Keep alive*), with your own token
+  and only through `SelfActivate` and the withdrawal of continuations it scheduled itself. Roles
+  that can grant access need your confirmation once (or `--yes`); roles whose policy needs
+  approval are never renewed; a role ended early (seen in the listing or your requests) is not
+  brought back and its continuation is withdrawn; pausing withdraws continuations. Switching
+  account or tenant starts it over, and a pass overtaken by that switch stops without touching the
+  new state.
+- Tenant logos (off by default; never in demo mode or the CLI) are fetched without a token, cookie
+  or stored credential, over HTTPS to port 443 only, from Microsoft's sign-in endpoint and branding
+  CDNs and, without a branding logo, the tenant's own verified domain (redirects only within it,
+  3 at most), with size and image checks; the cache is keyed by tenant GUID and written private.
+  Known gap: a guest tenant's administrator can point its domain at a loopback or internal
+  address. TLS hostname checks stop any HTTP request there, leaving a blind TCP and TLS handshake
+  to port 443 once per tenant every 7 days; URLSession offers no way to vet the address it connects
+  to (a separate lookup first could be bypassed by DNS rebinding), so Pimento does not claim to
+  refuse such addresses.
 - Demo mode (`--demo`) refuses every network request, `az`, the sign-in listener and the browser
   openers for the whole process.
 - Sign-out holds across processes: a refresh in another Pimento process replaces the stored refresh

@@ -120,6 +120,12 @@ public struct Preferences: Equatable, Sendable {
     public var confirmOwnerRoles = true
     public var maxParallelRequests = 8
 
+    // Keep alive
+    /// When keep-alive may renew roles (Mon–Fri 08:00–18:00 by default).
+    public var keepAliveHours = WorkingHours()
+    /// Keep-alive renews nothing while paused (the roles stay marked).
+    public var keepAlivePaused = false
+
     // General
     public var launchTenant: LaunchTenant = .lastUsed
     public var refreshOnLaunch = true
@@ -131,6 +137,13 @@ public struct Preferences: Equatable, Sendable {
     public var appearanceMode: AppearanceMode = .system
     /// When light, dark and ultra dark apply in `.timeOfDay` mode.
     public var appearanceSchedule = AppearanceSchedule()
+    /// Ask GitHub once a day whether a newer release exists (`UpdateCheck`).
+    /// Only tells; nothing is downloaded or installed.
+    public var checkForUpdates = true
+    /// Fetch tenant logos (sign-in page branding, else the website icon)
+    /// instead of showing only the offline monogram. Off by default: it tells
+    /// Microsoft and each tenant's website that this Mac looked them up.
+    public var fetchTenantLogos = false
 
     // Menu bar
     /// The menu bar extra: active roles with their countdown, presets, quick actions.
@@ -225,6 +238,8 @@ public struct Preferences: Equatable, Sendable {
         static let prefillLastJustification = "activation.prefillLastJustification"
         static let confirmOwnerRoles = "activation.confirmOwnerRoles"
         static let maxParallelRequests = "activation.maxParallelRequests"
+        static let keepAliveHours = "keepAlive.hours"
+        static let keepAlivePaused = "keepAlive.paused"
         static let launchTenant = "general.launchTenant"
         static let refreshOnLaunch = "general.refreshOnLaunch"
         static let autoRefreshMinutes = "general.autoRefreshMinutes"
@@ -234,13 +249,16 @@ public struct Preferences: Equatable, Sendable {
         static let showInMenuBar = "general.showInMenuBar"
         static let menuBarShowsRemainingTime = "general.menuBarRemainingTime"
         static let hideDockIcon = "general.hideDockIcon"
+        static let checkForUpdates = "general.checkForUpdates"
+        static let fetchTenantLogos = "general.fetchTenantLogos"
 
         static let all = [
             notifyOnCompletion, notifyOnlyOnFailure, playSound, expiryReminders, reminderLeadMinutes, notifyScheduledStart,
             notifyApprovalDecisions, notifyNewApprovals,
             defaultHours, rememberJustifications, prefillLastJustification, confirmOwnerRoles, maxParallelRequests,
+            keepAliveHours, keepAlivePaused,
             launchTenant, refreshOnLaunch, autoRefreshMinutes, theme, appearanceMode, appearanceSchedule,
-            showInMenuBar, menuBarShowsRemainingTime, hideDockIcon,
+            showInMenuBar, menuBarShowsRemainingTime, hideDockIcon, checkForUpdates, fetchTenantLogos,
         ]
     }
 
@@ -262,6 +280,8 @@ public struct Preferences: Equatable, Sendable {
         bool(Key.prefillLastJustification, &p.prefillLastJustification)
         bool(Key.confirmOwnerRoles, &p.confirmOwnerRoles)
         int(Key.maxParallelRequests, &p.maxParallelRequests)
+        p.keepAliveHours = WorkingHours(storedValue: store.object(forKey: Key.keepAliveHours))
+        bool(Key.keepAlivePaused, &p.keepAlivePaused)
         switch store.object(forKey: Key.launchTenant) as? String {
         case nil, "lastUsed": p.launchTenant = .lastUsed
         case "azDefault": p.launchTenant = .azDefault
@@ -275,6 +295,8 @@ public struct Preferences: Equatable, Sendable {
         bool(Key.showInMenuBar, &p.showInMenuBar)
         bool(Key.menuBarShowsRemainingTime, &p.menuBarShowsRemainingTime)
         bool(Key.hideDockIcon, &p.hideDockIcon)
+        bool(Key.checkForUpdates, &p.checkForUpdates)
+        bool(Key.fetchTenantLogos, &p.fetchTenantLogos)
         return p.validated()
     }
 
@@ -293,6 +315,8 @@ public struct Preferences: Equatable, Sendable {
         store.set(p.prefillLastJustification, forKey: Key.prefillLastJustification)
         store.set(p.confirmOwnerRoles, forKey: Key.confirmOwnerRoles)
         store.set(p.maxParallelRequests, forKey: Key.maxParallelRequests)
+        store.set(p.keepAliveHours.storedValue, forKey: Key.keepAliveHours)
+        store.set(p.keepAlivePaused, forKey: Key.keepAlivePaused)
         let launch: String = switch p.launchTenant {
         case .lastUsed: "lastUsed"
         case .azDefault: "azDefault"
@@ -307,6 +331,8 @@ public struct Preferences: Equatable, Sendable {
         store.set(p.showInMenuBar, forKey: Key.showInMenuBar)
         store.set(p.menuBarShowsRemainingTime, forKey: Key.menuBarShowsRemainingTime)
         store.set(p.hideDockIcon, forKey: Key.hideDockIcon)
+        store.set(p.checkForUpdates, forKey: Key.checkForUpdates)
+        store.set(p.fetchTenantLogos, forKey: Key.fetchTenantLogos)
     }
 
     /// Removes every stored setting, so the defaults apply again.

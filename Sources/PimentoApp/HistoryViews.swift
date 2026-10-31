@@ -190,7 +190,14 @@ private struct HistoryFilterBar: View {
                         Text("All").tag(String?.none)
                         Divider()
                         ForEach(tenants, id: \.id) { tenant in
-                            Text(tenant.label).tag(Optional(tenant.id))
+                            let info = model.knownTenant(tenant.id)
+                                ?? TenantInfo(id: tenant.id, displayName: UUID(uuidString: tenant.label) == nil ? tenant.label : nil)
+                            Label {
+                                Text(tenant.label)
+                            } icon: {
+                                Image(nsImage: TenantBadgeImage.image(for: info, logo: model.tenantLogos.image(for: info), size: 14))
+                            }
+                            .tag(Optional(tenant.id))
                         }
                     }
                     .fixedSize()
@@ -301,7 +308,7 @@ private struct HistoryTable: View {
                 Text(r.source.title).foregroundStyle(.secondary).lineLimit(1)
                     .help(r.version.map { "\(r.source.title), Pimento \($0)" } ?? "Read from Azure")
             }
-            .width(min: 40, ideal: 46)
+            .width(min: 40, ideal: 64)
 
             TableColumn("Request", value: \.requestSortKey) { r in
                 Text(r.shortRequestId ?? "").font(.system(.body, design: .monospaced)).foregroundStyle(.secondary)

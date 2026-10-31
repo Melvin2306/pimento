@@ -36,7 +36,7 @@ final class CLIHarness: @unchecked Sendable {
     var openURL: @Sendable (URL) async -> Bool = { _ in false }
     /// How often `login` said a browser sign-in was over.
     let browserSignInsEnded = TestBox<Int>(0)
-    /// Whether `login` may use the browser (false on Windows).
+    /// Whether `login` may use the browser.
     var browserSignIn = LoopbackListener.isSupported
     /// Use the tokens of the auth source (`--auth`) instead of `tokens`.
     var useAuthTokens = false
@@ -214,6 +214,7 @@ struct CLIRunnerTests {
         let first = roles[0]
         #expect(first["roleName"] as? String == "Owner")
         #expect(first["isOwner"] as? Bool == true)
+        #expect(first["grantsAccess"] as? Bool == true)
         #expect(first["isActive"] as? Bool == true)
         #expect(first["activeUntil"] as? String == "2026-10-29T18:42:17.913Z")
         #expect(first["membership"] as? String == "direct")

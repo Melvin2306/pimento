@@ -28,6 +28,7 @@ struct PreferencesTests {
         #expect(p.theme == .native)
         #expect(p.appearanceMode == .system)
         #expect(p.effectiveAppearance == .system)
+        #expect(!p.fetchTenantLogos, "logo fetching contacts Microsoft and tenant websites: opt-in only")
     }
 
     @Test func roundTripsThroughTheStore() {
@@ -45,6 +46,7 @@ struct PreferencesTests {
         p.autoRefreshMinutes = 5
         p.theme = .windowsXP
         p.appearanceMode = .dark
+        p.fetchTenantLogos = true
         let store = MemoryStore()
         p.save(to: store)
         #expect(Preferences.load(from: store) == p)
@@ -90,6 +92,7 @@ struct PreferencesTests {
         Preferences.reset(in: store)
         #expect(Preferences.load(from: store) == Preferences())
         #expect(store.values.keys.sorted() == ["tenantId"], "reset leaves data that is not a setting alone")
+        #expect(Set(Preferences.Key.all).count == Preferences.Key.all.count, "each setting is listed once")
     }
 
     @Test func themeIsStoredByName() {

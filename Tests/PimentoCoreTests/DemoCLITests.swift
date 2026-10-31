@@ -158,6 +158,40 @@ struct DemoCLITests {
         cli.expectIsolated()
     }
 
+    @Test func idSelectsOneRoleWhereAScopeFilterMatchesSeveral() async throws {
+        // What a launcher does: read `list --json`, pick one row, act on its id.
+        let cli = DemoCLIRun()
+        #expect(await cli.run("--demo", "list", "--json", "--role", "Contributor") == 0)
+        let list = try #require(try JSONSerialization.jsonObject(with: Data(cli.stdout.utf8)) as? [String: Any])
+        let roles = try #require(list["roles"] as? [[String: Any]])
+        let staging = try #require(roles.first { $0["scopeName"] as? String == "Contoso Staging" })
+        let id = try #require(staging["id"] as? String), scope = try #require(staging["scope"] as? String)
+        #expect(roles.filter { $0["scope"] as? String == scope }.count == 1)
+        // A scope filter also matches the roles below it: Contoso Production has
+        // Contributor on two resource groups too.
+        let prod = try #require(roles.first { $0["scopeName"] as? String == "Contoso Production" }?["scope"] as? String)
+        #expect(await cli.run("--demo", "list", prod, "--role", "Contributor", "--json") == 0)
+        let byScope = try #require(try JSONSerialization.jsonObject(with: Data(cli.stdout.utf8)) as? [String: Any])
+        #expect(((byScope["roles"] as? [[String: Any]])?.count ?? 0) > 1)
+        #expect(await cli.run("--demo", "list", "--id", id, "--json") == 0)
+        let one = try #require(try JSONSerialization.jsonObject(with: Data(cli.stdout.utf8)) as? [String: Any])
+        #expect((one["roles"] as? [[String: Any]])?.count == 1)
+        #expect(await cli.run("--demo", "activate", "--id", id, "--justification=Release", "--hours", "2", "-y", "--json") == 0)
+        let result = try #require(try JSONSerialization.jsonObject(with: Data(cli.stdout.utf8)) as? [String: Any])
+        let results = try #require(result["results"] as? [[String: Any]])
+        #expect(results.count == 1)
+        #expect(results.first?["outcome"] as? String == "activated")
+        #expect(((results.first?["role"] as? [String: Any])?["scopeName"] as? String) == "Contoso Staging")
+        // Deactivate by the id of an active role from `status --json`.
+        #expect(await cli.run("--demo", "status", "--json") == 0)
+        let status = try #require(try JSONSerialization.jsonObject(with: Data(cli.stdout.utf8)) as? [String: Any])
+        let dev = try #require((status["roles"] as? [[String: Any]])?.first { $0["scopeName"] as? String == "Contoso Development" })
+        #expect(await cli.run("--demo", "deactivate", "--id", try #require(dev["id"] as? String), "-y") == 0)
+        #expect(cli.stdout.contains("ended      Contributor · Contoso Development"))
+        #expect(!cli.stdout.contains("Contoso Production"))
+        cli.expectIsolated()
+    }
+
     @Test func approverCommandsListApproveAndDeny() async throws {
         let cli = DemoCLIRun()
         #expect(await cli.run("--demo", "approvals", "--json") == 0)

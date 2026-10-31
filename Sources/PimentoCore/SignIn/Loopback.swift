@@ -2,6 +2,8 @@
 import Darwin
 #elseif canImport(Glibc)
 import Glibc
+#elseif os(Windows)
+import WinSDK
 #endif
 import Foundation
 
@@ -71,20 +73,22 @@ public enum LoopbackRequest {
     }
 }
 
-#if !os(Windows)
+
 /// A one-shot HTTP listener on the loopback interface (127.0.0.1, and ::1 on
 /// the same port when available) for the authorization code redirect. It
 /// answers each request, ignores ones without our `state`, and stops at the
-/// first callback with it, at the timeout, or when cancelled.
+/// first callback with it, at the timeout, or when cancelled. The same code
+/// on every platform: BSD sockets on macOS and Linux, Winsock on Windows
+/// (`LoopbackSocket`).
 public final class LoopbackListener: @unchecked Sendable {
-    /// Whether browser sign-in can work here (not on Windows, see below).
+    /// Whether browser sign-in can work here: on macOS, Linux and Windows.
     public static let isSupported = true
 
     public let port: UInt16
     /// How long one connection may take to send its request head, in all:
     /// a client trickling bytes cannot hold the listener longer.
     let connectionTimeout: TimeInterval
-    private var sockets: [Int32]
+    private var sockets: [LoopbackSocket.Handle]
     private let lock = NSLock()
     private var stopped = false
     private var serving = false
@@ -104,10 +108,13 @@ public final class LoopbackListener: @unchecked Sendable {
     /// the redirect with the code and state), the port is dropped and
     /// another one tried; after `bindAttempts` ports, sign-in fails. Only
     /// where the system has no IPv6 loopback at all (so nobody can listen on
-    /// ::1) does Pimento listen on 127.0.0.1 alone. `ports`: the 127.0.0.1
+    /// ::1) does Pimento listen on 127.0.0.1 alone. On Windows both sockets
+    /// are exclusive (`SO_EXCLUSIVEADDRUSE`): no other program can bind the
+    /// port after them, not even with `SO_REUSEADDR`. `ports`: the 127.0.0.1
     /// port of each attempt (0: the kernel's choice; tests pick their own).
     init(connectionTimeout: TimeInterval, ports: [UInt16] = Array(repeating: 0, count: LoopbackListener.bindAttempts)) throws {
         try NetworkGuard.check("a sign-in listener on 127.0.0.1")
+        try LoopbackSocket.startup()
         self.connectionTimeout = connectionTimeout
         for candidate in ports {
             let (v4, port) = try Self.bindIPv4Loopback(port: candidate)
@@ -121,7 +128,7 @@ public final class LoopbackListener: @unchecked Sendable {
                 sockets = [v4]
                 return
             case .taken:
-                _ = Self.closeSocket(v4)
+                LoopbackSocket.close(v4)
             }
         }
         throw SignInError.loopback("could not listen on 127.0.0.1 and ::1 on the same port (\(ports.count) tries); "
@@ -130,51 +137,22 @@ public final class LoopbackListener: @unchecked Sendable {
 
     deinit { close() }
 
-    private static var streamType: Int32 {
-        #if canImport(Darwin)
-        SOCK_STREAM
-        #else
-        Int32(SOCK_STREAM.rawValue)
-        #endif
-    }
-
-    private static func closeSocket(_ fd: Int32) -> Int32 {
-        #if canImport(Darwin)
-        Darwin.close(fd)
-        #else
-        Glibc.close(fd)
-        #endif
-    }
-
     /// 127.0.0.1:`port` (0: any free port), listening; and the port it got.
-    private static func bindIPv4Loopback(port requested: UInt16) throws -> (Int32, UInt16) {
-        let v4 = socket(AF_INET, streamType, 0)
-        guard v4 >= 0 else { throw SignInError.loopback(String(cString: strerror(errno))) }
-        var addr = sockaddr_in()
-        #if canImport(Darwin)
-        addr.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
-        #endif
-        addr.sin_family = sa_family_t(AF_INET)
-        addr.sin_port = requested.bigEndian
-        addr.sin_addr = in_addr(s_addr: UInt32(0x7F00_0001).bigEndian)
-        let bound = withUnsafePointer(to: &addr) {
-            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(v4, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) }
+    private static func bindIPv4Loopback(port requested: UInt16) throws -> (LoopbackSocket.Handle, UInt16) {
+        guard let v4 = LoopbackSocket.makeSocket(family: AF_INET) else {
+            throw SignInError.loopback(LoopbackSocket.describe(LoopbackSocket.lastError))
         }
-        guard bound == 0, listen(v4, 32) == 0 else {
-            let message = String(cString: strerror(errno))
-            _ = closeSocket(v4)
+        guard LoopbackSocket.makeExclusive(v4), LoopbackSocket.bind(v4, to: LoopbackSocket.ipv4Loopback(port: requested)),
+              LoopbackSocket.listen(v4), let port = LoopbackSocket.localPort(v4) else {
+            let message = LoopbackSocket.describe(LoopbackSocket.lastError)
+            LoopbackSocket.close(v4)
             throw SignInError.loopback(message)
         }
-        var actual = sockaddr_in()
-        var length = socklen_t(MemoryLayout<sockaddr_in>.size)
-        _ = withUnsafeMutablePointer(to: &actual) {
-            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { getsockname(v4, $0, &length) }
-        }
-        return (v4, UInt16(bigEndian: actual.sin_port))
+        return (v4, port)
     }
 
     enum IPv6Bind: Equatable {
-        case bound(Int32)
+        case bound(LoopbackSocket.Handle)
         /// No IPv6 loopback on this system: nobody can listen on ::1.
         case unavailable
         /// ::1 on this port is someone else's (or failed otherwise): try another port.
@@ -182,32 +160,24 @@ public final class LoopbackListener: @unchecked Sendable {
     }
 
     /// Errors that mean the system has no IPv6 loopback, not that the port is taken.
-    static func meansNoIPv6(_ code: Int32) -> Bool {
-        code == EAFNOSUPPORT || code == EPROTONOSUPPORT || code == EADDRNOTAVAIL
-    }
+    static func meansNoIPv6(_ code: Int32) -> Bool { LoopbackSocket.meansNoIPv6(code) }
 
     static func bindIPv6Loopback(port: UInt16) -> IPv6Bind {
-        let fd = socket(AF_INET6, streamType, 0)
-        guard fd >= 0 else { return meansNoIPv6(errno) ? .unavailable : .taken }
-        var on: Int32 = 1
-        setsockopt(fd, Int32(IPPROTO_IPV6), IPV6_V6ONLY, &on, socklen_t(MemoryLayout<Int32>.size))
-        var addr = sockaddr_in6()
-        #if canImport(Darwin)
-        addr.sin6_len = UInt8(MemoryLayout<sockaddr_in6>.size)
-        #endif
-        addr.sin6_family = sa_family_t(AF_INET6)
-        addr.sin6_port = port.bigEndian
-        addr.sin6_addr = in6addr_loopback
-        let bound = withUnsafePointer(to: &addr) {
-            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, socklen_t(MemoryLayout<sockaddr_in6>.size)) }
+        guard let fd = LoopbackSocket.makeSocket(family: AF_INET6) else {
+            return meansNoIPv6(LoopbackSocket.lastError) ? .unavailable : .taken
         }
-        if bound != 0 {
-            let code = errno
-            _ = closeSocket(fd)
+        LoopbackSocket.setIPv6Only(fd)
+        guard LoopbackSocket.makeExclusive(fd) else {
+            LoopbackSocket.close(fd)
+            return .taken
+        }
+        if !LoopbackSocket.bind(fd, to: LoopbackSocket.ipv6Loopback(port: port)) {
+            let code = LoopbackSocket.lastError
+            LoopbackSocket.close(fd)
             return meansNoIPv6(code) ? .unavailable : .taken
         }
-        guard listen(fd, 32) == 0 else {
-            _ = closeSocket(fd)
+        guard LoopbackSocket.listen(fd) else {
+            LoopbackSocket.close(fd)
             return .taken
         }
         return .bound(fd)
@@ -215,7 +185,7 @@ public final class LoopbackListener: @unchecked Sendable {
 
     /// Stops listening; a pending `waitForCallback` ends with `.cancelled`.
     /// While one is waiting, its thread closes the sockets (within 200 ms),
-    /// so a descriptor is never closed under a running `poll`.
+    /// so a socket is never closed under a running `poll`.
     public func close() {
         lock.lock()
         defer { lock.unlock() }
@@ -225,7 +195,7 @@ public final class LoopbackListener: @unchecked Sendable {
 
     /// Call with `lock` held.
     private func closeSockets() {
-        for fd in sockets { _ = Self.closeSocket(fd) }
+        for fd in sockets { LoopbackSocket.close(fd) }
         sockets = []
     }
 
@@ -258,7 +228,7 @@ public final class LoopbackListener: @unchecked Sendable {
 
     /// One open connection: its request head so far and its own deadline.
     private struct Connection {
-        let fd: Int32
+        let fd: LoopbackSocket.Handle
         let deadline: Date
         var head: [UInt8] = []
 
@@ -282,7 +252,7 @@ public final class LoopbackListener: @unchecked Sendable {
         lock.unlock()
         var clients: [Connection] = []
         defer {
-            for client in clients { _ = Self.closeSocket(client.fd) }
+            for client in clients { LoopbackSocket.close(client.fd) }
             lock.lock()
             stopped = true
             serving = false
@@ -303,19 +273,22 @@ public final class LoopbackListener: @unchecked Sendable {
             // Wake up for the nearest connection deadline, at most every 200 ms.
             let nearest = clients.map { $0.deadline.timeIntervalSinceNow }.min() ?? 0.2
             let wait = Int32((min(0.2, max(0, nearest)) * 1000).rounded(.up))
-            var polls = (fds + clients.map(\.fd)).map { pollfd(fd: $0, events: Int16(POLLIN), revents: 0) }
-            let ready = poll(&polls, nfds_t(polls.count), wait)
+            let (ready, events, pollError) = LoopbackSocket.poll(fds + clients.map(\.fd), milliseconds: wait)
             if isStopped { throw SignInError.cancelled }
-            if ready < 0, errno != EINTR { throw SignInError.loopback(String(cString: strerror(errno))) }
+            if ready < 0, !LoopbackSocket.isTransient(pollError) { throw SignInError.loopback(LoopbackSocket.describe(pollError)) }
 
             // Read from every connection that has something; answer the finished ones.
             var open: [Connection] = []
             for (i, var client) in clients.enumerated() {
                 var done = client.deadline <= Date()
-                if ready > 0, polls[fds.count + i].revents != 0, !done {
+                if ready > 0, events[fds.count + i] != 0, !done {
                     var buffer = [UInt8](repeating: 0, count: 4096)
-                    let n = recv(client.fd, &buffer, buffer.count, 0)
-                    if n > 0 { client.head += buffer[0..<n] } else if n == 0 || (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) { done = true }
+                    let n = LoopbackSocket.receive(client.fd, into: &buffer)
+                    if n > 0 {
+                        client.head += buffer[0..<n]
+                    } else if n == 0 || !LoopbackSocket.isTransient(LoopbackSocket.lastError) {
+                        done = true
+                    }
                     if client.isComplete { done = true }
                 }
                 if done {
@@ -336,10 +309,9 @@ public final class LoopbackListener: @unchecked Sendable {
             clients = open
 
             guard ready > 0 else { continue }
-            for p in polls.prefix(fds.count) where p.revents & Int16(POLLIN) != 0 {
-                let fd = accept(p.fd, nil, nil)
-                guard fd >= 0 else { continue }
-                Self.prepare(fd)
+            for (index, revents) in events.prefix(fds.count).enumerated() where revents & LoopbackSocket.readable != 0 {
+                guard let fd = LoopbackSocket.accept(fds[index]) else { continue }
+                LoopbackSocket.prepare(fd)
                 // Added first, so `defer` closes it whatever `finish` does.
                 clients.append(Connection(fd: fd, deadline: Date().addingTimeInterval(connectionTimeout)))
                 if clients.count > Self.maxConnections, let code = try finish(clients.removeFirst()) { return code }
@@ -348,52 +320,18 @@ public final class LoopbackListener: @unchecked Sendable {
         throw SignInError.timedOut
     }
 
-    /// A connection that never blocks the serving thread, and no SIGPIPE.
-    private static func prepare(_ fd: Int32) {
-        _ = fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK)
-        #if canImport(Darwin)
-        var on: Int32 = 1
-        setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size))
-        #endif
-    }
-
     /// Parses what `client` sent, answers it (what fits in the socket buffer:
-    /// the page is small), closes the connection.
+    /// the page is small), ends the connection.
     private func answer(_ client: Connection, state: String) -> LoopbackCallback {
-        defer { _ = Self.closeSocket(client.fd) }
+        defer { LoopbackSocket.finish(client.fd) }
         let callback = LoopbackRequest.parse(String(decoding: client.head, as: UTF8.self), expectedState: state)
         let response = [UInt8](LoopbackRequest.response(for: callback))
         var sent = 0
         while sent < response.count {
-            #if canImport(Darwin)
-            let n = response[sent...].withUnsafeBytes { send(client.fd, $0.baseAddress, $0.count, 0) }
-            #else
-            let n = response[sent...].withUnsafeBytes { send(client.fd, $0.baseAddress, $0.count, Int32(MSG_NOSIGNAL)) }
-            #endif
+            let n = LoopbackSocket.send(client.fd, response[sent...])
             guard n > 0 else { break }
             sent += n
         }
         return callback
     }
 }
-
-#else
-
-/// Windows: no loopback listener yet (it would need Winsock), so no browser
-/// sign-in; `pimento login` uses a device code instead.
-public final class LoopbackListener: @unchecked Sendable {
-    public static let isSupported = false
-    public static let unsupportedMessage = "browser sign-in is not available on Windows; use `pimento login --device-code`"
-
-    public let port: UInt16 = 0
-    public var redirectURI: String { "\(MicrosoftIdentity.redirectBase):\(port)" }
-
-    public init() throws { throw SignInError.loopback(Self.unsupportedMessage) }
-
-    public func close() {}
-
-    public func waitForCallback(state: String, timeout: TimeInterval) async throws -> String {
-        throw SignInError.loopback(Self.unsupportedMessage)
-    }
-}
-#endif

@@ -171,6 +171,11 @@ struct MenuBarPanel: View {
         let colors = MenuBarColors(theme: theme, palette: palette)
         VStack(alignment: .leading, spacing: 0) {
             MenuBarHeader(model: model, colors: colors)
+            if model.updates.notice != nil {
+                MenuBarUpdateNotice(updates: model.updates, colors: colors)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 8)
+            }
             if let banner = model.banner {
                 MenuBarBanner(banner: banner, colors: colors) { model.banner = nil }
                     .padding(.horizontal, 12)
@@ -185,6 +190,10 @@ struct MenuBarPanel: View {
                 MenuBarPresetSection(model: model, colors: colors, openApp: actions.openApp)
                 divider(colors)
                 MenuBarLinks(model: model, colors: colors, actions: actions)
+                if !model.keptRoles.isEmpty || model.prefs.keepAlivePaused {
+                    divider(colors)
+                    MenuBarKeepAliveRow(model: model, colors: colors)
+                }
             }
             divider(colors)
             MenuBarFooter(model: model, colors: colors, actions: actions)
@@ -238,10 +247,16 @@ private struct MenuBarHeader: View {
                     Text(AppInfo.name).font(.headline).foregroundStyle(colors.headerText)
                     DemoBadge(compact: true)
                 }
-                Text(subtitle)
-                    .font(.caption)
-                    .foregroundStyle(colors.headerText.opacity(0.8))
-                    .lineLimit(2)
+                HStack(alignment: .top, spacing: 4) {
+                    if model.tenantError == nil, let current = model.currentTenantInfo {
+                        TenantBadge(model: model, tenant: current, size: 12)
+                            .padding(.top, 1)
+                    }
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(colors.headerText.opacity(0.8))
+                        .lineLimit(2)
+                }
             }
             Spacer(minLength: 4)
             if model.loadState == .loading || model.isActivating {
@@ -382,6 +397,13 @@ private struct MenuBarRoleRow: View {
                             .foregroundStyle(colors.warning)
                             .help("Owner role")
                             .accessibilityLabel("Owner")
+                    }
+                    if model.keepAliveRule(for: role) != nil {
+                        Image(systemName: model.prefs.keepAlivePaused ? "pause.circle" : "arrow.triangle.2.circlepath")
+                            .font(.caption)
+                            .foregroundStyle(model.keepAliveStatus(for: role)?.needsAttention == true ? colors.warning : colors.secondary)
+                            .help(model.keepAliveText(for: role))
+                            .accessibilityLabel(model.keepAliveText(for: role))
                     }
                 }
                 .lineLimit(1)

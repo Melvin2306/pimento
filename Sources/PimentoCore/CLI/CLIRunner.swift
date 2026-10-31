@@ -12,6 +12,9 @@ public struct CLIEnvironment: Sendable {
     public var write: @Sendable (String, Stream) -> Void
     /// One line from stdin (the confirmation answer); nil at end of input.
     public var readLine: @Sendable () -> String?
+    /// Raw reads from stdin, like read(2) (`pimento mcp`, which reads its
+    /// lines with a bounded reader); nil: `readLine` is used instead.
+    public var readInput: MCPLineReader.Read?
     public var stdoutIsTTY: Bool
     public var stderrIsTTY: Bool
     public var stdinIsTTY: Bool
@@ -37,6 +40,11 @@ public struct CLIEnvironment: Sendable {
     public var azureCLITokens: @Sendable (String?) -> TokenProvider = { AzureCLITokenProvider(tenantId: $0) }
     /// Set in demo mode: what the command runs against.
     public var demo: DemoSession?
+    /// `pimento version --check`'s connection to GitHub (wrapped in
+    /// `UpdateCheckTransport`); no other command uses it. Offline unless set.
+    public var updateTransport: HTTPTransport = OfflineTransport()
+    /// This executable's resolved path, to tell the app's bundled CLI apart.
+    public var executablePath: String?
 
     public init(
         write: @escaping @Sendable (String, Stream) -> Void,
@@ -99,8 +107,8 @@ public struct CLISignIn: Sendable {
     public var transport: HTTPTransport
     /// Opens the sign-in page in a browser; false if it could not.
     public var openURL: @Sendable (URL) async -> Bool
-    /// Whether browser sign-in works here (it needs a loopback listener: not
-    /// on Windows). Without it, `login` uses a device code.
+    /// Whether browser sign-in works here (it needs the loopback listener,
+    /// which every platform has). Without it, `login` uses a device code.
     public var browserSignIn: Bool
     /// Called when a browser sign-in is over (signed in, failed or timed out):
     /// removes what `openURL` left behind (the redirect page).
@@ -217,9 +225,7 @@ public struct CLIRunner: Sendable {
         case .help(let topic):
             out(CLIHelp.text(for: topic))
             return .success
-        case .version:
-            out("pimento \(AppInfo.version)")
-            return .success
+        case .version(let o): return await version(o)
         case .completions(let shell):
             out(CLIHelp.completionScript(for: shell))
             return .success
@@ -230,6 +236,7 @@ public struct CLIRunner: Sendable {
         case .deactivate(let o): return try await deactivate(o)
         case .renew(let o): return try await renew(o)
         case .extend(let o): return try await extend(o)
+        case .keepAlive(let o): return try await keepAlive(o)
         case .scheduled(let o): return try await scheduled(o)
         case .cancel(let o): return try await cancel(o)
         case .pending(let o): return try await pending(o)
@@ -241,6 +248,7 @@ public struct CLIRunner: Sendable {
         case .login(let o): return try await login(o)
         case .logout(let o): return try await logout(o)
         case .whoami(let o): return try await whoami(o)
+        case .mcp(let o): return try await mcp(o)
         }
     }
 
@@ -447,7 +455,16 @@ public struct CLIRunner: Sendable {
         let store = PresetStore(environment: env.variables)
         var library: PresetLibrary?
         var tenant = try resolveTenant(o.tenant)
-        if let name = o.preset {
+        var chosen: Preset?
+        if let id = o.presetId {
+            // By id: exactly that preset, in its own tenant (a different --tenant is an error).
+            let p = try store.load().preset(id: id)
+            chosen = p
+            if let own = try p.checkedTenantId() {
+                if let given = o.tenant, given.caseInsensitiveCompare(own) != .orderedSame { throw PresetError.otherTenant(p.name, tenantId: own) }
+                tenant = TenantSelection(tenantId: own, source: .commandLine)
+            }
+        } else if let name = o.preset {
             library = try store.load()
             if tenant.tenantId == nil, let only = library?.named(name), only.count == 1, let tid = try only[0].checkedTenantId() {
                 tenant = TenantSelection(tenantId: tid, source: .commandLine)
@@ -462,8 +479,12 @@ public struct CLIRunner: Sendable {
         var matched: [EligibleRole]
         var missing: [PresetRole] = []
         var preset: Preset?
-        if let name = o.preset, let library {
-            let p = try library.find(name, tenantId: tenantId)
+        if let name = o.preset, let library { chosen = try library.find(name, tenantId: tenantId, alias: tenant.tenantId) }
+        if let p = chosen {
+            // A preset of a tenant GUID runs only in that tenant.
+            if let own = p.tenantId, UUID(uuidString: own) != nil, let tenantId, own.caseInsensitiveCompare(tenantId) != .orderedSame {
+                throw PresetError.otherTenant(p.name, tenantId: own)
+            }
             let resolution = p.resolve(in: snapshot.roles)
             preset = p
             matched = resolution.roles
@@ -503,25 +524,15 @@ public struct CLIRunner: Sendable {
         }
         // Scheduled: a role whose activation has ended by the start can be
         // scheduled (PIM accepts that while it is active); one still active then is skipped.
-        func activeAtStart(_ r: EligibleRole) -> Bool {
-            guard r.isActive else { return false }
-            guard let start, let until = r.activeUntil else { return true }
-            return until > start
-        }
-        let skipped = matched.filter(activeAtStart)
-        let toActivate = matched.filter { !activeAtStart($0) }
+        let (skipped, toActivate) = ActivationPlanning.split(matched, start: start)
         let policies = await self.policies(for: toActivate, service: service)
         let needTicket = TicketRequirement.missing(toActivate, ticket: ticket) { policies[$0.policyKey] }
         if !needTicket.isEmpty {
             throw CLIParseError.missingTicket(roles: needTicket.map { "\($0.roleName) · \($0.scopeName)" })
         }
-        let plans = try ActivationRequestBuilder.plan(
-            toActivate, principalId: snapshot.identity.objectId, justification: justification, now: now,
-            start: start, ticket: ticket
-        ) { role in
-            EffectiveDuration.resolve(requested, policyMaxMinutes: policies[role.policyKey]?.maxMinutes,
-                                      fallbackHours: ActivationRequestBuilder.defaultHours)
-        }
+        let plans = try ActivationPlanning.activationPlans(
+            toActivate, policies: policies, principalId: snapshot.identity.objectId, justification: justification,
+            requested: requested, ticket: ticket, now: now, start: start)
 
         func json(_ outcomes: [String: ActivationOutcome]) -> CLIJSON.Activation {
             let byRole = Dictionary(plans.map { ($0.role.id, $0) }, uniquingKeysWith: { a, _ in a })

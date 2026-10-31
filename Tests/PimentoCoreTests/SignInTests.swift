@@ -2,6 +2,8 @@
 import Darwin
 #elseif canImport(Glibc)
 import Glibc
+#elseif os(Windows)
+import WinSDK
 #endif
 import Foundation
 #if canImport(FoundationNetworking)
@@ -41,46 +43,6 @@ func oauthError(_ error: String, _ description: String = "", codes: [Int] = [], 
     if let claims { body["claims"] = claims }
     return try! JSONSerialization.data(withJSONObject: body)
 }
-
-#if !os(Windows)
-/// Acts as the browser: sends `GET target` to the loopback listener on `port`.
-@discardableResult
-func browse(port: UInt16, _ target: String) -> String {
-    let fd = socket(AF_INET, {
-        #if canImport(Darwin)
-        SOCK_STREAM
-        #else
-        Int32(SOCK_STREAM.rawValue)
-        #endif
-    }(), 0)
-    defer { close(fd) }
-    var addr = sockaddr_in()
-    #if canImport(Darwin)
-    addr.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
-    #endif
-    addr.sin_family = sa_family_t(AF_INET)
-    addr.sin_port = port.bigEndian
-    addr.sin_addr = in_addr(s_addr: UInt32(0x7F00_0001).bigEndian)
-    let ok = withUnsafePointer(to: &addr) {
-        $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) }
-    }
-    guard ok == 0 else { return "" }
-    let request = Array("GET \(target) HTTP/1.1\r\nHost: localhost:\(port)\r\n\r\n".utf8)
-    _ = request.withUnsafeBytes { send(fd, $0.baseAddress, $0.count, 0) }
-    var response = [UInt8]()
-    var buffer = [UInt8](repeating: 0, count: 4096)
-    while true {
-        let n = recv(fd, &buffer, buffer.count, 0)
-        guard n > 0 else { break }
-        response += buffer[0..<n]
-    }
-    return String(decoding: response, as: UTF8.self)
-}
-#else
-/// Windows: no loopback listener, so nothing to browse (the tests that would are disabled).
-@discardableResult
-func browse(port: UInt16, _ target: String) -> String { "" }
-#endif
 
 func query(_ url: URL) -> [String: String] {
     Dictionary((URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []).map { ($0.name, $0.value ?? "") },
@@ -232,6 +194,12 @@ struct OAuthBuildingBlockTests {
 
 @Suite("Sign-in: responses, claims and errors")
 struct OAuthResponseTests {
+    @Test func aTakenLoopbackPortPointsToTheDeviceCode() {
+        let message = SignInError.loopback("another program holds the ::1 side").localizedDescription
+        #expect(message.contains("pimento login --device-code"))
+        #expect(message.contains("Sign In with Code"))
+    }
+
     @Test func tokenResponseAndClientInfo() throws {
         let r = try #require(TokenResponse.parse(tokenAnswer(expiresIn: 4000)))
         #expect(r.expiresIn == 4000)
@@ -395,8 +363,7 @@ struct LoopbackTests {
         #expect(String(decoding: LoopbackRequest.response(for: .ignored), as: UTF8.self).hasPrefix("HTTP/1.1 404"))
     }
 
-    @Test(.enabled(if: LoopbackListener.isSupported, "no loopback listener on Windows"))
-    func listenerReturnsTheCodeAndSkipsStrangers() async throws {
+    @Test func listenerReturnsTheCodeAndSkipsStrangers() async throws {
         let listener = try LoopbackListener()
         #expect(listener.port > 0)
         #expect(listener.redirectURI == "http://localhost:\(listener.port)")
@@ -411,8 +378,7 @@ struct LoopbackTests {
         #expect(try await code == "the-code")
     }
 
-    @Test(.enabled(if: LoopbackListener.isSupported, "no loopback listener on Windows"))
-    func listenerReportsTheIdentityPlatformsError() async throws {
+    @Test func listenerReportsTheIdentityPlatformsError() async throws {
         let listener = try LoopbackListener()
         async let code = listener.waitForCallback(state: "s1", timeout: 10)
         try await Task.sleep(nanoseconds: 50_000_000)
@@ -426,7 +392,6 @@ struct LoopbackTests {
         }
     }
 
-    #if !os(Windows)
     /// A local client sending its request a byte at a time gets an answer and
     /// is cut off at the connection deadline, and the real redirect still
     /// gets through afterwards.
@@ -446,11 +411,10 @@ struct LoopbackTests {
                 // One byte every 150 ms (the whole request would take about 8 s).
                 for byte in request {
                     TestSocket.sendAll(fd, [byte])
-                    var p = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
-                    if poll(&p, 1, 150) > 0 { break }
+                    if TestSocket.waitReadable(fd, milliseconds: 150) { break }
                 }
                 while Date().timeIntervalSince(started) < 10 {
-                    let n = recv(fd, &buffer, buffer.count, 0)
+                    let n = TestSocket.receive(fd, into: &buffer)
                     guard n > 0 else { break }
                     response += buffer[0..<n]
                 }
@@ -463,9 +427,7 @@ struct LoopbackTests {
         #expect(page.hasPrefix("HTTP/1.1 200"))
         #expect(try await code == "the-code")
     }
-    #endif
 
-    #if !os(Windows)
     /// Connections that send nothing do not queue the browser's redirect
     /// behind them: it is answered at once, while they are still open, and
     /// more of them than the listener serves at once only push out the oldest.
@@ -483,10 +445,51 @@ struct LoopbackTests {
         #expect(Date().timeIntervalSince(started) < 2, "the redirect waited for the idle connections")
         #expect(try await code == "the-code")
     }
-    #endif
 
-    @Test(.enabled(if: LoopbackListener.isSupported, "no loopback listener on Windows"))
-    func listenerTimesOutAndCancels() async throws {
+    /// What a client sends after its request head is read and dropped once it
+    /// is answered, so the answer is not lost to a reset; and a client that
+    /// never stops sending cannot hold the listener in that drain.
+    @Test func moreThanTheHeadNeitherLosesTheAnswerNorHoldsTheListener() async throws {
+        let listener = try LoopbackListener(connectionTimeout: 2)
+        async let code = listener.waitForCallback(state: "s1", timeout: 20)
+        try await Task.sleep(nanoseconds: 50_000_000)
+        let port = listener.port
+        let head = Array("GET /favicon.ico HTTP/1.1\r\nHost: localhost\r\n\r\n".utf8)
+        // Head and body in one go; the answer is read only after all of it was sent.
+        let answer: String = await withCheckedContinuation { continuation in
+            Thread {
+                guard let fd = TestSocket.connect(port: port) else { return continuation.resume(returning: "") }
+                defer { _ = TestSocket.close(fd) }
+                TestSocket.sendAll(fd, head + [UInt8](repeating: 0x78, count: 32 * 1024))
+                var response = [UInt8]()
+                var buffer = [UInt8](repeating: 0, count: 4096)
+                while TestSocket.waitReadable(fd, milliseconds: 3000) {
+                    let n = TestSocket.receive(fd, into: &buffer)
+                    guard n > 0 else { break }
+                    response += buffer[0..<n]
+                }
+                continuation.resume(returning: String(decoding: response, as: UTF8.self))
+            }.start()
+        }
+        #expect(answer.hasPrefix("HTTP/1.1 404"), "the answer was lost: \(answer.prefix(40))")
+        // A client that sends without end until the listener lets it go.
+        let flooding = Thread {
+            guard let fd = TestSocket.connect(port: port) else { return }
+            defer { _ = TestSocket.close(fd) }
+            let chunk = head + [UInt8](repeating: 0x78, count: 64 * 1024)
+            let started = Date()
+            while Date().timeIntervalSince(started) < 10, LoopbackSocket.send(fd, chunk[...]) > 0 {}
+        }
+        flooding.start()
+        try await Task.sleep(nanoseconds: 200_000_000)
+        let started = Date()
+        let page = browse(port: port, "/?code=the-code&state=s1")
+        #expect(page.hasPrefix("HTTP/1.1 200"))
+        #expect(try await code == "the-code")
+        #expect(Date().timeIntervalSince(started) < 2, "the flooding client held the listener")
+    }
+
+    @Test func listenerTimesOutAndCancels() async throws {
         let listener = try LoopbackListener()
         await #expect(throws: SignInError.timedOut) { _ = try await listener.waitForCallback(state: "s", timeout: 0.3) }
 
@@ -514,8 +517,7 @@ struct TokenBrokerTests {
         return account
     }
 
-    @Test(.enabled(if: LoopbackListener.isSupported, "no loopback listener on Windows"))
-    func browserSignInWithLoopbackAndPKCE() async throws {
+    @Test func browserSignInWithLoopbackAndPKCE() async throws {
         let seen = TestBox<URL>()
         let (broker, transport, store) = broker { request in
             let f = formFields(request)
@@ -571,8 +573,7 @@ struct TokenBrokerTests {
         #expect(try store.accounts().count == 1)
     }
 
-    @Test(.enabled(if: LoopbackListener.isSupported, "no loopback listener on Windows"))
-    func browserSignInRejectsAMissingNonce() async throws {
+    @Test func browserSignInRejectsAMissingNonce() async throws {
         let (broker, _, store) = broker { _ in (tokenAnswer(nonce: nil), 200) }
         await #expect(throws: SignInError.nonceMismatch) {
             _ = try await broker.signInWithBrowser(clientId: testClientId, timeout: 10) { url in
@@ -585,8 +586,7 @@ struct TokenBrokerTests {
         #expect(try store.accounts().isEmpty)
     }
 
-    @Test(.enabled(if: LoopbackListener.isSupported, "no loopback listener on Windows"))
-    func browserSignInRejectsAForeignNonce() async throws {
+    @Test func browserSignInRejectsAForeignNonce() async throws {
         let (broker, _, store) = broker { _ in (tokenAnswer(nonce: "someone-else"), 200) }
         await #expect(throws: SignInError.nonceMismatch) {
             _ = try await broker.signInWithBrowser(clientId: testClientId, timeout: 10) { url in
@@ -599,8 +599,7 @@ struct TokenBrokerTests {
         #expect(try store.accounts().isEmpty)
     }
 
-    @Test(.enabled(if: LoopbackListener.isSupported, "no loopback listener on Windows"))
-    func browserSignInThatCannotOpenStopsListening() async throws {
+    @Test func browserSignInThatCannotOpenStopsListening() async throws {
         let (broker, transport, _) = broker { _ in (tokenAnswer(), 200) }
         await #expect(throws: SignInError.self) {
             _ = try await broker.signInWithBrowser(clientId: testClientId, timeout: 10) { _ in false }
@@ -1077,34 +1076,36 @@ struct BrowserLaunchTests {
         #expect(text.contains("LSOpenCFURLRef(url as CFURL, nil)"))
         #expect(text.contains("BrowserLaunch.openThroughPage(url"))
         #expect(text.contains("redirectPages.removeAll()"))
+        // Windows: the page's path straight to ShellExecuteW, never through cmd.exe or a shell string.
+        #expect(text.contains("ShellExecuteW(nil, verb, file, nil, nil, SW_SHOWNORMAL)"))
+        #expect(!text.contains("cmd.exe /c") && !text.contains("\"start\""))
     }
 }
 
-#if !os(Windows)
 @Suite("Sign-in: the loopback listener owns both sides of localhost")
 struct LoopbackDualStackTests {
     /// Another program's listener on [::1] (IPv6 only), on a port of the
     /// kernel's choosing; nil when this system has no IPv6 loopback.
-    static func squatter() -> (fd: Int32, port: UInt16)? {
+    static func squatter() -> (fd: TestSocket.Handle, port: UInt16)? {
+        try? LoopbackSocket.startup()
         guard case .bound(let fd) = LoopbackListener.bindIPv6Loopback(port: 0) else { return nil }
-        var addr = sockaddr_in6()
-        var length = socklen_t(MemoryLayout<sockaddr_in6>.size)
-        _ = withUnsafeMutablePointer(to: &addr) {
-            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { getsockname(fd, $0, &length) }
+        guard let port = LoopbackSocket.localPort(fd) else {
+            TestSocket.close(fd)
+            return nil
         }
-        return (fd, UInt16(bigEndian: addr.sin6_port))
+        return (fd, port)
     }
 
     static var hasIPv6Loopback: Bool {
         guard let s = squatter() else { return false }
-        close(s.fd)
+        TestSocket.close(s.fd)
         return true
     }
 
     @Test(.enabled(if: hasIPv6Loopback, "no IPv6 loopback here"))
     func aPortWhoseIPv6SideIsTakenIsNeverUsed() throws {
         let squat = try #require(Self.squatter())
-        defer { close(squat.fd) }
+        defer { TestSocket.close(squat.fd) }
         #expect(LoopbackListener.bindIPv6Loopback(port: squat.port) == .taken)
         // Only that port to try: sign-in fails rather than leaving ::1 to the squatter.
         #expect(throws: SignInError.self) { _ = try LoopbackListener(connectionTimeout: 5, ports: [squat.port]) }
@@ -1122,8 +1123,26 @@ struct LoopbackDualStackTests {
             defer { listener.close() }
             if Self.hasIPv6Loopback { #expect(LoopbackListener.bindIPv6Loopback(port: listener.port) == .taken) }
         }
-        #expect(LoopbackListener.meansNoIPv6(EAFNOSUPPORT) && LoopbackListener.meansNoIPv6(EADDRNOTAVAIL))
-        #expect(!LoopbackListener.meansNoIPv6(EADDRINUSE) && !LoopbackListener.meansNoIPv6(EACCES))
+        #expect(LoopbackListener.meansNoIPv6(TestSocket.noAddressFamily) && LoopbackListener.meansNoIPv6(TestSocket.addressNotAvailable))
+        #expect(!LoopbackListener.meansNoIPv6(TestSocket.addressInUse) && !LoopbackListener.meansNoIPv6(TestSocket.accessDenied))
+    }
+
+    /// No other socket can bind the listener's port, not even with
+    /// `SO_REUSEADDR`: on Windows that option would otherwise let another
+    /// program take the port over (and the redirect with it), which the
+    /// listener's `SO_EXCLUSIVEADDRUSE` prevents.
+    @Test func nobodyElseCanBindTheListenersPort() throws {
+        let listener = try LoopbackListener()
+        defer { listener.close() }
+        let v4 = try #require(LoopbackSocket.makeSocket(family: AF_INET))
+        defer { TestSocket.close(v4) }
+        LoopbackSocket.setOption(v4, SOL_SOCKET, SO_REUSEADDR, 1)
+        #expect(!LoopbackSocket.bind(v4, to: LoopbackSocket.ipv4Loopback(port: listener.port)))
+        if Self.hasIPv6Loopback, let v6 = LoopbackSocket.makeSocket(family: AF_INET6) {
+            defer { TestSocket.close(v6) }
+            LoopbackSocket.setIPv6Only(v6)
+            LoopbackSocket.setOption(v6, SOL_SOCKET, SO_REUSEADDR, 1)
+            #expect(!LoopbackSocket.bind(v6, to: LoopbackSocket.ipv6Loopback(port: listener.port)))
+        }
     }
 }
-#endif

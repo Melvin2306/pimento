@@ -40,6 +40,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             AppAppearance.apply(AppModel.shared.appearance)
             // Starts the menu bar countdown's timer.
             _ = MenuBarClock.shared
+            // Once a day, whether a newer release exists (Settings › General › Updates).
+            AppModel.shared.updates.setAutomatic(AppModel.shared.prefs.checkForUpdates)
         }
     }
 
@@ -69,6 +71,8 @@ struct PimentoApp: App {
         .commands {
             CommandGroup(replacing: .appInfo) {
                 Button("About \(AppInfo.name)") { showAboutPanel() }
+                Button("Check for Updates…") { model.updates.checkFromMenu() }
+                    .disabled(!model.updates.isAvailable || model.updates.isChecking)
             }
             CommandGroup(after: .appSettings) {
                 Button("Install Command Line Tool…") { CommandLineTool.install() }

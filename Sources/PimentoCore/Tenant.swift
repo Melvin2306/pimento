@@ -87,12 +87,15 @@ public struct TenantInfo: Identifiable, Hashable, Sendable {
     public let defaultDomain: String?
     /// ARM's `tenantCategory`: `Home`, `ProjectedBy` or `ManagedBy` (Azure Lighthouse).
     public let category: String?
+    /// The tenant's verified domains, from ARM's `/tenants` (empty from az's cache).
+    public let domains: [String]
 
-    public init(id: String, displayName: String? = nil, defaultDomain: String? = nil, category: String? = nil) {
+    public init(id: String, displayName: String? = nil, defaultDomain: String? = nil, category: String? = nil, domains: [String] = []) {
         self.id = id
         self.displayName = displayName
         self.defaultDomain = defaultDomain
         self.category = category
+        self.domains = domains
     }
 
     /// The display name, else the default domain; `nil` when az and ARM know neither.
@@ -162,13 +165,27 @@ public enum TenantDirectory {
             let displayName: String?
             let defaultDomain: String?
             let tenantCategory: String?
+            let domains: [String]?
+
+            init(from decoder: Decoder) throws {
+                let c = try decoder.container(keyedBy: CodingKeys.self)
+                tenantId = try c.decodeIfPresent(String.self, forKey: .tenantId)
+                displayName = try c.decodeIfPresent(String.self, forKey: .displayName)
+                defaultDomain = try c.decodeIfPresent(String.self, forKey: .defaultDomain)
+                tenantCategory = try c.decodeIfPresent(String.self, forKey: .tenantCategory)
+                // Only names and categories matter for the listing: an odd `domains` costs the domains alone.
+                domains = try? c.decodeIfPresent([String].self, forKey: .domains)
+            }
+
+            enum CodingKeys: String, CodingKey { case tenantId, displayName, defaultDomain, tenantCategory, domains }
         }
         guard let page = try? JSONDecoder().decode(ARMList<Item>.self, from: data) else { return nil }
         let tenants = page.value.compactMap { item -> TenantInfo? in
             guard let id = normalizedId(item.tenantId) else { return nil }
             return TenantInfo(
                 id: id, displayName: realName(item.displayName),
-                defaultDomain: realName(item.defaultDomain), category: realName(item.tenantCategory))
+                defaultDomain: realName(item.defaultDomain), category: realName(item.tenantCategory),
+                domains: (item.domains ?? []).compactMap(realName))
         }
         let next = ARM.followableNextLink(page.nextLink)
         return (tenants, next)
@@ -191,7 +208,8 @@ public enum TenantDirectory {
                 id: tenant.id,
                 displayName: existing.displayName ?? tenant.displayName,
                 defaultDomain: existing.defaultDomain ?? tenant.defaultDomain,
-                category: existing.category ?? tenant.category)
+                category: existing.category ?? tenant.category,
+                domains: existing.domains.isEmpty ? tenant.domains : existing.domains)
         }
         return sorted(order.compactMap { byId[$0] })
     }

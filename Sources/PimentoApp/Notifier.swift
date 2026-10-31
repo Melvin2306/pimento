@@ -226,6 +226,18 @@ enum Notifier {
         schedule(UNNotificationRequest(identifier: notice.id, content: content, trigger: nil))
     }
 
+    /// Keep-alive renewed a role, or could not: as the completion settings
+    /// say (off: none; only failures: failures and skipped renewals).
+    static func keepAlive(_ events: [KeepAliveEvent], prefs: Preferences) {
+        guard isAvailable, prefs.notifyOnCompletion else { return }
+        let now = AppClock.now()
+        for event in events where event.isFailure || !prefs.notifyOnlyOnFailure {
+            let notice = event.notice(now: now)
+            let content = content(notice.title, notice.body, thread: "keep-alive", sound: prefs.playSound)
+            schedule(UNNotificationRequest(identifier: "keep-alive-\(UUID().uuidString)", content: content, trigger: nil))
+        }
+    }
+
     /// What a notification opens when clicked.
     nonisolated static let openKey = "pimento.open"
 
