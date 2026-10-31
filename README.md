@@ -98,8 +98,8 @@ removes it again (`$env:PIMENTO_NO_COMPLETIONS = "1"` skips it). You can read th
 [`install.sh`](scripts/install.sh), [`install.ps1`](scripts/install.ps1).
 
 - **A specific version:**
-  `curl -fsSL https://raw.githubusercontent.com/Melvin2306/pimento/main/scripts/install.sh | PIMENTO_VERSION=0.1.0 sh`
-  (on Windows, `$env:PIMENTO_VERSION = "0.1.0"` before `irm … | iex`).
+  `curl -fsSL https://raw.githubusercontent.com/Melvin2306/pimento/main/scripts/install.sh | PIMENTO_VERSION=0.2.0 sh`
+  (on Windows, `$env:PIMENTO_VERSION = "0.2.0"` before `irm … | iex`).
 - **Another folder:**
   `curl -fsSL https://raw.githubusercontent.com/Melvin2306/pimento/main/scripts/install.sh | sh -s -- --dir ~/bin`
   (on Windows, `$env:PIMENTO_INSTALL_DIR`). `sh -s -- --help` lists all options.
@@ -125,7 +125,7 @@ completion block from your PowerShell profiles.
 ### Manual download
 
 Every release has these files under stable names, so the links always point to the latest version
-(and the same files with the version in their name, e.g. `Pimento-0.1.0.dmg`):
+(and the same files with the version in their name, e.g. `Pimento-0.2.0.dmg`):
 
 | Download | Contains |
 | --- | --- |
@@ -544,7 +544,7 @@ starts, when it first records something, and when the retention changes. The set
 Readers ignore fields they do not know and skip lines they cannot read.
 
 ```json
-{"action":"activate","at":"2026-10-29T08:00:03.120Z","durationMinutes":240,"end":"2026-10-29T12:00:02.000Z","id":"5b3e…","justification":"CHG-1001 release 2.4","requestId":"7a1b2c3d-0000-4000-8000-000000000002","requestedDuration":"PT8H","result":"succeeded","roleDefinitionId":"/subscriptions/…/roleDefinitions/b24988ac-6180-42a0-ab88-20f7382dd24c","roleName":"Contributor","scope":"/subscriptions/bbbbbbbb-0000-0000-0000-00000000000b","scopeName":"Contoso Staging","scopeType":"subscription","source":"app","start":"2026-10-29T08:00:02.000Z","status":"Provisioned","tenantId":"11111111-2222-4333-8444-555555555555","tenantLabel":"Contoso","ticketNumber":"CHG-1001","ticketSystem":"ServiceNow","v":1,"version":"0.1.0"}
+{"action":"activate","at":"2026-10-29T08:00:03.120Z","durationMinutes":240,"end":"2026-10-29T12:00:02.000Z","id":"5b3e…","justification":"CHG-1001 release 2.4","requestId":"7a1b2c3d-0000-4000-8000-000000000002","requestedDuration":"PT8H","result":"succeeded","roleDefinitionId":"/subscriptions/…/roleDefinitions/b24988ac-6180-42a0-ab88-20f7382dd24c","roleName":"Contributor","scope":"/subscriptions/bbbbbbbb-0000-0000-0000-00000000000b","scopeName":"Contoso Staging","scopeType":"subscription","source":"app","start":"2026-10-29T08:00:02.000Z","status":"Provisioned","tenantId":"11111111-2222-4333-8444-555555555555","tenantLabel":"Contoso","ticketNumber":"CHG-1001","ticketSystem":"ServiceNow","v":1,"version":"0.2.0"}
 ```
 
 The CSV export is [RFC 4180](https://www.rfc-editor.org/rfc/rfc4180): UTF-8, a header row, CRLF line
@@ -766,7 +766,7 @@ options, with an ⓘ button where an option needs more explanation. Changes appl
 
 Once a day, at launch or while it runs, Pimento asks GitHub for the latest release and compares it
 with its own version (semantic versioning; drafts and pre-releases are ignored). When a newer one
-exists, a one-line notice above the role table and in the menu bar says *Pimento 0.2.0 is
+exists, a one-line notice above the role table and in the menu bar says *Pimento 0.3.0 is
 available*, with **Download** (the release's `Pimento.dmg` in your browser) and **Release Notes**
 (the release page). Open the disk image and drag Pimento onto Applications to replace the old one;
 your settings, presets, history and sign-in stay. The ✕ hides the notice until the next version.
@@ -1188,7 +1188,7 @@ The PowerShell completion also offers the names of your presets (after `--preset
 works offline. cmd.exe has no programmable completion, so there is none for it.
 
 **Deprecated flags.** The flags of Pimento's first builds, `pimento --list`, `--dry-run` and
-`--tenants`, still work in 0.1.x (also on the app binary, which hands them to the bundled CLI).
+`--tenants`, still work in 0.2.x (also on the app binary, which hands them to the bundled CLI).
 They print a note and go away in a later release. `--dry-run` keeps its old meaning: `--role` matches a substring, and
 without filters it plans every eligible role.
 

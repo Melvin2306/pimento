@@ -24,7 +24,7 @@ body:
     id: version
     attributes:
       label: Pimento version
-      placeholder: "0.1.0 (pimento --version)"
+      placeholder: "0.2.0 (pimento --version)"
     validations:
       required: true
   - type: input
